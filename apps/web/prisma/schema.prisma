@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SEPLAN_ADMIN
+  SECRETARIA_REPRESENTANTE
+}
+
+enum ThemeBudget {
+  OCAD
+  OSG
+  CLIMATICO
+}
+
+enum AssignmentStatus {
+  RASCUNHO
+  PRONTO_PARA_VALIDACAO
+  ARQUIVADO
+}
+
+enum ValidationStatus {
+  RASCUNHO
+  ENVIADO
+  DEVOLVIDO
+  APROVADO
+}
+
+enum QddPeriodType {
+  MES_ISOLADO
+  ACUMULADO_ANUAL
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  password         String
+  role             UserRole
+  organizationCode String?
+  unitCode         String?
+  createdAt        DateTime @default(now())
+
+  sessions    Session[]
+  assignments ThematicAssignment[]
+}
+
+model Session {
+  token     String   @id
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BudgetImport {
+  id             String        @id @default(cuid())
+  filename       String
+  year           Int
+  referenceMonth Int
+  periodType     QddPeriodType
+  importedAt     DateTime      @default(now())
+  rowCount       Int
+  actionCount    Int
+  status         String        @default("VIGENTE")
+
+  actions BudgetAction[]
+}
+
+model BudgetAction {
+  id               String @id @default(cuid())
+  importId         String
+  year             Int
+  organizationCode String
+  organizationName String
+  unitCode         String
+  unitName         String
+  application      String
+  functionalProgram String
+  projectActivity  String
+
+  initialBudget  Float @default(0)
+  supplemented   Float @default(0)
+  updatedBudget  Float @default(0)
+  committed      Float @default(0)
+  liquidated     Float @default(0)
+  paid           Float @default(0)
+  available      Float @default(0)
+
+  import      BudgetImport         @relation(fields: [importId], references: [id], onDelete: Cascade)
+  expenseLines ExpenseLine[]
+  assignments  ThematicAssignment[]
+  validations  ActionValidation[]
+
+  @@index([importId])
+  @@index([organizationCode])
+}
+
+model ExpenseLine {
+  id               String @id @default(cuid())
+  actionId         String
+  organizationCode String
+  organizationName String
+  unitCode         String
+  unitName         String
+  application      String
+  functionalProgram String
+  projectActivity  String
+  expenseAccount   String
+  expenseDescription String
+  reduced          String
+  source           String
+
+  initialBudget      Float @default(0)
+  supplemented       Float @default(0)
+  updatedBudget      Float @default(0)
+  committed          Float @default(0)
+  liquidated         Float @default(0)
+  payableToLiquidate Float @default(0)
+  paid               Float @default(0)
+  payable            Float @default(0)
+  available          Float @default(0)
+
+  action BudgetAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([actionId])
+}
+
+model ThematicAssignment {
+  id               String           @id @default(cuid())
+  actionId         String
+  theme            ThemeBudget
+  axis             String
+  classification   String
+  weightingFactor  Float?
+  justification    String?
+  status           AssignmentStatus @default(PRONTO_PARA_VALIDACAO)
+  createdBy        String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  action      BudgetAction       @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  createdByUser User             @relation(fields: [createdBy], references: [id])
+  validations ActionValidation[]
+
+  @@index([actionId])
+}
+
+model ValidationCycle {
+  id        String   @id @default(cuid())
+  name      String
+  year      Int
+  theme     ThemeBudget
+  status    String   @default("ABERTO")
+  openedAt  DateTime @default(now())
+  closedAt  DateTime?
+
+  validations ActionValidation[]
+}
+
+model ImportPreview {
+  id        String   @id
+  data      Json
+  createdAt DateTime @default(now())
+}
+
+model ActionValidation {
+  id                   String           @id @default(cuid())
+  cycleId              String
+  actionId             String
+  assignmentId         String
+  organizationCode     String
+  unitCode             String
+  theme                ThemeBudget
+  status               ValidationStatus @default(RASCUNHO)
+  executionStatus      String?
+  realizedDescription  String?
+  informedExecutedValue Float?
+  observations         String?
+  submittedAt          DateTime?
+  reviewedAt           DateTime?
+  reviewerComment      String?
+  updatedAt            DateTime         @updatedAt
+
+  deliveries Json @default("[]")
+  evidences  Json @default("[]")
+
+  cycle      ValidationCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  action     BudgetAction       @relation(fields: [actionId], references: [id])
+  assignment ThematicAssignment @relation(fields: [assignmentId], references: [id])
+
+  @@index([cycleId])
+  @@index([organizationCode])
+}
