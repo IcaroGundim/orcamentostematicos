@@ -19,6 +19,7 @@ import {
   RotateCcwIcon,
   SearchIcon,
   SendIcon,
+  Trash2Icon,
   UploadIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -155,6 +156,10 @@ export default function SeplanPage() {
   const [cycles, setCycles] = useState<ValidationCycle[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
+  const [isPreviewingImport, setIsPreviewingImport] = useState(false);
+  const [isConfirmingImport, setIsConfirmingImport] = useState(false);
+  const [deletingImportId, setDeletingImportId] = useState('');
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPeriodType, setSelectedPeriodType] = useState<QddPeriodType>('ACUMULADO_ANUAL');
   const [selectedReferenceMonth, setSelectedReferenceMonth] = useState(new Date().getMonth() + 1);
   const [selectedActionId, setSelectedActionId] = useState('');
@@ -184,6 +189,13 @@ export default function SeplanPage() {
       next.has(code) ? next.delete(code) : next.add(code);
       return next;
     });
+  }
+
+  function signOut() {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    clearStoredSession();
+    router.push('/login');
   }
 
   useEffect(() => {
@@ -223,29 +235,63 @@ export default function SeplanPage() {
   }
 
   async function uploadQdd(file: File) {
-    const formData = new FormData();
-    formData.set('file', file);
-    formData.set('periodType', selectedPeriodType);
-    formData.set('referenceMonth', String(selectedReferenceMonth));
-    const result = await api<ImportPreview>('/imports/qdd/preview', {
-      method: 'POST',
-      body: formData,
-    });
-    setPreview(result);
-    toast.success('Prévia do QDD gerada com sucesso.');
-    setActiveSection('structure');
+    setIsPreviewingImport(true);
+    try {
+      const formData = new FormData();
+      formData.set('file', file);
+      formData.set('periodType', selectedPeriodType);
+      formData.set('referenceMonth', String(selectedReferenceMonth));
+      const result = await api<ImportPreview>('/imports/qdd/preview', {
+        method: 'POST',
+        body: formData,
+      });
+      setPreview(result);
+      toast.success('Prévia do QDD gerada com sucesso.');
+      setActiveSection('structure');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao gerar a prévia do QDD.');
+    } finally {
+      setIsPreviewingImport(false);
+    }
   }
 
   async function confirmImport() {
-    if (!preview) return;
-    await api('/imports/qdd/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ previewId: preview.previewId }),
-    });
-    setPreview(null);
-    toast.success('QDD importado e registrado como vigente.');
-    setActionsFilters(initialActionsFilters);
-    await load();
+    if (!preview || isConfirmingImport) return;
+    setIsConfirmingImport(true);
+    try {
+      await api('/imports/qdd/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ previewId: preview.previewId }),
+      });
+      setPreview(null);
+      toast.success('QDD importado e registrado como vigente.');
+      setActionsFilters(initialActionsFilters);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao confirmar a importação do QDD.');
+    } finally {
+      setIsConfirmingImport(false);
+    }
+  }
+
+  async function deleteImport(importRecord: BudgetImport) {
+    if (deletingImportId) return;
+    const confirmed = window.confirm(
+      `Excluir a importação ${formatPeriod(importRecord.referenceMonth, importRecord.year, importRecord.periodType)}?\n\n` +
+      'As ações, linhas de despesa, classificações e validações vinculadas a este QDD serão removidas.',
+    );
+    if (!confirmed) return;
+
+    setDeletingImportId(importRecord.id);
+    try {
+      await api(`/imports/qdd/${importRecord.id}`, { method: 'DELETE' });
+      toast.success('Importação excluída.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir a importação.');
+    } finally {
+      setDeletingImportId('');
+    }
   }
 
   async function createAssignment() {
@@ -653,13 +699,11 @@ export default function SeplanPage() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Sair"
-                onClick={() => {
-                  clearStoredSession();
-                  router.push('/login');
-                }}
+                disabled={isSigningOut}
+                onClick={signOut}
               >
-                <LogOutIcon />
-                <span>Sair</span>
+                {isSigningOut ? <RefreshCwIcon className="animate-spin" /> : <LogOutIcon />}
+                <span>{isSigningOut ? 'Saindo...' : 'Sair'}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -707,13 +751,11 @@ export default function SeplanPage() {
               <Button
                 className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
                 variant="ghost"
-                onClick={() => {
-                  clearStoredSession();
-                  router.push('/login');
-                }}
+                disabled={isSigningOut}
+                onClick={signOut}
               >
-                <LogOutIcon data-icon="inline-start" />
-                Sair
+                {isSigningOut ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <LogOutIcon data-icon="inline-start" />}
+                {isSigningOut ? 'Saindo...' : 'Sair'}
               </Button>
             </div>
           </div>
@@ -787,27 +829,53 @@ export default function SeplanPage() {
                               </Field>
                             )}
                           </FieldGroup>
-                          <Button asChild variant="outline" className="h-20 w-full cursor-pointer border-dashed bg-primary/5 text-primary">
+                          <Button
+                            asChild
+                            variant="outline"
+                            aria-disabled={isPreviewingImport || isConfirmingImport}
+                            className={cn(
+                              'h-20 w-full cursor-pointer border-dashed bg-primary/5 text-primary',
+                              (isPreviewingImport || isConfirmingImport) && 'pointer-events-none opacity-60',
+                            )}
+                          >
                             <label>
-                              <UploadIcon data-icon="inline-start" />
-                              Selecionar .xls ou .xlsx
-                              <input type="file" accept=".xls,.xlsx" className="hidden" onChange={(event) => event.target.files?.[0] && void uploadQdd(event.target.files[0])} />
+                              {isPreviewingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <UploadIcon data-icon="inline-start" />}
+                              {isPreviewingImport ? 'Processando QDD...' : 'Selecionar .xls ou .xlsx'}
+                              <input
+                                type="file"
+                                accept=".xls,.xlsx"
+                                className="hidden"
+                                disabled={isPreviewingImport || isConfirmingImport}
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  if (file) void uploadQdd(file);
+                                  event.target.value = '';
+                                }}
+                              />
                             </label>
                           </Button>
                           {preview ? (
-                            <Alert className="border-primary/25 bg-primary/5">
+                            <Alert className="relative border-primary/25 bg-primary/5">
                               <FileSpreadsheetIcon />
                               <AlertDescription>
                                 <span className="block font-medium text-foreground">{preview.filename}</span>
                                 <span className="block">Período: {formatPeriod(preview.referenceMonth, preview.year, preview.periodType)}</span>
                                 <span className="block">{preview.rowCount} linhas · {preview.actionCount} ações · {preview.organizationsCount} órgãos</span>
                               </AlertDescription>
+                              <button
+                                type="button"
+                                onClick={() => setPreview(null)}
+                                className="absolute right-3 top-3 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                title="Remover arquivo"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              </button>
                             </Alert>
                           ) : null}
                           {preview ? (
-                            <Button onClick={() => void confirmImport()}>
-                              <CheckCircle2Icon data-icon="inline-start" />
-                              Confirmar e registrar QDD
+                            <Button disabled={isConfirmingImport || isPreviewingImport} onClick={() => void confirmImport()}>
+                              {isConfirmingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <CheckCircle2Icon data-icon="inline-start" />}
+                              {isConfirmingImport ? 'Registrando QDD...' : 'Confirmar e registrar QDD'}
                             </Button>
                           ) : null}
                         </CardContent>
@@ -949,18 +1017,35 @@ export default function SeplanPage() {
                       ) : (
                         <div className="flex flex-col gap-2">
                           {importHistory.map((imp) => (
-                            <div key={imp.id} className="flex flex-col gap-1 rounded-lg border p-3">
-                              <div className="flex items-center gap-2">
-                                <Badge variant={imp.status === 'VIGENTE' ? 'default' : 'secondary'} className="shrink-0">
-                                  {imp.status === 'VIGENTE' ? 'Vigente' : 'Histórico'}
-                                </Badge>
-                                <span className="font-medium">{formatPeriod(imp.referenceMonth, imp.year, imp.periodType)}</span>
-                                <span className="text-xs text-muted-foreground">{imp.periodType === 'ACUMULADO_ANUAL' ? 'Acumulado' : 'Mês isolado'}</span>
+                            <div key={imp.id} className="flex items-start justify-between gap-3 rounded-lg border p-3">
+                              <div className="flex min-w-0 flex-col gap-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant={imp.status === 'VIGENTE' ? 'default' : 'secondary'} className="shrink-0">
+                                    {imp.status === 'VIGENTE' ? 'Vigente' : 'Histórico'}
+                                  </Badge>
+                                  <span className="font-medium">{formatPeriod(imp.referenceMonth, imp.year, imp.periodType)}</span>
+                                  <span className="text-xs text-muted-foreground">{imp.periodType === 'ACUMULADO_ANUAL' ? 'Acumulado' : 'Mês isolado'}</span>
+                                </div>
+                                <span className="truncate text-xs text-muted-foreground" title={imp.filename}>{imp.filename}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {imp.actionCount.toLocaleString('pt-BR')} ações · {imp.rowCount.toLocaleString('pt-BR')} linhas · {new Date(imp.importedAt).toLocaleDateString('pt-BR')}
+                                </span>
                               </div>
-                              <span className="truncate text-xs text-muted-foreground" title={imp.filename}>{imp.filename}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {imp.actionCount.toLocaleString('pt-BR')} ações · {imp.rowCount.toLocaleString('pt-BR')} linhas · {new Date(imp.importedAt).toLocaleDateString('pt-BR')}
-                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                disabled={deletingImportId === imp.id}
+                                title="Excluir importação"
+                                aria-label="Excluir importação"
+                                onClick={() => void deleteImport(imp)}
+                              >
+                                {deletingImportId === imp.id ? (
+                                  <RefreshCwIcon className="size-4 animate-spin" />
+                                ) : (
+                                  <Trash2Icon className="size-4" />
+                                )}
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -1822,4 +1907,3 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
     return true;
   });
 }
-

@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { parseQdd } from '@/lib/qdd-parser';
 import { createId } from '@/lib/store';
 
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();

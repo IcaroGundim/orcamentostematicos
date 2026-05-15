@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { BookOpenIcon, CheckIcon, ChevronDownIcon, ExternalLinkIcon, FileCheck2Icon, InfoIcon, LogOutIcon, PlusIcon, SaveIcon, SendIcon } from 'lucide-react';
+import { BookOpenIcon, CheckIcon, ChevronDownIcon, ExternalLinkIcon, FileCheck2Icon, InfoIcon, LogOutIcon, PlusIcon, RefreshCwIcon, SaveIcon, SendIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -55,6 +55,7 @@ export default function SecretariaPage() {
   const router = useRouter();
   const [validations, setValidations] = useState<ValidationItem[]>([]);
   const [currentId, setCurrentId] = useState('');
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const current = useMemo(() => validations.find((item) => item.id === currentId) ?? validations[0], [validations, currentId]);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -94,6 +95,13 @@ export default function SecretariaPage() {
     const data = await api<ValidationItem[]>('/validations/my');
     setValidations(data);
     setCurrentId((id) => id || data[0]?.id || '');
+  }
+
+  function signOut() {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    clearStoredSession();
+    router.push('/login');
   }
 
   async function patch(values: FormValues) {
@@ -154,9 +162,9 @@ export default function SecretariaPage() {
                 ))}
               </PopoverContent>
             </Popover>
-            <Button className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" variant="ghost" onClick={() => { clearStoredSession(); router.push('/login'); }}>
-              <LogOutIcon data-icon="inline-start" />
-              Sair
+            <Button className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" variant="ghost" disabled={isSigningOut} onClick={signOut}>
+              {isSigningOut ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <LogOutIcon data-icon="inline-start" />}
+              {isSigningOut ? 'Saindo...' : 'Sair'}
             </Button>
           </div>
         </div>

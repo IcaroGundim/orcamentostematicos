@@ -1,6 +1,5 @@
 /**
- * Shared data-access helpers (replaces NestJS DataStoreService)
- * Used by Next.js API Route Handlers.
+ * Shared data-access helpers used by Next.js API Route Handlers.
  */
 import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma';
@@ -146,6 +145,8 @@ export function mapAction(row: any) {
       liquidated: l.liquidated, payableToLiquidate: l.payableToLiquidate,
       paid: l.paid, payable: l.payable, available: l.available,
     })),
+    expenseLinesCount: row.expenseLines?.length ?? 0,
+    assignments: (row.assignments ?? []).map(mapAssignment),
     assignmentIds: (row.assignments ?? []).map((a: any) => a.id),
   };
 }
@@ -189,30 +190,64 @@ export async function addImportedBudget(importRecord: any, actions: any[]) {
         actionCount: importRecord.actionCount, status: 'VIGENTE',
       },
     });
-    for (const action of actions) {
-      await tx.budgetAction.create({
-        data: {
-          id: action.id, importId: importRecord.id, year: action.year,
-          organizationCode: action.organizationCode, organizationName: action.organizationName,
-          unitCode: action.unitCode, unitName: action.unitName, application: action.application,
-          functionalProgram: action.functionalProgram, projectActivity: action.projectActivity,
-          initialBudget: action.totals.initialBudget, supplemented: action.totals.supplemented,
-          updatedBudget: action.totals.updatedBudget, committed: action.totals.committed,
-          liquidated: action.totals.liquidated, paid: action.totals.paid, available: action.totals.available,
-          expenseLines: {
-            create: action.expenseLines.map((line: any) => ({
-              id: line.id, organizationCode: line.organizationCode, organizationName: line.organizationName,
-              unitCode: line.unitCode, unitName: line.unitName, application: line.application,
-              functionalProgram: line.functionalProgram, projectActivity: line.projectActivity,
-              expenseAccount: line.expenseAccount, expenseDescription: line.expenseDescription,
-              reduced: line.reduced, source: line.source, initialBudget: line.initialBudget,
-              supplemented: line.supplemented, updatedBudget: line.updatedBudget, committed: line.committed,
-              liquidated: line.liquidated, payableToLiquidate: line.payableToLiquidate,
-              paid: line.paid, payable: line.payable, available: line.available,
-            })),
-          },
-        },
-      });
-    }
+
+    await createInBatches(tx.budgetAction, actions.map((action) => ({
+      id: action.id,
+      importId: importRecord.id,
+      year: action.year,
+      organizationCode: action.organizationCode,
+      organizationName: action.organizationName,
+      unitCode: action.unitCode,
+      unitName: action.unitName,
+      application: action.application,
+      functionalProgram: action.functionalProgram,
+      projectActivity: action.projectActivity,
+      initialBudget: action.totals.initialBudget,
+      supplemented: action.totals.supplemented,
+      updatedBudget: action.totals.updatedBudget,
+      committed: action.totals.committed,
+      liquidated: action.totals.liquidated,
+      paid: action.totals.paid,
+      available: action.totals.available,
+    })));
+
+    const lines = actions.flatMap((action) => action.expenseLines.map((line: any) => ({
+      id: line.id,
+      actionId: action.id,
+      organizationCode: line.organizationCode,
+      organizationName: line.organizationName,
+      unitCode: line.unitCode,
+      unitName: line.unitName,
+      application: line.application,
+      functionalProgram: line.functionalProgram,
+      projectActivity: line.projectActivity,
+      expenseAccount: line.expenseAccount,
+      expenseDescription: line.expenseDescription,
+      reduced: line.reduced,
+      source: line.source,
+      initialBudget: line.initialBudget,
+      supplemented: line.supplemented,
+      updatedBudget: line.updatedBudget,
+      committed: line.committed,
+      liquidated: line.liquidated,
+      payableToLiquidate: line.payableToLiquidate,
+      paid: line.paid,
+      payable: line.payable,
+      available: line.available,
+    })));
+
+    await createInBatches(tx.expenseLine, lines);
+  }, {
+    maxWait: 10000,
+    timeout: 60000,
   });
+}
+
+async function createInBatches(model: { createMany: (args: { data: any[] }) => Promise<unknown> }, data: any[], batchSize = 2000) {
+  for (let index = 0; index < data.length; index += batchSize) {
+    const batch = data.slice(index, index + batchSize);
+    if (batch.length) {
+      await model.createMany({ data: batch });
+    }
+  }
 }

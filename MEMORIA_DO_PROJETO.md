@@ -10,13 +10,13 @@ O sistema existe para apoiar a identificação, organização, validação e aco
 - Orçamento da Criança e do Adolescente (OCAD)
 - Orçamento Climático
 
-A ideia central é transformar os dados brutos do orçamento estadual, especialmente o QDD, em uma base organizada de ações temáticas que possam ser validadas pelas secretarias responsáveis e revisadas pela SEPLAN. No MVP, a estrutura vigente do QDD já nasce pré-carregada no backend a partir do arquivo de referência do projeto.
+A ideia central é transformar os dados brutos do orçamento estadual, especialmente o QDD, em uma base organizada de ações temáticas que possam ser validadas pelas secretarias responsáveis e revisadas pela SEPLAN. No MVP, a estrutura vigente do QDD é carregada pela importação manual feita pela SEPLAN.
 
 ## Finalidade
 
 A finalidade do sistema é criar um fluxo institucional para que a SEPLAN consiga:
 
-- consultar a estrutura vigente do orçamento do Estado do Acre já pré-carregada;
+- consultar a estrutura vigente do orçamento do Estado do Acre carregada a partir do QDD;
 - atualizar a base vigente quando houver novo QDD oficial;
 - consolidar programas, projetos e atividades orçamentárias por órgão e unidade administrativa;
 - classificar manualmente quais ações pertencem a cada orçamento temático;
@@ -33,8 +33,8 @@ O sistema não substitui o processo de elaboração do orçamento. Ele organiza 
 
 O fluxo principal pensado para o projeto é:
 
-1. O sistema inicia com a estrutura vigente do QDD de referência já carregada.
-2. A SEPLAN consulta órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas, descrições e fontes.
+1. A SEPLAN importa o QDD oficial pela interface do sistema.
+2. O sistema consolida a estrutura vigente do QDD em ações orçamentárias e preserva as linhas de despesa para consulta.
 3. Quando houver novo QDD oficial, a SEPLAN pode substituir a base vigente pela importação manual.
 4. A SEPLAN realiza a curadoria manual, marcando quais ações pertencem ao OSG, OCAD ou Orçamento Climático.
 5. A SEPLAN informa eixo, classificação metodológica, ponderador quando necessário e justificativa da classificação.
@@ -50,8 +50,8 @@ O fluxo principal pensado para o projeto é:
 - Representantes de secretarias e autarquias só podem visualizar e preencher informações vinculadas ao seu próprio órgão ou unidade.
 - A unidade principal de validação é a ação consolidada, não cada linha individual do QDD.
 - As linhas do QDD continuam preservadas como detalhamento consultivo da ação.
-- A estrutura vigente do MVP é pré-carregada a partir do QDD de referência salvo na raiz do projeto.
-- A importação manual de QDD passa a funcionar como atualização/substituição dessa base vigente.
+- A estrutura vigente do MVP é criada e atualizada pela importação manual de QDD.
+- A importação manual de QDD funciona como atualização/substituição da base vigente.
 - Uma ação pode pertencer a mais de um orçamento temático.
 - A classificação temática é manual no MVP, feita pela equipe gestora da SEPLAN.
 - O sistema deve registrar histórico mínimo de status da validação: rascunho, enviado, devolvido e aprovado.
@@ -89,18 +89,15 @@ O sistema precisa representar a estrutura administrativa do Estado do Acre a par
 
 Essa estrutura é essencial para aplicar as regras de acesso. O usuário representante de uma secretaria deve conseguir validar apenas as informações pertencentes a sua secretaria.
 
-No MVP, essa estrutura já fica gravada em uma seed local gerada do arquivo `QDD_Saldo_Retroativo_Execucao-1425-20260513.xls`, incluindo órgãos, unidades, aplicação programada, função programática, projeto atividade, conta de despesa, descrição da despesa e fonte de recurso.
+No MVP, essa estrutura é gravada no banco a partir da importação do QDD, incluindo órgãos, unidades, aplicação programada, função programática, projeto atividade, conta de despesa, descrição da despesa e fonte de recurso.
 
 ## Estado atual do projeto
 
 O projeto está estruturado como um monorepo com:
 
-- `apps/api`: backend em NestJS e TypeScript;
-- `apps/web`: frontend em Next.js, React, TypeScript, Tailwind CSS e shadcn/ui.
+- `apps/web`: aplicação Next.js com frontend, API Routes, React, TypeScript, Tailwind CSS e shadcn/ui.
 
-O MVP atual usa armazenamento temporário em memória no backend, iniciado automaticamente com uma seed do QDD de referência. Isso permite validar o fluxo do produto antes da conexão definitiva com banco de dados.
-
-A intenção futura é usar PostgreSQL, possivelmente via Neon, mas a conexão com banco ainda não faz parte da primeira etapa.
+O MVP atual usa Prisma com PostgreSQL/Neon para persistir usuários, sessões, importações de QDD, ações orçamentárias, classificações temáticas, ciclos e validações.
 
 ## Tecnologias principais
 
@@ -119,8 +116,8 @@ Frontend:
 
 Backend:
 
-- NestJS
-- TypeScript
+- Next.js Route Handlers
+- Prisma
 
 Controle de acesso:
 
@@ -129,7 +126,7 @@ Controle de acesso:
 
 Banco de dados:
 
-- A definir/conectar em etapa posterior, com direcionamento para PostgreSQL/Neon.
+- PostgreSQL/Neon via Prisma.
 
 ## Perfis previstos
 
@@ -142,7 +139,7 @@ Banco de dados:
 O MVP deve priorizar:
 
 - login próprio;
-- estrutura vigente pré-carregada do QDD;
+- estrutura vigente carregada por importação de QDD;
 - atualização da base vigente por importação de novo QDD;
 - consolidação das ações orçamentárias;
 - curadoria manual dos três orçamentos temáticos;
@@ -153,7 +150,6 @@ O MVP deve priorizar:
 
 Ficam para etapas posteriores:
 
-- persistência real em banco PostgreSQL/Neon;
 - auditoria completa;
 - exportações oficiais mais robustas;
 - publicação pública dos resultados;

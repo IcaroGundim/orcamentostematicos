@@ -1,6 +1,6 @@
 import type { User } from '@/types/domain';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+const API_URL = '/api';
 
 export interface Session {
   token: string;

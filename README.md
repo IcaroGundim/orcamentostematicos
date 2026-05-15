@@ -1,12 +1,13 @@
 # Sistema de Gestão dos Orçamentos Temáticos do Acre
 
-MVP em monorepo para manter a estrutura vigente do QDD do Estado do Acre pré-carregada, consolidar ações orçamentárias, classificar manualmente nos orçamentos temáticos e validar entregas pelas secretarias.
+MVP em monorepo para importar a estrutura vigente do QDD do Estado do Acre, consolidar ações orçamentárias, classificar manualmente nos orçamentos temáticos e validar entregas pelas secretarias.
 
 ## Stack
 
-- Frontend: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui-style components, Lucide React, React Hook Form, Zod, TanStack Table e Recharts.
-- Backend: NestJS e TypeScript.
-- Dados: armazenamento temporário em memória, iniciado com seed do QDD de referência, com contratos preparados para futura persistência em PostgreSQL/Neon.
+- Aplicação: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui-style components, Lucide React, React Hook Form, Zod, TanStack Table e Recharts.
+- API: Route Handlers do Next.js em `/api`.
+- Dados: Prisma com PostgreSQL/Neon.
+- Deploy: Vercel.
 
 ## Scripts
 
@@ -15,9 +16,9 @@ npm install
 npm run dev
 ```
 
-API: `http://localhost:3001`
-
 Web: `http://localhost:3000`
+
+API interna: `http://localhost:3000/api`
 
 ## Usuários de demonstração
 
@@ -29,20 +30,14 @@ Web: `http://localhost:3000`
 ## Fluxo principal
 
 1. Entrar como SEPLAN Admin.
-2. Consultar a estrutura vigente já pré-carregada do QDD de referência.
+2. Importar ou consultar a estrutura vigente do QDD.
 3. Classificar ações em OCAD, OSG ou Climático, com eixo e metodologia.
 4. Abrir ciclo de validação.
 5. Entrar como representante de secretaria e preencher a validação.
 6. Revisar e aprovar/devolver pela SEPLAN.
 
-## Base vigente
+## Base vigente e importação
 
-A API nasce com uma seed gerada a partir de `QDD_Saldo_Retroativo_Execucao-1425-20260513.xls`, preservando órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas de despesa, descrições, fontes e valores.
+O sistema permite importar manualmente um QDD em `.xls` ou `.xlsx` pela interface da SEPLAN. A prévia consolida as linhas do QDD em ações orçamentárias; ao confirmar, o QDD é registrado como base vigente, preservando órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas de despesa, descrições, fontes e valores.
 
-Para regenerar a seed depois de atualizar o arquivo de referência:
-
-```bash
-npm run generate:qdd-seed -w apps/api
-```
-
-A importação manual pela interface continua disponível como atualização/substituição da base vigente.
+Ao registrar um novo QDD, importações vigentes anteriores são marcadas como histórico.

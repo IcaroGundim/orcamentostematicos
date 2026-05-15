@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircleIcon, LogInIcon } from 'lucide-react';
+import { AlertCircleIcon, LoaderCircleIcon, LogInIcon } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -28,6 +28,7 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
     defaultValues: { email: 'admin@seplan.ac.gov.br', password: 'admin123' },
   });
+  const isSubmitting = form.formState.isSubmitting;
 
   async function onSubmit(values: FormData) {
     setError('');
@@ -99,7 +100,7 @@ export default function LoginPage() {
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="email">E-mail</FieldLabel>
-                  <Input id="email" type="email" autoComplete="email" {...form.register('email')} />
+                  <Input id="email" type="email" autoComplete="email" disabled={isSubmitting} {...form.register('email')} />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="password">Senha</FieldLabel>
@@ -107,6 +108,7 @@ export default function LoginPage() {
                     id="password"
                     type="password"
                     autoComplete="current-password"
+                    disabled={isSubmitting}
                     {...form.register('password')}
                   />
                 </Field>
@@ -117,9 +119,13 @@ export default function LoginPage() {
                     <AlertDescription>{error}</AlertDescription>
                   </Alert>
                 ) : null}
-                <Button type="submit" className="w-full">
-                  <LogInIcon data-icon="inline-start" />
-                  Acessar
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <LogInIcon data-icon="inline-start" />
+                  )}
+                  {isSubmitting ? 'Entrando...' : 'Acessar'}
                 </Button>
               </FieldGroup>
             </form>
