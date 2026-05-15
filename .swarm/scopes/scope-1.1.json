@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "taskId": "1.1",
+  "declaredAt": 1778853363497,
+  "expiresAt": 1778939763497,
+  "files": [
+    "apps/web/src/app/seplan/page.tsx"
+  ]
+}

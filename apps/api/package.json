@@ -1,0 +1,33 @@
+{
+  "name": "@orcamentos-tematicos/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "lint": "tsc --noEmit",
+    "generate:qdd-seed": "tsx scripts/generate-qdd-seed.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "latest",
+    "@nestjs/core": "latest",
+    "@nestjs/mapped-types": "latest",
+    "@nestjs/platform-express": "latest",
+    "class-transformer": "latest",
+    "class-validator": "latest",
+    "multer": "latest",
+    "reflect-metadata": "latest",
+    "rxjs": "latest",
+    "xlsx": "latest"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "latest",
+    "@nestjs/schematics": "latest",
+    "@types/express": "latest",
+    "@types/multer": "latest",
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
