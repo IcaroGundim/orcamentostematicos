@@ -4,19 +4,27 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "node dist/main.js",
     "lint": "tsc --noEmit",
-    "generate:qdd-seed": "tsx scripts/generate-qdd-seed.ts"
+    "generate:qdd-seed": "tsx scripts/generate-qdd-seed.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@nestjs/common": "latest",
     "@nestjs/core": "latest",
     "@nestjs/mapped-types": "latest",
     "@nestjs/platform-express": "latest",
+    "@prisma/adapter-neon": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "class-transformer": "latest",
     "class-validator": "latest",
     "multer": "latest",
+    "prisma": "^7.8.0",
     "reflect-metadata": "latest",
     "rxjs": "latest",
     "xlsx": "latest"

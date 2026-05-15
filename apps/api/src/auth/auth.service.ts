@@ -6,24 +6,23 @@ import { DataStoreService } from '../store/store.service';
 export class AuthService {
   constructor(private readonly store: DataStoreService) {}
 
-  login(email: string, password: string) {
-    const user = this.store.users.find((item) => item.email.toLowerCase() === email.toLowerCase());
+  async login(email: string, password: string) {
+    const user = await this.store.findUserByEmail(email);
     if (!user || user.password !== password) {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
     const token = randomBytes(32).toString('hex');
-    this.store.sessions.set(token, user.id);
+    await this.store.createSession(token, user.id);
     const { password: _password, ...safeUser } = user;
     return { token, user: safeUser };
   }
 
-  authenticate(header?: string) {
+  async authenticate(header?: string) {
     const token = header?.replace(/^Bearer\s+/i, '');
     if (!token) {
       throw new UnauthorizedException('Token ausente.');
     }
-    const userId = this.store.sessions.get(token);
-    const user = this.store.users.find((item) => item.id === userId);
+    const user = await this.store.getUserByToken(token);
     if (!user) {
       throw new UnauthorizedException('Sessão inválida.');
     }

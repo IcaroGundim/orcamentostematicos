@@ -21,8 +21,9 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@Headers('authorization') authorization?: string) {
-    const { password: _password, ...user } = this.auth.authenticate(authorization);
-    return user;
+  async me(@Headers('authorization') authorization?: string) {
+    const user = await this.auth.authenticate(authorization);
+    const { password: _password, ...safeUser } = user;
+    return safeUser;
   }
 }

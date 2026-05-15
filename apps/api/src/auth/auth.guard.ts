@@ -5,9 +5,9 @@ import { AuthService } from './auth.service';
 export class AuthGuard implements CanActivate {
   constructor(private readonly auth: AuthService) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{ headers: Record<string, string>; user?: unknown }>();
-    request.user = this.auth.authenticate(request.headers.authorization);
+    request.user = await this.auth.authenticate(request.headers.authorization);
     return true;
   }
 }
