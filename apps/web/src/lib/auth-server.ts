@@ -38,6 +38,10 @@ export function badRequest(message: string) {
   return NextResponse.json({ message, error: 'Bad Request', statusCode: 400 }, { status: 400 });
 }
 
+export function conflict(message: string) {
+  return NextResponse.json({ message, error: 'Conflict', statusCode: 409 }, { status: 409 });
+}
+
 export function ok(data: unknown) {
   return NextResponse.json(data);
 }

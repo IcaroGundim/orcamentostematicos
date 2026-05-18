@@ -42,7 +42,16 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       window.location.href = '/login';
       return new Promise<T>(() => {});
     }
-    const message = await response.text();
+    const text = await response.text();
+    let message = text;
+    try {
+      const parsed = JSON.parse(text) as { message?: string };
+      if (parsed?.message && typeof parsed.message === 'string') {
+        message = parsed.message;
+      }
+    } catch {
+      /* usar texto bruto */
+    }
     throw new Error(message || 'Erro ao acessar a API.');
   }
   return response.json() as Promise<T>;

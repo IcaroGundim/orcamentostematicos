@@ -76,6 +76,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
+import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import type { BudgetAction, BudgetImport, Metadata, QddPeriodType, Summary, ThematicAssignment, ThemeBudget, ValidationCycle, ValidationItem } from '@/types/domain';
 
@@ -159,6 +160,9 @@ export default function SeplanPage() {
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
+  const [isRemovingAssignment, setIsRemovingAssignment] = useState(false);
+  const [removePopoverOpen, setRemovePopoverOpen] = useState(false);
+  const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPeriodType, setSelectedPeriodType] = useState<QddPeriodType>('ACUMULADO_ANUAL');
   const [selectedReferenceMonth, setSelectedReferenceMonth] = useState(new Date().getMonth() + 1);
@@ -295,25 +299,67 @@ export default function SeplanPage() {
   }
 
   async function createAssignment() {
-    await api<ThematicAssignment>('/thematic-assignments', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...assignment,
-        actionId: selectedActionId,
-        weightingFactor: assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
-      }),
-    });
-    toast.success('Ação classificada no orçamento temático.');
-    await load();
+    try {
+      await api<ThematicAssignment>('/thematic-assignments', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...assignment,
+          actionId: selectedActionId,
+          weightingFactor: assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+        }),
+      });
+      toast.success('Ação classificada no orçamento temático.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao classificar ação.');
+    }
+  }
+
+  async function confirmRemoveAssignment() {
+    const action = actions.find((a) => a.id === selectedActionId);
+    if (!selectedActionId || isRemovingAssignment || !action) return;
+    const validIds = new Set(action.assignments.map((a) => a.id));
+    const idsToRemove = assignmentIdsPendingRemoval.filter((id) => validIds.has(id));
+    if (idsToRemove.length === 0) return;
+
+    setIsRemovingAssignment(true);
+    let removedCount = 0;
+    try {
+      for (const id of idsToRemove) {
+        try {
+          await api(`/thematic-assignments/${id}`, { method: 'DELETE' });
+          removedCount++;
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Erro ao remover a classificação.');
+          if (removedCount > 0) {
+            toast.warning(`${removedCount} classificação(ões) removida(s) antes do erro.`);
+          }
+          await load();
+          return;
+        }
+      }
+      toast.success(
+        removedCount === 1 ? 'Classificação removida.' : `${removedCount} classificações removidas.`,
+      );
+      setRemovePopoverOpen(false);
+      setAssignmentIdsPendingRemoval([]);
+      await load();
+    } finally {
+      setIsRemovingAssignment(false);
+    }
   }
 
   async function createCycle() {
-    await api('/validation-cycles', {
-      method: 'POST',
-      body: JSON.stringify(cycle),
-    });
-    toast.success('Ciclo aberto e validações geradas.');
-    await load();
+    try {
+      await api('/validation-cycles', {
+        method: 'POST',
+        body: JSON.stringify(cycle),
+      });
+      toast.success('Ciclo aberto e validações geradas.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao abrir ciclo de validação.');
+    }
   }
 
   async function closeCycleById(id: string) {
@@ -555,6 +601,54 @@ export default function SeplanPage() {
     });
   }, [actions, actionsFilters]);
 
+  const displayedStructureActions = useMemo(() => {
+    const q = actionsSearch.trim().toLowerCase();
+    if (!q) return filteredStructureActions;
+    return filteredStructureActions.filter(
+      (a) =>
+        a.application.toLowerCase().includes(q) ||
+        a.functionalProgram.toLowerCase().includes(q) ||
+        a.projectActivity.toLowerCase().includes(q)
+    );
+  }, [filteredStructureActions, actionsSearch]);
+
+  const structureActionsShowUnit = actionsFilters.unitCode === allValue;
+
+  const selectedStructureOrganization = useMemo(() => {
+    if (actionsFilters.organizationCode === allValue) return null;
+    return organizations.find((o) => o.code === actionsFilters.organizationCode) ?? null;
+  }, [actionsFilters.organizationCode, organizations]);
+
+  const structureSelectedUnitLabel = useMemo(() => {
+    if (actionsFilters.unitCode === allValue) return null;
+    const u =
+      actionsFilters.organizationCode === allValue
+        ? units.find((x) => x.code === actionsFilters.unitCode)
+        : units.find(
+            (x) =>
+              x.code === actionsFilters.unitCode &&
+              x.organizationCode === actionsFilters.organizationCode
+          );
+    return u ? `${u.code} — ${u.name}` : actionsFilters.unitCode;
+  }, [units, actionsFilters.unitCode, actionsFilters.organizationCode]);
+
+  const structureActionsScopeDescription = useMemo(() => {
+    const count = displayedStructureActions.length.toLocaleString('pt-BR');
+    if (actionsFilters.organizationCode === allValue) {
+      const unitPart = structureSelectedUnitLabel ? ` · ${structureSelectedUnitLabel}` : '';
+      return `${count} ação(ões) · todas as secretarias${unitPart}`;
+    }
+    const unitPart = structureActionsShowUnit
+      ? 'Todas as unidades da secretaria'
+      : structureSelectedUnitLabel ?? '—';
+    return `${count} ação(ões) na lista atual · ${unitPart}`;
+  }, [
+    displayedStructureActions.length,
+    actionsFilters.organizationCode,
+    structureSelectedUnitLabel,
+    structureActionsShowUnit,
+  ]);
+
   const themeGaugeData = useMemo(() => {
     const acc = new Map<ThemeBudget, { liquidated: number; planned: number }>();
     for (const action of actions) {
@@ -584,6 +678,26 @@ export default function SeplanPage() {
   const axes = metadata?.axes[currentTheme] ?? [];
   const classifications = metadata?.classifications[currentTheme] ?? [];
   const selectedAction = actions.find((action) => action.id === selectedActionId);
+  const existingAssignment =
+    selectedAction?.assignments.find((item) => item.theme === assignment.theme) ?? null;
+  const selectedActionHasTheme = Boolean(existingAssignment);
+  const assignmentsRemovalKey = selectedAction?.assignments.map((a) => a.id).join() ?? '';
+
+  useEffect(() => {
+    const list = selectedAction?.assignments ?? [];
+    const ids = new Set(list.map((a) => a.id));
+    setAssignmentIdsPendingRemoval((current) => current.filter((id) => ids.has(id)));
+  }, [selectedAction?.id, assignmentsRemovalKey]);
+
+  useEffect(() => {
+    if (!removePopoverOpen) return;
+    setAssignmentIdsPendingRemoval([]);
+  }, [removePopoverOpen]);
+
+  useEffect(() => {
+    setRemovePopoverOpen(false);
+  }, [selectedActionId]);
+
   const filteredActionCount = table.getFilteredRowModel().rows.length;
   const organizationCount = organizations.length;
   const unitCount = uniqueBy(actions, (action) => `${action.organizationCode}-${action.unitCode}`).length;
@@ -710,8 +824,8 @@ export default function SeplanPage() {
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset className="min-h-svh">
-        <header className="sticky top-0 z-30 border-b border-primary/30 bg-primary text-primary-foreground shadow-sm">
+      <SidebarInset className="flex h-svh min-h-0 flex-col overflow-hidden">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-primary-foreground/20 bg-primary text-primary-foreground shadow-sm">
           <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
             <div className="flex items-center gap-3">
               <SidebarTrigger size="icon-lg" className="size-10 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
@@ -761,9 +875,9 @@ export default function SeplanPage() {
           </div>
         </header>
 
-        <div className="flex w-full min-w-0 flex-col gap-5 px-4 py-5 lg:px-6 2xl:px-8">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:px-6 2xl:px-8">
           {activeSection === 'overview' ? (
-            <div className="flex flex-col gap-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
               <ActionsTableCard
                 title="Ações orçamentárias consolidadas"
                 description={`${filteredActionCount} registros filtrados`}
@@ -783,18 +897,22 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'structure' ? (
-            <section className="flex flex-col gap-5">
-              <Tabs value={structureTab} onValueChange={(v) => setStructureTab(v as 'management' | 'actions')}>
-                <TabsList>
+            <section className="flex min-h-0 flex-1 flex-col gap-5">
+              <Tabs
+                value={structureTab}
+                onValueChange={(v) => setStructureTab(v as 'management' | 'actions')}
+                className="flex min-h-0 flex-1 flex-col gap-3"
+              >
+                <TabsList className="w-fit shrink-0">
                   <TabsTrigger value="management">Gerenciamento</TabsTrigger>
                   <TabsTrigger value="actions">Ações</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="management" className="flex flex-col gap-5">
+                <TabsContent value="management" className="mt-0 min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
                   <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] lg:items-start">
                     <div ref={managementCardsRef} className="flex min-h-0 flex-col gap-5">
                       {/* Importar QDD */}
-                      <Card className="ring-accent/35">
+                      <Card>
                         <CardHeader>
                           <CardTitle>Importar QDD</CardTitle>
                           <CardDescription>Substitua a base vigente apenas quando houver uma nova versão oficial.</CardDescription>
@@ -882,7 +1000,7 @@ export default function SeplanPage() {
                       </Card>
 
                       {/* Estatísticas da base */}
-                      <Card className="ring-primary/15">
+                      <Card>
                         <CardHeader>
                           <CardTitle>Base vigente</CardTitle>
                           <CardDescription>Cobertura administrativa e programática do QDD carregado.</CardDescription>
@@ -906,7 +1024,7 @@ export default function SeplanPage() {
                     </div>
 
                     <Card
-                      className="ring-primary/15 lg:min-h-0"
+                      className="lg:min-h-0"
                       style={managementCardsHeight ? { height: `${managementCardsHeight}px` } : undefined}
                     >
                       <CardHeader>
@@ -1002,7 +1120,7 @@ export default function SeplanPage() {
                   </div>
 
                   {/* Histórico de importações */}
-                  <Card className="ring-primary/15">
+                  <Card className="mt-4">
                     <CardHeader>
                       <CardTitle>Histórico de importações</CardTitle>
                       <CardDescription>{importHistory.length} QDD{importHistory.length !== 1 ? 's' : ''} registrado{importHistory.length !== 1 ? 's' : ''}.</CardDescription>
@@ -1054,152 +1172,183 @@ export default function SeplanPage() {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="actions" className="flex flex-col gap-5">
-                  {/* Filtros */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_1.2fr]">
-                    <OrgaoCombobox
-                      value={actionsFilters.organizationCode}
-                      organizations={organizations}
-                      onChange={(value) => { setActionsFilters({ organizationCode: value, unitCode: allValue }); setActionsSearch(''); }}
-                      className="relative w-full"
-                    />
-                    <Select
-                      value={actionsFilters.unitCode}
-                      onValueChange={(value) => setActionsFilters({ ...actionsFilters, unitCode: value })}
-                      disabled={actionsFilters.organizationCode === allValue}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Todas as unidades" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value={allValue}>Todas as unidades</SelectItem>
-                          {units.map((unit) => (
-                            <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
-                              {unit.code} - {unit.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <div className="relative">
-                      <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Buscar ação, programa funcional..."
-                        value={actionsSearch}
-                        onChange={(e) => setActionsSearch(e.target.value)}
-                        disabled={actionsFilters.organizationCode === allValue}
-                        className="pl-9"
-                      />
-                    </div>
-                  </div>
-
-                  {actionsFilters.organizationCode === allValue ? (
-                    <Card className="ring-primary/15">
-                      <CardContent>
-                        <Empty>
-                          <EmptyHeader><EmptyMedia><FolderCogIcon /></EmptyMedia></EmptyHeader>
-                          <EmptyTitle>Selecione uma secretaria</EmptyTitle>
-                          <EmptyDescription>Escolha uma secretaria acima para visualizar as ações programadas.</EmptyDescription>
-                        </Empty>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <>
-                      {/* Resumo */}
-                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                        {[
-                          { label: 'Ações', value: filteredStructureActions.length.toLocaleString('pt-BR') },
-                          {
-                            label: 'Planejado inicial',
-                            value: formatMoney(filteredStructureActions.reduce((s, a) => s + a.totals.initialBudget, 0)),
-                          },
-                          {
-                            label: 'Orçamento atualizado',
-                            value: formatMoney(filteredStructureActions.reduce((s, a) => s + a.totals.updatedBudget, 0)),
-                          },
-                          {
-                            label: 'Liquidado',
-                            value: formatMoney(filteredStructureActions.reduce((s, a) => s + a.totals.liquidated, 0)),
-                          },
-                          {
-                            label: 'Disponível',
-                            value: formatMoney(filteredStructureActions.reduce((s, a) => s + a.totals.available, 0)),
-                          },
-                        ].map((stat) => (
-                          <div key={stat.label} className="rounded-lg border bg-muted/30 p-3">
-                            <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-                            <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
+                <TabsContent value="actions" className="mt-0 flex min-h-0 min-w-0 flex-1 flex-col">
+                    <Card className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <CardHeader className="shrink-0">
+                        <CardTitle>
+                          {actionsFilters.organizationCode === allValue
+                            ? 'Ações programadas'
+                            : selectedStructureOrganization
+                              ? `${selectedStructureOrganization.code} — ${selectedStructureOrganization.name}`
+                              : 'Ações programadas'}
+                        </CardTitle>
+                        <CardDescription>
+                          <span className="block">{structureActionsScopeDescription}</span>
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+                        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+                          <OrgaoCombobox
+                            value={actionsFilters.organizationCode}
+                            organizations={organizations}
+                            onChange={(value) => {
+                              setActionsFilters({ organizationCode: value, unitCode: allValue });
+                              setActionsSearch('');
+                            }}
+                            className="relative w-full min-w-0"
+                          />
+                          <Select
+                            value={actionsFilters.unitCode}
+                            onValueChange={(value) => setActionsFilters({ ...actionsFilters, unitCode: value })}
+                          >
+                            <SelectTrigger className="w-full min-w-0">
+                              <SelectValue placeholder="Todas as unidades" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                <SelectItem value={allValue}>Todas as unidades</SelectItem>
+                                {units.map((unit) => (
+                                  <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
+                                    {unit.code} - {unit.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                          <div className="relative min-w-0">
+                            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="Buscar ação, programa funcional..."
+                              value={actionsSearch}
+                              onChange={(e) => setActionsSearch(e.target.value)}
+                              className="w-full min-w-0 pl-9"
+                            />
                           </div>
-                        ))}
-                      </div>
-
-                      {/* Lista de ações */}
-                      {(() => {
-                        const q = actionsSearch.trim().toLowerCase();
-                        const displayedActions = q
-                          ? filteredStructureActions.filter((a) =>
-                              a.application.toLowerCase().includes(q) ||
-                              a.functionalProgram.toLowerCase().includes(q) ||
-                              a.projectActivity.toLowerCase().includes(q)
-                            )
-                          : filteredStructureActions;
-                        return displayedActions.length === 0 ? (
-                        <Card className="ring-primary/15">
-                          <CardContent>
-                            <Empty>
-                              <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
-                              <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
-                              <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
-                            </Empty>
-                          </CardContent>
-                        </Card>
-                      ) : (
-                        <div className="flex flex-col gap-3">
-                          {displayedActions.map((action) => (
-                            <Card key={action.id} size="sm" className="ring-primary/10">
-                              <CardHeader>
-                                <CardTitle className="line-clamp-2">{action.application}</CardTitle>
-                                <CardDescription className="line-clamp-1">{action.functionalProgram}</CardDescription>
-                                <CardAction className="flex items-center gap-2">
-                                  <Badge variant="secondary" className="whitespace-nowrap font-mono text-xs">{action.projectActivity}</Badge>
-                                  <Badge variant="outline" className="whitespace-nowrap text-xs">{action.expenseLinesCount} lin.</Badge>
-                                </CardAction>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                  {[
-                                    { label: 'Planejado inicial', value: formatMoney(action.totals.initialBudget) },
-                                    { label: 'Orçamento atualizado', value: formatMoney(action.totals.updatedBudget) },
-                                    { label: 'Liquidado', value: formatMoney(action.totals.liquidated) },
-                                    { label: 'Disponível', value: formatMoney(action.totals.available) },
-                                  ].map((item) => (
-                                    <div key={item.label}>
-                                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
-                                      <p className="tabular-nums">{item.value}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                                {actionsFilters.unitCode === allValue && (
-                                  <p className="mt-2 text-xs text-muted-foreground">
-                                    {action.unitCode} – {action.unitName}
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
+                        </div>
+                        <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
+                          {[
+                            {
+                              label: 'Ações',
+                              value: filteredStructureActions.length.toLocaleString('pt-BR'),
+                            },
+                            {
+                              label: 'Planejado inicial',
+                              value: formatMoney(
+                                filteredStructureActions.reduce((s, a) => s + a.totals.initialBudget, 0)
+                              ),
+                            },
+                            {
+                              label: 'Orçamento atualizado',
+                              value: formatMoney(
+                                filteredStructureActions.reduce((s, a) => s + a.totals.updatedBudget, 0)
+                              ),
+                            },
+                            {
+                              label: 'Liquidado',
+                              value: formatMoney(
+                                filteredStructureActions.reduce((s, a) => s + a.totals.liquidated, 0)
+                              ),
+                            },
+                            {
+                              label: 'Disponível',
+                              value: formatMoney(
+                                filteredStructureActions.reduce((s, a) => s + a.totals.available, 0)
+                              ),
+                            },
+                          ].map((stat) => (
+                            <div key={stat.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                              <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
+                            </div>
                           ))}
                         </div>
-                      );
-                      })()}
-                    </>
-                  )}
+                        {displayedStructureActions.length === 0 ? (
+                          <Empty>
+                            <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
+                            <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
+                            <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
+                          </Empty>
+                        ) : (
+                          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                            <Separator className="shrink-0" />
+                            <ScrollArea className="min-h-0 min-w-0 flex-1 w-full">
+                              <div className="min-w-0">
+                                <Table className="table-fixed w-full min-w-[42rem]">
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="h-9 w-[38%] min-w-[12rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Ação
+                                  </TableHead>
+                                  {structureActionsShowUnit ? (
+                                    <TableHead className="h-9 w-[18%] max-w-[10rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                      Unidade
+                                    </TableHead>
+                                  ) : null}
+                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Inicial
+                                  </TableHead>
+                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Atualizado
+                                  </TableHead>
+                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Liquidado
+                                  </TableHead>
+                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Disponível
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {displayedStructureActions.map((action) => (
+                                  <TableRow key={action.id}>
+                                    <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
+                                      <div className="flex min-w-0 flex-col gap-0.5">
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="secondary" className="shrink-0 font-mono text-xs">
+                                            {action.projectActivity}
+                                          </Badge>
+                                        </div>
+                                        <p className="text-sm font-medium leading-snug">{action.application}</p>
+                                        <p className="text-xs text-muted-foreground">{action.functionalProgram}</p>
+                                      </div>
+                                    </TableCell>
+                                    {structureActionsShowUnit ? (
+                                      <TableCell className="w-[18%] max-w-[10rem] py-2 align-top text-sm">
+                                        <span className="text-xs text-muted-foreground">{action.unitCode}</span>
+                                        <p className="truncate text-xs" title={action.unitName}>
+                                          {action.unitName}
+                                        </p>
+                                      </TableCell>
+                                    ) : null}
+                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                      {formatMoney(action.totals.initialBudget)}
+                                    </TableCell>
+                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                      {formatMoney(action.totals.updatedBudget)}
+                                    </TableCell>
+                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                      {formatMoney(action.totals.liquidated)}
+                                    </TableCell>
+                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                      {formatMoney(action.totals.available)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
                 </TabsContent>
               </Tabs>
             </section>
           ) : null}
 
           {activeSection === 'curation' ? (
-            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px] 2xl:grid-cols-[minmax(0,1fr)_460px]">
+            <section className="grid min-h-0 flex-1 gap-5 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_430px] 2xl:grid-cols-[minmax(0,1fr)_460px]">
               <ActionsTableCard
                 title="Selecionar ação para curadoria"
                 description={`${filteredActionCount} registros filtrados`}
@@ -1216,7 +1365,7 @@ export default function SeplanPage() {
                 onQddPopoverOpenChange={setQddPopoverOpen}
               />
 
-              <Card className="ring-accent/35">
+              <Card >
                 <CardHeader>
                   <CardTitle>Curadoria temática</CardTitle>
                   <CardDescription>
@@ -1276,10 +1425,51 @@ export default function SeplanPage() {
                       <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
                       <Textarea id="justification" value={assignment.justification} onChange={(event) => setAssignment({ ...assignment, justification: event.target.value })} />
                     </Field>
-                    <Button disabled={!selectedActionId || !assignment.axis || !assignment.classification} onClick={() => void createAssignment()}>
-                      <FolderCogIcon data-icon="inline-start" />
-                      Classificar ação
-                    </Button>
+                    {selectedActionHasTheme ? (
+                      <Alert className="border-primary/25 bg-primary/5">
+                        <FolderCogIcon />
+                        <AlertDescription className="text-xs">
+                          Esta ação já possui classificação para <strong>{themeLabels[assignment.theme]}</strong>. Use &quot;Remover classificação&quot; para excluí-la quando não houver validações vinculadas — assim você poderá classificar novamente neste tema.
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={
+                          !selectedActionId ||
+                          !assignment.axis ||
+                          !assignment.classification ||
+                          selectedActionHasTheme ||
+                          isRemovingAssignment
+                        }
+                        onClick={() => void createAssignment()}
+                      >
+                        <FolderCogIcon data-icon="inline-start" />
+                        Classificar ação
+                      </Button>
+                      {(selectedAction?.assignments.length ?? 0) > 0 && selectedActionId ? (
+                        <RemoveClassificationPopover
+                          open={removePopoverOpen}
+                          onOpenChange={setRemovePopoverOpen}
+                          metadata={metadata}
+                          selectedAction={selectedAction ?? null}
+                          selectedAssignmentIds={assignmentIdsPendingRemoval}
+                          onSelectedAssignmentIdsChange={setAssignmentIdsPendingRemoval}
+                          isRemovingAssignment={isRemovingAssignment}
+                          onConfirmRemove={confirmRemoveAssignment}
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            disabled={isRemovingAssignment}
+                          >
+                            <Trash2Icon data-icon="inline-start" />
+                            Remover classificação
+                          </Button>
+                        </RemoveClassificationPopover>
+                      ) : null}
+                    </div>
                   </FieldGroup>
                 </CardContent>
               </Card>
@@ -1287,9 +1477,9 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'cycles' ? (
-            <section className="grid gap-5 xl:grid-cols-[430px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
+            <section className="grid min-h-0 flex-1 gap-5 overflow-y-auto xl:grid-cols-[430px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
               <div className="flex flex-col gap-5">
-                <Card className="ring-accent/35">
+                <Card >
                   <CardHeader>
                     <CardTitle>Abrir ciclo</CardTitle>
                     <CardDescription>Gere validações para as secretarias a partir das ações classificadas no exercício.</CardDescription>
@@ -1334,7 +1524,7 @@ export default function SeplanPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="ring-primary/15">
+                <Card >
                   <CardHeader>
                     <CardTitle>Situação atual</CardTitle>
                     <CardDescription>Panorama das classificações e ciclos registrados no sistema.</CardDescription>
@@ -1358,7 +1548,7 @@ export default function SeplanPage() {
                 </Card>
               </div>
 
-              <Card className="ring-primary/15">
+              <Card >
                 <CardHeader>
                   <CardTitle>Ciclos de validação</CardTitle>
                   <CardDescription>
@@ -1391,11 +1581,11 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'review' ? (
-            <section className="flex flex-col gap-5">
+            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
 
               <div className="grid gap-3">
                 {validations.map((validation) => (
-                  <Card key={validation.id} size="sm" className="ring-primary/10">
+                  <Card key={validation.id} size="sm" >
                     <CardHeader>
                       <CardTitle>{validation.action?.application}</CardTitle>
                       <CardDescription>{validation.action?.organizationCode} - {validation.action?.organizationName}</CardDescription>
@@ -1439,8 +1629,8 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'reports' ? (
-            <section className="flex flex-col gap-5">
-              <Card className="ring-primary/15">
+            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              <Card >
                 <CardHeader>
                   <CardTitle>Execução dos orçamentos temáticos</CardTitle>
                   <CardDescription>Percentual de execução por tema — liquidado sobre a dotação atualizada.</CardDescription>
@@ -1484,7 +1674,7 @@ export default function SeplanPage() {
               </Card>
 
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <Card className="ring-primary/15">
+                <Card >
                   <CardHeader>
                     <CardTitle>Resumo por tema</CardTitle>
                     <CardDescription>Valores liquidados das ações classificadas por orçamento temático.</CardDescription>
@@ -1502,7 +1692,7 @@ export default function SeplanPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="ring-accent/35">
+                <Card >
                   <CardHeader>
                     <CardTitle>Status das validações</CardTitle>
                     <CardDescription>Distribuição atual dos formulários enviados às secretarias.</CardDescription>
@@ -1584,7 +1774,7 @@ function ActionsTableCard({
   }
 
   return (
-    <Card className="ring-primary/15">
+    <Card >
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -1703,6 +1893,7 @@ function OrgaoCombobox({
 
   const selectedOrg = organizations.find((o) => o.code === value);
   const displayValue = value === allValue ? 'Todos os órgãos' : selectedOrg ? `${selectedOrg.code} - ${selectedOrg.name}` : '';
+  const matchTriggerWidth = /\bw-full\b/.test(className ?? '');
 
   const allItems = [
     { code: allValue, label: 'Todos os órgãos' },
@@ -1746,7 +1937,12 @@ function OrgaoCombobox({
         <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
       </div>
       {open && (
-        <div className="absolute z-50 mt-1 max-h-80 w-80 overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 right-0 sm:right-auto sm:left-0">
+        <div
+          className={cn(
+            'absolute z-50 mt-1 max-h-80 overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
+            matchTriggerWidth ? 'left-0 right-0 w-full min-w-0' : 'right-0 w-80 sm:right-auto sm:left-0',
+          )}
+        >
           {filtered.length > 0 ? filtered.map((item) => (
             <button
               key={item.code}
@@ -1793,7 +1989,7 @@ function CycleCard({ cycle, onClose, onDelete }: { cycle: ValidationCycle; onClo
   const isOpen = cycle.status === 'ABERTO';
 
   return (
-    <div className={cn('rounded-lg border bg-card p-4 flex flex-col gap-3', isOpen ? 'border-primary/20 ring-1 ring-primary/10' : '')}>
+    <div className={cn('rounded-lg border border-border bg-card p-4 flex flex-col gap-3 shadow-sm', isOpen && 'border-primary')}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">

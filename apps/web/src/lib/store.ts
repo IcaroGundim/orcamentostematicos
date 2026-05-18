@@ -29,13 +29,16 @@ export async function listActions(user: { role: string; organizationCode?: strin
   if (!vigenteId) return [];
 
   const where: Record<string, unknown> = { importId: vigenteId };
+  if (filters.year) where['year'] = filters.year;
+
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
+    if (!user.organizationCode) return [];
     if (user.organizationCode) where['organizationCode'] = user.organizationCode;
     if (user.unitCode) where['unitCode'] = user.unitCode;
+  } else {
+    if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
+    if (filters.unitCode) where['unitCode'] = filters.unitCode;
   }
-  if (filters.year) where['year'] = filters.year;
-  if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
-  if (filters.unitCode) where['unitCode'] = filters.unitCode;
 
   const rows = await prisma.budgetAction.findMany({
     where,
@@ -80,7 +83,7 @@ export async function getSummary(user: { role: string; organizationCode?: string
   ]);
 
   const actionIds = new Set(actions.map((a) => a.id));
-  const userAssignments = assignments.filter((a) => actionIds.has(a.actionId));
+  const userAssignments = uniqueAssignmentsByActionTheme(assignments.filter((a) => actionIds.has(a.actionId)));
 
   const themes = ['OCAD', 'OSG', 'CLIMATICO'];
   const statuses = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
@@ -105,17 +108,29 @@ export async function getSummary(user: { role: string; organizationCode?: string
 
 // ── Validations ──────────────────────────────────────────────────────────────
 
-export async function listValidations(user: { role: string; organizationCode?: string | null }) {
+export async function listValidations(user: { role: string; organizationCode?: string | null; unitCode?: string | null }) {
   const where: Record<string, unknown> = {};
   if (user.role === 'SECRETARIA_REPRESENTANTE' && user.organizationCode) {
     where['organizationCode'] = user.organizationCode;
+    if (user.unitCode) where['unitCode'] = user.unitCode;
   }
-  return prisma.actionValidation.findMany({ where, orderBy: { updatedAt: 'asc' } });
+  const rows = await prisma.actionValidation.findMany({
+    where,
+    include: {
+      action: { include: { expenseLines: true, assignments: true } },
+      assignment: true,
+      cycle: true,
+    },
+    orderBy: { updatedAt: 'asc' },
+  });
+  return rows.map(mapValidation);
 }
 
 // ── Mappers ──────────────────────────────────────────────────────────────────
 
 export function mapAction(row: any) {
+  const assignments = uniqueAssignmentsByActionTheme(row.assignments ?? []);
+
   return {
     id: row.id,
     year: row.year,
@@ -146,8 +161,8 @@ export function mapAction(row: any) {
       paid: l.paid, payable: l.payable, available: l.available,
     })),
     expenseLinesCount: row.expenseLines?.length ?? 0,
-    assignments: (row.assignments ?? []).map(mapAssignment),
-    assignmentIds: (row.assignments ?? []).map((a: any) => a.id),
+    assignments: assignments.map(mapAssignment),
+    assignmentIds: assignments.map((a: any) => a.id),
   };
 }
 
@@ -174,6 +189,29 @@ export function mapCycle(row: any) {
     id: row.id, name: row.name, year: row.year, theme: row.theme, status: row.status,
     openedAt: row.openedAt instanceof Date ? row.openedAt.toISOString() : row.openedAt,
     closedAt: row.closedAt instanceof Date ? row.closedAt.toISOString() : (row.closedAt ?? undefined),
+  };
+}
+
+export function mapValidation(row: any) {
+  return {
+    id: row.id,
+    cycleId: row.cycleId,
+    actionId: row.actionId,
+    assignmentId: row.assignmentId,
+    organizationCode: row.organizationCode,
+    unitCode: row.unitCode,
+    theme: row.theme,
+    status: row.status,
+    executionStatus: row.executionStatus ?? undefined,
+    realizedDescription: row.realizedDescription ?? undefined,
+    deliveries: Array.isArray(row.deliveries) ? row.deliveries : [],
+    informedExecutedValue: row.informedExecutedValue ?? undefined,
+    evidences: Array.isArray(row.evidences) ? row.evidences : [],
+    observations: row.observations ?? undefined,
+    reviewerComment: row.reviewerComment ?? undefined,
+    action: row.action ? mapAction(row.action) : undefined,
+    assignment: row.assignment ? mapAssignment(row.assignment) : undefined,
+    cycle: row.cycle ? mapCycle(row.cycle) : undefined,
   };
 }
 
@@ -250,4 +288,12 @@ async function createInBatches(model: { createMany: (args: { data: any[] }) => P
       await model.createMany({ data: batch });
     }
   }
+}
+
+function uniqueAssignmentsByActionTheme<T extends { actionId: string; theme: string; createdAt?: Date | string }>(assignments: T[]) {
+  return [...assignments]
+    .sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')))
+    .filter((assignment, index, list) => (
+      list.findIndex((item) => item.actionId === assignment.actionId && item.theme === assignment.theme) === index
+    ));
 }

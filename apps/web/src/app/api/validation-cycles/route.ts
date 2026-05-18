@@ -1,13 +1,26 @@
 import { NextRequest } from 'next/server';
+import { ValidationStatus } from '@prisma/client';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { mapCycle } from '@/lib/store';
 
+const VALIDATION_STATUSES = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as const;
+
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  const rows = await prisma.validationCycle.findMany({ orderBy: { openedAt: 'desc' } });
-  return ok(rows.map(mapCycle));
+  const rows = await prisma.validationCycle.findMany({
+    orderBy: { openedAt: 'desc' },
+    include: { validations: { select: { status: true } } },
+  });
+  return ok(rows.map((row) => ({
+    ...mapCycle(row),
+    validationCount: row.validations.length,
+    validationsByStatus: VALIDATION_STATUSES.map((status) => ({
+      status,
+      count: row.validations.filter((v) => v.status === status).length,
+    })),
+  })));
 }
 
 export async function POST(req: NextRequest) {
@@ -24,24 +37,45 @@ export async function POST(req: NextRequest) {
 
   const assignments = await prisma.thematicAssignment.findMany({
     where: { theme: body.theme, status: 'PRONTO_PARA_VALIDACAO' },
+    orderBy: { createdAt: 'asc' },
   });
-  const actionIds = assignments.map((a) => a.actionId);
+  const uniqueAssignments = [...new Map(assignments.map((assignment) => [assignment.actionId, assignment])).values()];
+  const actionIds = uniqueAssignments.map((a) => a.actionId);
   const actions = await prisma.budgetAction.findMany({ where: { id: { in: actionIds }, year: Number(body.year) } });
   const actionSet = new Set(actions.map((a) => a.id));
+  const actionsById = new Map(actions.map((action) => [action.id, action]));
+
+  const validationRows = uniqueAssignments
+    .filter((a) => actionSet.has(a.actionId))
+    .map((a) => {
+      const action = actionsById.get(a.actionId)!;
+      return {
+        cycleId: cycle.id, actionId: a.actionId, assignmentId: a.id,
+        organizationCode: action.organizationCode, unitCode: action.unitCode,
+        theme: body.theme, status: ValidationStatus.RASCUNHO, deliveries: [], evidences: [],
+      };
+    });
+
+  if (!validationRows.length) {
+    await prisma.validationCycle.delete({ where: { id: cycle.id } });
+    return badRequest('Nenhuma ação classificada foi encontrada para este tema e exercício.');
+  }
 
   await prisma.actionValidation.createMany({
-    data: assignments
-      .filter((a) => actionSet.has(a.actionId))
-      .map((a) => {
-        const action = actions.find((ac) => ac.id === a.actionId)!;
-        return {
-          cycleId: cycle.id, actionId: a.actionId, assignmentId: a.id,
-          organizationCode: action.organizationCode, unitCode: action.unitCode,
-          theme: body.theme, status: 'RASCUNHO', deliveries: [], evidences: [],
-        };
-      }),
+    data: validationRows,
     skipDuplicates: true,
   });
 
-  return ok(mapCycle(cycle));
+  const created = await prisma.validationCycle.findUniqueOrThrow({
+    where: { id: cycle.id },
+    include: { validations: { select: { status: true } } },
+  });
+  return ok({
+    ...mapCycle(created),
+    validationCount: created.validations.length,
+    validationsByStatus: VALIDATION_STATUSES.map((status) => ({
+      status,
+      count: created.validations.filter((v) => v.status === status).length,
+    })),
+  });
 }
