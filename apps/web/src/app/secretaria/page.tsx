@@ -605,21 +605,21 @@ export default function SecretariaPage() {
             <SummaryCountBadge count={validations.length} label="validações" />
             <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />
             {userRole === 'SECRETARIA_REPRESENTANTE' && (
-              <Popover
-                open={submitIssuesOpen}
-                onOpenChange={(open) => {
-                  if (!open) {
-                    setSubmitIssuesOpen(false);
-                    setSubmitIssues([]);
-                  }
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <div className="flex gap-2">
+              <div className="flex gap-2.5">
+                <Popover
+                  open={submitIssuesOpen}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setSubmitIssuesOpen(false);
+                      setSubmitIssues([]);
+                    }
+                  }}
+                >
+                  <PopoverTrigger asChild>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-amber-500/40 text-amber-700 hover:bg-amber-500/10 hover:text-amber-800"
+                      className="border-amber-500/40 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 hover:text-amber-800 shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                       disabled={
                         isSubmittingAll ||
                         !validations.some((v) => v.status === 'RASCUNHO' || v.status === 'DEVOLVIDO' || v.status === 'DEVOLVIDO_REVISOR')
@@ -633,83 +633,83 @@ export default function SecretariaPage() {
                       )}
                       {isSubmittingAll ? 'Enviando...' : 'Enviar para Revisão Interna'}
                     </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    side="bottom"
+                    className="flex w-[min(96vw,28rem)] flex-col gap-3 border-destructive/30 bg-popover p-4 shadow-lg"
+                  >
+                    <div className="flex items-start gap-2">
+                      <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="font-semibold leading-none text-destructive">Itens pendentes antes do envio</p>
+                        <p className="text-sm text-muted-foreground">
+                          Complete os campos abaixo antes de enviar para Revisão Interna.
+                        </p>
+                      </div>
+                    </div>
+                    <ScrollArea className="max-h-[min(50vh,16rem)] w-full rounded-lg border border-destructive/20 bg-muted">
+                      <div className="flex flex-col gap-4 p-3 text-sm">
+                        {submitIssues.map((group) => (
+                          <div key={group.validationId}>
+                            <p className="font-medium text-foreground">
+                              {group.title}
+                              {group.isSelected ? (
+                                <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                  (validação selecionada)
+                                </span>
+                              ) : null}
+                            </p>
+                            <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                              {group.items.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    <div className="flex justify-end border-t border-destructive/20 pt-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSubmitIssuesOpen(false);
+                          setSubmitIssues([]);
+                        }}
+                      >
+                        Fechar
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
 
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={
-                        isSubmittingAll ||
-                        !validations.some((v) => v.status === 'APROVADO_REVISOR')
-                      }
-                      onClick={() => void submitAll(true)}
-                    >
-                      {isSubmittingAll ? (
-                        <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                      ) : (
-                        <SendIcon data-icon="inline-start" className="size-4" />
-                      )}
-                      {isSubmittingAll ? 'Enviando...' : 'Enviar para SEPLAN'}
-                    </Button>
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="end"
-                  side="bottom"
-                  className="flex w-[min(96vw,28rem)] flex-col gap-3 border-destructive/30 bg-popover p-4 shadow-lg"
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold tracking-wide transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  disabled={
+                    isSubmittingAll ||
+                    !validations.some((v) => v.status === 'APROVADO_REVISOR')
+                  }
+                  onClick={() => void submitAll(true)}
                 >
-                  <div className="flex items-start gap-2">
-                    <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="font-semibold leading-none text-destructive">Itens pendentes antes do envio</p>
-                      <p className="text-sm text-muted-foreground">
-                        Complete os campos abaixo antes de enviar para Revisão Interna.
-                      </p>
-                    </div>
-                  </div>
-                  <ScrollArea className="max-h-[min(50vh,16rem)] w-full rounded-lg border border-destructive/20 bg-muted">
-                    <div className="flex flex-col gap-4 p-3 text-sm">
-                      {submitIssues.map((group) => (
-                        <div key={group.validationId}>
-                          <p className="font-medium text-foreground">
-                            {group.title}
-                            {group.isSelected ? (
-                              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                (validação selecionada)
-                              </span>
-                            ) : null}
-                          </p>
-                          <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                            {group.items.map((item) => (
-                              <li key={item}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                  <div className="flex justify-end border-t border-destructive/20 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSubmitIssuesOpen(false);
-                        setSubmitIssues([]);
-                      }}
-                    >
-                      Fechar
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+                  {isSubmittingAll ? (
+                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                  ) : (
+                    <SendIcon data-icon="inline-start" className="size-4" />
+                  )}
+                  {isSubmittingAll ? 'Enviando...' : 'Enviar para SEPLAN'}
+                </Button>
+              </div>
             )}
 
             {userRole === 'SECRETARIA_REVISOR' && (
-              <div className="flex gap-2">
+              <div className="flex gap-2.5">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  className="border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/10 hover:text-destructive shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                   disabled={
                     isReviewingAll ||
                     !validations.some((v) => v.status === 'ENVIADO_REVISOR')
@@ -726,7 +726,7 @@ export default function SecretariaPage() {
 
                 <Button
                   size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white hover:text-white"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold tracking-wide transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                   disabled={
                     isReviewingAll ||
                     !validations.some((v) => v.status === 'ENVIADO_REVISOR')
