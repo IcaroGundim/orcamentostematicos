@@ -722,7 +722,7 @@ export default function SecretariaPage() {
                   ) : (
                     <Undo2Icon data-icon="inline-start" className="size-4" />
                   )}
-                  Devolver Tudo ao Técnico
+                  Devolver para Correção
                 </Button>
 
                 <Button
