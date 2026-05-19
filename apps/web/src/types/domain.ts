@@ -4,6 +4,7 @@ export type ValidationStatus =
   | 'RASCUNHO'
   | 'ENVIADO_REVISOR'
   | 'DEVOLVIDO_REVISOR'
+  | 'APROVADO_REVISOR'
   | 'ENVIADO'
   | 'DEVOLVIDO'
   | 'APROVADO';

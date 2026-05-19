@@ -36,14 +36,15 @@ export function StatusBadge({ status }: { status: ValidationStatus }) {
   const variant =
     status === 'APROVADO' ? 'default' :
     status === 'DEVOLVIDO' || status === 'DEVOLVIDO_REVISOR' ? 'destructive' :
-    status === 'ENVIADO' || status === 'ENVIADO_REVISOR' ? 'outline' :
+    status === 'ENVIADO' || status === 'ENVIADO_REVISOR' || status === 'APROVADO_REVISOR' ? 'outline' :
     'secondary';
   return (
     <Badge
       variant={variant}
       className={cn(
         status === 'ENVIADO_REVISOR' && 'border-amber-500/40 bg-amber-500/10 text-amber-600',
-        status === 'DEVOLVIDO_REVISOR' && 'border-rose-500/40 bg-rose-500/10 text-rose-600'
+        status === 'DEVOLVIDO_REVISOR' && 'border-rose-500/40 bg-rose-500/10 text-rose-600',
+        status === 'APROVADO_REVISOR' && 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600'
       )}
     >
       {statusLabels[status]}

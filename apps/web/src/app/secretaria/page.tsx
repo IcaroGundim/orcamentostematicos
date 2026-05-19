@@ -269,16 +269,17 @@ export default function SecretariaPage() {
     toast.success('Rascunho salvo.');
   }
 
-  async function submitAll() {
+  async function submitAll(toSeplan: boolean) {
     if (isSubmittingAll) return;
 
-    const pending = validations.filter((item) => item.status === 'RASCUNHO' || item.status === 'DEVOLVIDO' || item.status === 'DEVOLVIDO_REVISOR');
+    const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
+    const pending = validations.filter((item) => targetStatuses.includes(item.status));
     if (!pending.length) {
-      toast.info('Nenhuma validação pronta para envio.');
+      toast.info(`Nenhuma validação pronta para ${toSeplan ? 'envio à SEPLAN' : 'revisão interna'}.`);
       return;
     }
 
-    const editableNow = current?.status === 'RASCUNHO' || current?.status === 'DEVOLVIDO' || current?.status === 'DEVOLVIDO_REVISOR';
+    const editableNow = current && targetStatuses.includes(current.status);
     setIsSubmittingAll(true);
     try {
       if (editableNow && current && form.formState.isDirty) {
@@ -307,7 +308,7 @@ export default function SecretariaPage() {
 
       const result = await api<{ enviadas: number; incompletas: number }>('/validations/submit-all', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ toSeplan }),
       });
 
       if (result.enviadas === 0 && result.incompletas === 0) {
@@ -321,14 +322,22 @@ export default function SecretariaPage() {
         }
         const reminder =
           issues.length > 0 ? ' Confira o balão de pendências ao lado do botão de envio.' : '';
-        toast.success(`Respostas enviadas para Revisão Interna: ${parts.join(', ')}.${reminder}`);
+        toast.success(
+          toSeplan
+            ? `Respostas enviadas para SEPLAN: ${parts.join(', ')}.${reminder}`
+            : `Respostas enviadas para Revisão Interna: ${parts.join(', ')}.${reminder}`
+        );
       }
 
       await load();
       clearAllValidationDrafts();
       prevCurrentIdRef.current = null;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao enviar respostas para Revisão Interna.');
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : `Erro ao enviar respostas para ${toSeplan ? 'SEPLAN' : 'Revisão Interna'}.`,
+      );
     } finally {
       setIsSubmittingAll(false);
     }
@@ -548,21 +557,42 @@ export default function SecretariaPage() {
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button
-                    size="sm"
-                    disabled={
-                      isSubmittingAll ||
-                      !validations.some((v) => v.status === 'RASCUNHO' || v.status === 'DEVOLVIDO' || v.status === 'DEVOLVIDO_REVISOR')
-                    }
-                    onClick={() => void submitAll()}
-                  >
-                    {isSubmittingAll ? (
-                      <RefreshCwIcon data-icon="inline-start" className="animate-spin" />
-                    ) : (
-                      <SendIcon data-icon="inline-start" />
-                    )}
-                    {isSubmittingAll ? 'Enviando...' : 'Enviar para Revisão Interna'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-500/40 text-amber-700 hover:bg-amber-500/10 hover:text-amber-800"
+                      disabled={
+                        isSubmittingAll ||
+                        !validations.some((v) => v.status === 'RASCUNHO' || v.status === 'DEVOLVIDO' || v.status === 'DEVOLVIDO_REVISOR')
+                      }
+                      onClick={() => void submitAll(false)}
+                    >
+                      {isSubmittingAll ? (
+                        <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                      ) : (
+                        <SendIcon data-icon="inline-start" className="size-4" />
+                      )}
+                      {isSubmittingAll ? 'Enviando...' : 'Enviar para Revisão Interna'}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={
+                        isSubmittingAll ||
+                        !validations.some((v) => v.status === 'APROVADO_REVISOR')
+                      }
+                      onClick={() => void submitAll(true)}
+                    >
+                      {isSubmittingAll ? (
+                        <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                      ) : (
+                        <SendIcon data-icon="inline-start" className="size-4" />
+                      )}
+                      {isSubmittingAll ? 'Enviando...' : 'Enviar para SEPLAN'}
+                    </Button>
+                  </div>
                 </PopoverTrigger>
                 <PopoverContent
                   align="end"

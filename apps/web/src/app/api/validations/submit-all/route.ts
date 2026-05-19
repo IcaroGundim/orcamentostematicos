@@ -12,11 +12,16 @@ export async function POST(req: NextRequest) {
   if (!user) return unauthorized();
   if (user.role !== 'SECRETARIA_REPRESENTANTE' || !user.organizationCode) return forbidden();
 
+  const body = await req.json().catch(() => null);
+  const toSeplan = !!body?.toSeplan;
+
+  const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
+
   const rows = await prisma.actionValidation.findMany({
     where: {
       organizationCode: user.organizationCode,
       ...(user.unitCode ? { unitCode: user.unitCode } : {}),
-      status: { in: ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'] },
+      status: { in: targetStatuses as any },
     },
   });
 
@@ -39,9 +44,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (completeIds.length) {
+    const nextStatus = toSeplan ? 'ENVIADO' : 'ENVIADO_REVISOR';
     await prisma.actionValidation.updateMany({
       where: { id: { in: completeIds } },
-      data: { status: 'ENVIADO_REVISOR', submittedAt: new Date() },
+      data: { status: nextStatus as any, submittedAt: new Date() },
     });
   }
 

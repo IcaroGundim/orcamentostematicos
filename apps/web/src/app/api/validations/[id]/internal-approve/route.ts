@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const row = await prisma.actionValidation.update({
     where: { id },
-    data: { status: 'ENVIADO', reviewedAt: new Date() },
+    data: { status: 'APROVADO_REVISOR', reviewedAt: new Date() },
   }).catch(() => null);
 
   if (!row) return notFound('Não foi possível aprovar a validação.');
