@@ -106,6 +106,7 @@ export default function SecretariaPage() {
   const [userRole, setUserRole] = useState<string>('');
   const [internalReviewComment, setInternalReviewComment] = useState('');
   const [isActionReviewing, setIsActionReviewing] = useState(false);
+  const [isReviewingAll, setIsReviewingAll] = useState(false);
   const prevCurrentIdRef = useRef<string | null>(null);
   const current = useMemo(() => validations.find((item) => item.id === currentId) ?? validations[0], [validations, currentId]);
 
@@ -126,6 +127,9 @@ export default function SecretariaPage() {
       return;
     }
     setUserRole(session.user.role);
+    if (session.user.role === 'SECRETARIA_REVISOR') {
+      setActiveTab('validations');
+    }
     load().catch((err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Erro ao carregar dados. O servidor pode estar indisponível.');
     });
@@ -188,6 +192,56 @@ export default function SecretariaPage() {
       toast.error(err instanceof Error ? err.message : 'Erro ao devolver validação.');
     } finally {
       setIsActionReviewing(false);
+    }
+  }
+
+  async function reviewAll(approve: boolean) {
+    if (isReviewingAll) return;
+
+    const pending = validations.filter((item) => item.status === 'ENVIADO_REVISOR');
+    if (!pending.length) {
+      toast.info('Nenhuma validação pendente de revisão.');
+      return;
+    }
+
+    let comment = '';
+    if (!approve) {
+      const userInput = prompt('Digite o comentário de devolução para todas as validações:');
+      if (userInput === null) return; // User cancelled
+      if (!userInput.trim()) {
+        toast.warning('O comentário de devolução é obrigatório para realizar a devolução.');
+        return;
+      }
+      comment = userInput;
+    }
+
+    setIsReviewingAll(true);
+    try {
+      const result = await api<{ revisados?: number; error?: string }>('/validations/review-all', {
+        method: 'POST',
+        body: JSON.stringify({ approve, reviewerComment: comment }),
+      });
+
+      if (result.error) {
+        toast.error(result.error);
+      } else if (result.revisados) {
+        toast.success(
+          approve
+            ? `Aprovadas com sucesso ${result.revisados} validação(ões)!`
+            : `Devolvidas com sucesso ${result.revisados} validação(ões) para o técnico!`
+        );
+        await load();
+      } else {
+        toast.info('Nenhuma validação revisada.');
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : `Erro ao realizar a revisão em lote.`
+      );
+    } finally {
+      setIsReviewingAll(false);
     }
   }
 
@@ -539,10 +593,14 @@ export default function SecretariaPage() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
-            <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
-          </TabsList>
+          {userRole !== 'SECRETARIA_REVISOR' ? (
+            <TabsList>
+              <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
+              <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
+            </TabsList>
+          ) : (
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Revisão de Entregas (Pasta)</h1>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <SummaryCountBadge count={validations.length} label="validações" />
             <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />
@@ -644,6 +702,45 @@ export default function SecretariaPage() {
                   </div>
                 </PopoverContent>
               </Popover>
+            )}
+
+            {userRole === 'SECRETARIA_REVISOR' && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  disabled={
+                    isReviewingAll ||
+                    !validations.some((v) => v.status === 'ENVIADO_REVISOR')
+                  }
+                  onClick={() => void reviewAll(false)}
+                >
+                  {isReviewingAll ? (
+                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                  ) : (
+                    <Trash2Icon data-icon="inline-start" className="size-4" />
+                  )}
+                  Devolver Tudo ao Técnico
+                </Button>
+
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white hover:text-white"
+                  disabled={
+                    isReviewingAll ||
+                    !validations.some((v) => v.status === 'ENVIADO_REVISOR')
+                  }
+                  onClick={() => void reviewAll(true)}
+                >
+                  {isReviewingAll ? (
+                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                  ) : (
+                    <CheckIcon data-icon="inline-start" className="size-4" />
+                  )}
+                  Aprovar Tudo
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -834,7 +931,8 @@ export default function SecretariaPage() {
         </TabsContent>
 
         <TabsContent value="curation">
-          <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
+          {userRole !== 'SECRETARIA_REVISOR' ? (
+            <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
             <Card className="min-w-0">
               <CardHeader>
                 <CardTitle>Ações da secretaria</CardTitle>
@@ -1127,7 +1225,12 @@ export default function SecretariaPage() {
                 </FieldGroup>
               </CardContent>
             </Card>
-          </section>
+            </section>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground bg-card rounded-lg border border-border">
+              Acesso não autorizado para esta funcionalidade.
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </main>
