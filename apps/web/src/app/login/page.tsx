@@ -38,7 +38,7 @@ export default function LoginPage() {
         body: JSON.stringify(values),
       });
       setStoredSession(session);
-      router.push(session.user.role === 'SECRETARIA_REPRESENTANTE' ? '/secretaria' : '/seplan');
+      router.push(session.user.role === 'SEPLAN_ADMIN' ? '/seplan' : '/secretaria');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login.');
     }
@@ -132,9 +132,88 @@ export default function LoginPage() {
 
             <Separator className="my-5" />
 
-            <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-              <span>admin@seplan.ac.gov.br / admin123</span>
-              <span>semulher@ac.gov.br / secretaria123</span>
+            <div className="mt-2 flex flex-col gap-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
+                Acesso Rápido de Homologação (Debug)
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    form.setValue('email', 'admin@seplan.ac.gov.br');
+                    form.setValue('password', 'admin123');
+                    void form.handleSubmit(onSubmit)();
+                  }}
+                  className="col-span-2 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-left transition-all hover:bg-primary/10 hover:border-primary/40 disabled:opacity-50"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-bold text-primary">Gestor SEPLAN (Administrador)</span>
+                    <span className="text-[9px] text-muted-foreground">admin@seplan.ac.gov.br</span>
+                  </div>
+                  <span className="rounded bg-primary px-1.5 py-0.5 text-[8px] font-semibold text-white uppercase">SEPLAN</span>
+                </button>
+                
+                <div className="col-span-2 grid grid-cols-2 gap-1.5 border-t border-border pt-2">
+                  <span className="col-span-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">SEMULHER (Mulher)</span>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      form.setValue('email', 'semulher@ac.gov.br');
+                      form.setValue('password', 'secretaria123');
+                      void form.handleSubmit(onSubmit)();
+                    }}
+                    className="flex flex-col rounded-lg border border-border bg-card p-2 text-left transition-all hover:bg-muted disabled:opacity-50"
+                  >
+                    <span className="text-[10px] font-bold text-foreground">Técnico</span>
+                    <span className="text-[8px] text-muted-foreground truncate w-full">semulher@ac.gov.br</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      form.setValue('email', 'revisor.semulher@ac.gov.br');
+                      form.setValue('password', 'secretaria123');
+                      void form.handleSubmit(onSubmit)();
+                    }}
+                    className="flex flex-col rounded-lg border border-border bg-card p-2 text-left transition-all hover:bg-muted disabled:opacity-50"
+                  >
+                    <span className="text-[10px] font-bold text-foreground">Revisor</span>
+                    <span className="text-[8px] text-muted-foreground truncate w-full">revisor.semulher@ac.gov.br</span>
+                  </button>
+                </div>
+
+                <div className="col-span-2 grid grid-cols-2 gap-1.5 border-t border-border pt-2">
+                  <span className="col-span-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">SESACRE (Saúde)</span>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      form.setValue('email', 'sesacre@ac.gov.br');
+                      form.setValue('password', 'secretaria123');
+                      void form.handleSubmit(onSubmit)();
+                    }}
+                    className="flex flex-col rounded-lg border border-border bg-card p-2 text-left transition-all hover:bg-muted disabled:opacity-50"
+                  >
+                    <span className="text-[10px] font-bold text-foreground">Técnico</span>
+                    <span className="text-[8px] text-muted-foreground truncate w-full">sesacre@ac.gov.br</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      form.setValue('email', 'revisor.sesacre@ac.gov.br');
+                      form.setValue('password', 'secretaria123');
+                      void form.handleSubmit(onSubmit)();
+                    }}
+                    className="flex flex-col rounded-lg border border-border bg-card p-2 text-left transition-all hover:bg-muted disabled:opacity-50"
+                  >
+                    <span className="text-[10px] font-bold text-foreground">Revisor</span>
+                    <span className="text-[8px] text-muted-foreground truncate w-full">revisor.sesacre@ac.gov.br</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

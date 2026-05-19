@@ -44,7 +44,33 @@ async function main() {
     },
   });
 
-  console.log('Seed concluído: 3 usuários criados.');
+  await prisma.user.upsert({
+    where: { email: 'revisor.semulher@ac.gov.br' },
+    update: {},
+    create: {
+      id: 'user-revisor-semulher',
+      name: 'Revisor SEMULHER',
+      email: 'revisor.semulher@ac.gov.br',
+      password: 'secretaria123',
+      role: 'SECRETARIA_REVISOR',
+      organizationCode: '762',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'revisor.sesacre@ac.gov.br' },
+    update: {},
+    create: {
+      id: 'user-revisor-sesacre',
+      name: 'Revisor SESACRE',
+      email: 'revisor.sesacre@ac.gov.br',
+      password: 'secretaria123',
+      role: 'SECRETARIA_REVISOR',
+      organizationCode: '721',
+    },
+  });
+
+  console.log('Seed concluído: 5 usuários criados.');
 }
 
 main()

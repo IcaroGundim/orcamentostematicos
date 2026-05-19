@@ -20,11 +20,33 @@ export function ThemeBadge({ theme }: { theme: ThemeBudget }) {
   );
 }
 
+export function SummaryCountBadge({ count, label }: { count: number; label: string }) {
+  return (
+    <Badge
+      variant="default"
+      className="h-7 gap-2 rounded-[min(var(--radius-md),12px)] border-transparent px-3.5 text-[0.8rem] font-normal shadow-sm"
+    >
+      <span className="tabular-nums font-semibold leading-none">{count}</span>
+      <span className="text-white uppercase tracking-wide">{label}</span>
+    </Badge>
+  );
+}
+
 export function StatusBadge({ status }: { status: ValidationStatus }) {
   const variant =
     status === 'APROVADO' ? 'default' :
-    status === 'DEVOLVIDO' ? 'destructive' :
-    status === 'ENVIADO' ? 'outline' :
+    status === 'DEVOLVIDO' || status === 'DEVOLVIDO_REVISOR' ? 'destructive' :
+    status === 'ENVIADO' || status === 'ENVIADO_REVISOR' ? 'outline' :
     'secondary';
-  return <Badge variant={variant}>{statusLabels[status]}</Badge>;
+  return (
+    <Badge
+      variant={variant}
+      className={cn(
+        status === 'ENVIADO_REVISOR' && 'border-amber-500/40 bg-amber-500/10 text-amber-600',
+        status === 'DEVOLVIDO_REVISOR' && 'border-rose-500/40 bg-rose-500/10 text-rose-600'
+      )}
+    >
+      {statusLabels[status]}
+    </Badge>
+  );
 }

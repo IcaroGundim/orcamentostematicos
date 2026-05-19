@@ -10,25 +10,23 @@ import {
   FolderCogIcon,
   InfoIcon,
   LogOutIcon,
-  PlusIcon,
   RefreshCwIcon,
-  SaveIcon,
   SearchIcon,
   SendIcon,
   Trash2Icon,
+  TriangleAlertIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
-import { z } from 'zod';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -39,35 +37,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
+import { StatusBadge, SummaryCountBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
-import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels } from '@/lib/api';
+import { ValidationForm } from '@/components/domain/validation-form';
+import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, statusLabels } from '@/lib/api';
+import { isExclusiveAllocation, resolveWeightingFactor } from '@/lib/classification-rules';
+import {
+  appendActionAssignment,
+  decrementSummaryAssignments,
+  fetchCurationSnapshot,
+  incrementSummaryAssignments,
+  patchActionAssignments,
+} from '@/lib/curation-actions';
+import {
+  clearAllValidationDrafts,
+  clearValidationDraft,
+  getValidationDraft,
+  setValidationDraft,
+} from '@/lib/validation-draft-cache';
+import {
+  collectPendingValidationIssues,
+  emptyValidationFormValues,
+  toValidationFormInput,
+  validationFormSchema,
+  type ValidationFormInput,
+  type ValidationFormValues,
+  type ValidationSubmitIssue,
+} from '@/lib/validation-schema';
 import type { BudgetAction, Metadata, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
 
-const schema = z.object({
-  executionStatus: z.string().min(1),
-  realizedDescription: z.string().min(5),
-  informedExecutedValue: z.coerce.number().min(0),
-  observations: z.string().optional(),
-  deliveries: z.array(
-    z.object({
-      id: z.string().optional(),
-      description: z.string().min(3),
-      quantity: z.coerce.number().min(0),
-      unit: z.string().min(1),
-      municipality: z.string().min(1),
-      beneficiaries: z.string().min(1),
-    }),
-  ),
-});
-
-type FormInput = z.input<typeof schema>;
-type FormValues = z.output<typeof schema>;
+type FormInput = ValidationFormInput;
+type FormValues = ValidationFormValues;
 
 const allValue = 'ALL';
 
@@ -95,14 +99,21 @@ export default function SecretariaPage() {
   const [removePopoverOpen, setRemovePopoverOpen] = useState(false);
   const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
   const [isRemovingAssignment, setIsRemovingAssignment] = useState(false);
+  const [isSubmittingAll, setIsSubmittingAll] = useState(false);
+  const [submitIssues, setSubmitIssues] = useState<ValidationSubmitIssue[]>([]);
+  const [submitIssuesOpen, setSubmitIssuesOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('curation');
+  const [userRole, setUserRole] = useState<string>('');
+  const [internalReviewComment, setInternalReviewComment] = useState('');
+  const [isActionReviewing, setIsActionReviewing] = useState(false);
+  const prevCurrentIdRef = useRef<string | null>(null);
   const current = useMemo(() => validations.find((item) => item.id === currentId) ?? validations[0], [validations, currentId]);
 
   const form = useForm<FormInput, unknown, FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: emptyValues(),
+    resolver: zodResolver(validationFormSchema),
+    defaultValues: emptyValidationFormValues(),
   });
   const deliveries = useFieldArray({ control: form.control, name: 'deliveries' });
-  const executionStatus = form.watch('executionStatus');
 
   useEffect(() => {
     const session = getStoredSession();
@@ -110,25 +121,75 @@ export default function SecretariaPage() {
       router.push('/login');
       return;
     }
-    if (session.user.role !== 'SECRETARIA_REPRESENTANTE') {
+    if (session.user.role !== 'SECRETARIA_REPRESENTANTE' && session.user.role !== 'SECRETARIA_REVISOR') {
       router.push('/seplan');
       return;
     }
+    setUserRole(session.user.role);
     load().catch((err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Erro ao carregar dados. O servidor pode estar indisponível.');
     });
   }, [router]);
 
   useEffect(() => {
-    if (!current) return;
-    form.reset({
-      executionStatus: current.executionStatus ?? 'EM_EXECUCAO',
-      realizedDescription: current.realizedDescription ?? '',
-      informedExecutedValue: current.informedExecutedValue ?? 0,
-      observations: current.observations ?? '',
-      deliveries: current.deliveries.length ? current.deliveries : [blankDelivery()],
-    });
-  }, [current, form]);
+    if (!currentId) return;
+    const validation = validations.find((item) => item.id === currentId);
+    if (!validation) return;
+
+    if (prevCurrentIdRef.current !== currentId) {
+      if (prevCurrentIdRef.current) {
+        setValidationDraft(prevCurrentIdRef.current, form.getValues());
+      }
+      const cached = getValidationDraft(currentId);
+      form.reset(cached ?? toValidationFormInput(validation));
+      prevCurrentIdRef.current = currentId;
+    }
+  }, [currentId, validations, form]);
+
+  useEffect(() => {
+    setSubmitIssues([]);
+    setSubmitIssuesOpen(false);
+    setInternalReviewComment('');
+  }, [currentId]);
+
+  async function handleInternalApprove(id: string) {
+    if (isActionReviewing) return;
+    setIsActionReviewing(true);
+    try {
+      await api(`/validations/${id}/internal-approve`, {
+        method: 'POST',
+      });
+      toast.success('Validação aprovada e enviada com sucesso para a SEPLAN!');
+      await load();
+      setInternalReviewComment('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao aprovar validação.');
+    } finally {
+      setIsActionReviewing(false);
+    }
+  }
+
+  async function handleInternalReturn(id: string) {
+    if (isActionReviewing) return;
+    if (!internalReviewComment.trim()) {
+      toast.warning('O comentário de devolução é obrigatório.');
+      return;
+    }
+    setIsActionReviewing(true);
+    try {
+      await api(`/validations/${id}/internal-return`, {
+        method: 'POST',
+        body: JSON.stringify({ internalReviewerComment: internalReviewComment }),
+      });
+      toast.success('Validação devolvida com sucesso para o técnico.');
+      await load();
+      setInternalReviewComment('');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao devolver validação.');
+    } finally {
+      setIsActionReviewing(false);
+    }
+  }
 
   async function load() {
     const [validationData, meta, actionData, summaryData] = await Promise.all([
@@ -161,34 +222,150 @@ export default function SecretariaPage() {
     });
   }
 
-  async function save(values: FormValues) {
-    await patch(values);
-    toast.success('Rascunho salvo.');
-    await load();
+  function cacheCurrentDraft() {
+    if (!currentId) return;
+    setValidationDraft(currentId, form.getValues());
   }
 
-  async function submit(values: FormValues) {
+  function selectValidation(id: string) {
+    if (id === currentId) return;
+    cacheCurrentDraft();
+    setCurrentId(id);
+  }
+
+  function handleTabChange(nextTab: string) {
+    if (activeTab === 'validations' && nextTab !== 'validations') {
+      cacheCurrentDraft();
+    }
+    setActiveTab(nextTab);
+  }
+
+  async function save(values: FormValues) {
     if (!current) return;
     await patch(values);
-    await api(`/validations/${current.id}/submit`, { method: 'POST', body: JSON.stringify({}) });
-    toast.success('Validação enviada para a SEPLAN.');
-    await load();
+    clearValidationDraft(current.id);
+    setValidations((prev) =>
+      prev.map((item) =>
+        item.id === current.id
+          ? {
+              ...item,
+              executionStatus: values.executionStatus,
+              realizedDescription: values.realizedDescription,
+              informedExecutedValue: values.informedExecutedValue,
+              observations: values.observations ?? '',
+              deliveries: values.deliveries.map((delivery) => ({
+                id: delivery.id,
+                name: delivery.name,
+                description: delivery.description,
+                quantity: delivery.quantity,
+                municipality: delivery.municipality,
+                beneficiaries: delivery.beneficiaries,
+              })),
+            }
+          : item,
+      ),
+    );
+    form.reset(values);
+    toast.success('Rascunho salvo.');
+  }
+
+  async function submitAll() {
+    if (isSubmittingAll) return;
+
+    const pending = validations.filter((item) => item.status === 'RASCUNHO' || item.status === 'DEVOLVIDO' || item.status === 'DEVOLVIDO_REVISOR');
+    if (!pending.length) {
+      toast.info('Nenhuma validação pronta para envio.');
+      return;
+    }
+
+    const editableNow = current?.status === 'RASCUNHO' || current?.status === 'DEVOLVIDO' || current?.status === 'DEVOLVIDO_REVISOR';
+    setIsSubmittingAll(true);
+    try {
+      if (editableNow && current && form.formState.isDirty) {
+        await patch(form.getValues() as FormValues);
+        form.reset(form.getValues());
+      }
+
+      if (editableNow && current) {
+        await form.trigger();
+      }
+
+      const issues = collectPendingValidationIssues(
+        pending,
+        current?.id,
+        editableNow && current ? form.getValues() : null,
+      );
+      setSubmitIssues(issues);
+      setSubmitIssuesOpen(issues.length > 0);
+
+      if (issues.length > 0) {
+        const fieldCount = issues.reduce((total, issue) => total + issue.items.length, 0);
+        toast.warning(
+          `${issues.length} validação${issues.length !== 1 ? 'ões' : ''} com pendências (${fieldCount} campo${fieldCount !== 1 ? 's' : ''}). Veja o balão ao lado do botão de envio.`,
+        );
+      }
+
+      const result = await api<{ enviadas: number; incompletas: number }>('/validations/submit-all', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+      if (result.enviadas === 0 && result.incompletas === 0) {
+        toast.info('Nenhuma validação completa para envio neste momento.');
+      } else {
+        const parts = [`${result.enviadas} enviada${result.enviadas !== 1 ? 's' : ''}`];
+        if (result.incompletas > 0) {
+          parts.push(
+            `${result.incompletas} incompleta${result.incompletas !== 1 ? 's' : ''} não enviada${result.incompletas !== 1 ? 's' : ''}`,
+          );
+        }
+        const reminder =
+          issues.length > 0 ? ' Confira o balão de pendências ao lado do botão de envio.' : '';
+        toast.success(`Respostas enviadas para Revisão Interna: ${parts.join(', ')}.${reminder}`);
+      }
+
+      await load();
+      clearAllValidationDrafts();
+      prevCurrentIdRef.current = null;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao enviar respostas para Revisão Interna.');
+    } finally {
+      setIsSubmittingAll(false);
+    }
   }
 
   async function createAssignment() {
     if (!selectedActionId) return;
+    const snapshot = actions;
     try {
-      await api<ThematicAssignment>('/thematic-assignments', {
+      const created = await api<ThematicAssignment>('/thematic-assignments', {
         method: 'POST',
         body: JSON.stringify({
           ...assignment,
           actionId: selectedActionId,
-          weightingFactor: assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          weightingFactor: resolveWeightingFactor(
+            assignment.theme,
+            assignment.classification,
+            assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          ),
         }),
       });
+      setActions((prev) => appendActionAssignment(prev, selectedActionId, created));
+      setSummary((prev) => incrementSummaryAssignments(prev, 1));
       toast.success('Ação classificada no orçamento temático.');
-      await load();
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+        // A validação RASCUNHO é gerada automaticamente no backend; recarrega
+        // para que apareça imediatamente na aba Validações.
+        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        setValidations(freshValidations);
+      } catch {
+        /* mantém estado otimista */
+      }
     } catch (err) {
+      setActions(snapshot);
       toast.error(err instanceof Error ? err.message : 'Erro ao classificar ação.');
     }
   }
@@ -198,36 +375,70 @@ export default function SecretariaPage() {
     if (!selectedActionId || isRemovingAssignment || !action) return;
     const validIds = new Set(action.assignments.map((a) => a.id));
     const idsToRemove = assignmentIdsPendingRemoval.filter((id) => validIds.has(id));
-    if (idsToRemove.length === 0) return;
+    if (idsToRemove.length === 0) {
+      toast.warning('Marque ao menos uma classificação para remover.');
+      return;
+    }
 
+    const snapshot = actions;
+    const actionId = selectedActionId;
     setIsRemovingAssignment(true);
-    let removedCount = 0;
     try {
-      for (const id of idsToRemove) {
-        try {
-          await api(`/thematic-assignments/${id}`, { method: 'DELETE' });
-          removedCount++;
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Erro ao remover a classificação.');
-          if (removedCount > 0) {
-            toast.warning(`${removedCount} classificação(ões) removida(s) antes do erro.`);
-          }
-          await load();
-          return;
-        }
-      }
-      toast.success(
-        removedCount === 1 ? 'Classificação removida.' : `${removedCount} classificações removidas.`,
+      const results = await Promise.allSettled(
+        idsToRemove.map((id) => api(`/thematic-assignments/${id}`, { method: 'DELETE' })),
       );
-      setRemovePopoverOpen(false);
-      setAssignmentIdsPendingRemoval([]);
-      await load();
+
+      const succeeded: string[] = [];
+      let firstError: string | null = null;
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          succeeded.push(idsToRemove[index]!);
+        } else if (!firstError) {
+          firstError =
+            result.reason instanceof Error ? result.reason.message : 'Erro ao remover a classificação.';
+        }
+      });
+
+      if (succeeded.length > 0) {
+        setActions((prev) => patchActionAssignments(prev, actionId, succeeded));
+        setSummary((prev) => (prev ? decrementSummaryAssignments(prev, succeeded.length) : prev));
+      } else {
+        setActions(snapshot);
+      }
+
+      if (firstError) {
+        toast.error(firstError);
+        if (succeeded.length > 0) {
+          toast.warning(`${succeeded.length} classificação(ões) removida(s) antes do erro.`);
+        }
+      } else {
+        toast.success(
+          succeeded.length === 1 ? 'Classificação removida.' : `${succeeded.length} classificações removidas.`,
+        );
+        setRemovePopoverOpen(false);
+        setAssignmentIdsPendingRemoval([]);
+      }
+
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+      } catch {
+        /* mantém estado otimista */
+      }
+    } catch (err) {
+      setActions(snapshot);
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover classificações.');
     } finally {
       setIsRemovingAssignment(false);
     }
   }
 
-  const editable = current?.status === 'RASCUNHO' || current?.status === 'DEVOLVIDO';
+  const editable =
+    userRole === 'SECRETARIA_REPRESENTANTE' &&
+    (current?.status === 'RASCUNHO' ||
+      current?.status === 'DEVOLVIDO' ||
+      current?.status === 'DEVOLVIDO_REVISOR');
   const units = useMemo(() => {
     const map = new Map<string, { code: string; name: string }>();
     for (const action of actions) {
@@ -264,15 +475,12 @@ export default function SecretariaPage() {
   const assignmentsRemovalKey = selectedAction?.assignments.map((a) => a.id).join() ?? '';
 
   useEffect(() => {
-    const list = selectedAction?.assignments ?? [];
-    const ids = new Set(list.map((a) => a.id));
-    setAssignmentIdsPendingRemoval((current) => current.filter((id) => ids.has(id)));
-  }, [selectedAction?.id, assignmentsRemovalKey]);
-
-  useEffect(() => {
-    if (!removePopoverOpen) return;
-    setAssignmentIdsPendingRemoval([]);
-  }, [removePopoverOpen]);
+    if (!removePopoverOpen) {
+      setAssignmentIdsPendingRemoval([]);
+      return;
+    }
+    setAssignmentIdsPendingRemoval(selectedAction?.assignments.map((item) => item.id) ?? []);
+  }, [removePopoverOpen, selectedAction?.id, assignmentsRemovalKey, selectedAction?.assignments]);
 
   useEffect(() => {
     setRemovePopoverOpen(false);
@@ -320,19 +528,97 @@ export default function SecretariaPage() {
         </div>
       </header>
 
-      <Tabs defaultValue="validations" className="w-full px-6 py-5 lg:px-8 2xl:px-10">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <TabsList>
-            <TabsTrigger value="validations">Validações</TabsTrigger>
             <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
+            <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
           </TabsList>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{validations.length} validações</Badge>
-            <Badge variant="secondary">{summary?.assignments ?? 0} classificações</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <SummaryCountBadge count={validations.length} label="validações" />
+            <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />
+            {userRole === 'SECRETARIA_REPRESENTANTE' && (
+              <Popover
+                open={submitIssuesOpen}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setSubmitIssuesOpen(false);
+                    setSubmitIssues([]);
+                  }
+                }}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    size="sm"
+                    disabled={
+                      isSubmittingAll ||
+                      !validations.some((v) => v.status === 'RASCUNHO' || v.status === 'DEVOLVIDO' || v.status === 'DEVOLVIDO_REVISOR')
+                    }
+                    onClick={() => void submitAll()}
+                  >
+                    {isSubmittingAll ? (
+                      <RefreshCwIcon data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <SendIcon data-icon="inline-start" />
+                    )}
+                    {isSubmittingAll ? 'Enviando...' : 'Enviar para Revisão Interna'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="flex w-[min(96vw,28rem)] flex-col gap-3 border-destructive/30 bg-popover p-4 shadow-lg"
+                >
+                  <div className="flex items-start gap-2">
+                    <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <p className="font-semibold leading-none text-destructive">Itens pendentes antes do envio</p>
+                      <p className="text-sm text-muted-foreground">
+                        Complete os campos abaixo antes de enviar para Revisão Interna.
+                      </p>
+                    </div>
+                  </div>
+                  <ScrollArea className="max-h-[min(50vh,16rem)] w-full rounded-lg border border-destructive/20 bg-muted">
+                    <div className="flex flex-col gap-4 p-3 text-sm">
+                      {submitIssues.map((group) => (
+                        <div key={group.validationId}>
+                          <p className="font-medium text-foreground">
+                            {group.title}
+                            {group.isSelected ? (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                (validação selecionada)
+                              </span>
+                            ) : null}
+                          </p>
+                          <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                            {group.items.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  <div className="flex justify-end border-t border-destructive/20 pt-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSubmitIssuesOpen(false);
+                        setSubmitIssues([]);
+                      }}
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
         </div>
 
-        <TabsContent value="validations">
+        <TabsContent value="validations" forceMount className="mt-0 data-[state=inactive]:hidden">
           <div className="grid w-full gap-5 xl:grid-cols-[430px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
             <Card>
               <CardHeader>
@@ -350,14 +636,14 @@ export default function SecretariaPage() {
                             'rounded-lg border bg-card p-3 text-left text-sm transition-colors hover:bg-muted/50',
                             current?.id === validation.id && 'border-primary bg-primary/5',
                           )}
-                          onClick={() => setCurrentId(validation.id)}
+                          onClick={() => selectValidation(validation.id)}
                         >
                           <div className="mb-2 flex flex-wrap gap-2">
                             <StatusBadge status={validation.status} />
                             <ThemeBadge theme={validation.theme} />
                           </div>
                           <p className="font-medium leading-snug">{validation.action?.application}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{validation.cycle?.name}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{validation.action?.unitCode} - {validation.action?.unitName}</p>
                         </button>
                       ))}
                     </div>
@@ -369,7 +655,7 @@ export default function SecretariaPage() {
                         <CheckIcon />
                       </EmptyMedia>
                       <EmptyTitle>Nenhuma ação disponível</EmptyTitle>
-                      <EmptyDescription>A SEPLAN ainda não abriu validações para esta secretaria.</EmptyDescription>
+                      <EmptyDescription>Classifique ações na aba Curadoria temática para que apareçam aqui.</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 )}
@@ -412,93 +698,91 @@ export default function SecretariaPage() {
                           <AlertDescription>{current.reviewerComment}</AlertDescription>
                         </Alert>
                       ) : null}
+                      {current.internalReviewerComment ? (
+                        <Alert className="border-amber-500/25 bg-amber-500/5 text-amber-800 dark:text-amber-300">
+                          <InfoIcon className="text-amber-500" />
+                          <AlertTitle className="text-amber-600 font-semibold">Comentário do Revisor Interno</AlertTitle>
+                          <AlertDescription>{current.internalReviewerComment}</AlertDescription>
+                        </Alert>
+                      ) : null}
                     </CardContent>
                   </Card>
 
-                  <Card className="mt-4">
-                    <CardHeader>
-                      <CardTitle>Formulário de validação</CardTitle>
-                      <CardDescription>Informe o que foi realizado e as entregas correspondentes.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <form onSubmit={form.handleSubmit(submit)}>
-                        <FieldGroup>
-                          <div className="grid gap-4 md:grid-cols-3">
-                            <Field data-disabled={!editable || undefined}>
-                              <FieldLabel>Status da execução</FieldLabel>
-                              <Select
-                                value={executionStatus}
-                                disabled={!editable}
-                                onValueChange={(value) => form.setValue('executionStatus', value, { shouldValidate: true })}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    <SelectItem value="NAO_INICIADA">Não iniciada</SelectItem>
-                                    <SelectItem value="EM_EXECUCAO">Em execução</SelectItem>
-                                    <SelectItem value="CONCLUIDA">Concluída</SelectItem>
-                                    <SelectItem value="PARALISADA">Paralisada</SelectItem>
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </Field>
-                            <Field data-disabled={!editable || undefined}>
-                              <FieldLabel htmlFor="executedValue">Valor executado informado</FieldLabel>
-                              <Input id="executedValue" disabled={!editable} type="number" step="0.01" {...form.register('informedExecutedValue')} />
-                            </Field>
-                            <Field data-disabled={!editable || undefined}>
-                              <FieldLabel htmlFor="observations">Observações</FieldLabel>
-                              <Input id="observations" disabled={!editable} {...form.register('observations')} />
-                            </Field>
-                          </div>
-
-                          <Field data-disabled={!editable || undefined}>
-                            <FieldLabel htmlFor="realizedDescription">Descrição do realizado</FieldLabel>
-                            <Textarea id="realizedDescription" disabled={!editable} {...form.register('realizedDescription')} />
-                          </Field>
-
-                          <Separator />
-
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex flex-col gap-1">
-                              <h3 className="font-medium">Entregas realizadas</h3>
-                              <p className="text-sm text-muted-foreground">Cadastre quantidade, unidade, município e público beneficiado.</p>
-                            </div>
-                            <Button type="button" variant="outline" disabled={!editable} onClick={() => deliveries.append(blankDelivery())}>
-                              <PlusIcon data-icon="inline-start" />
-                              Entrega
-                            </Button>
-                          </div>
+                  {userRole === 'SECRETARIA_REVISOR' && (
+                    <Card className="border-primary/30 bg-primary/[0.02]">
+                      <CardHeader>
+                        <CardTitle className="text-base font-semibold">Painel de Revisão Interna</CardTitle>
+                        <CardDescription>
+                          Examine os dados preenchidos pelo técnico. Você pode aprovar o envio para a SEPLAN ou devolver para ajustes.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        {current.status === 'ENVIADO_REVISOR' ? (
                           <div className="flex flex-col gap-3">
-                            {deliveries.fields.map((field, index) => (
-                              <Card key={field.id} size="sm">
-                                <CardContent className="grid gap-3 md:grid-cols-[1fr_120px_120px_1fr_1fr]">
-                                  <Input disabled={!editable} placeholder="Descrição" {...form.register(`deliveries.${index}.description`)} />
-                                  <Input disabled={!editable} type="number" placeholder="Qtd." {...form.register(`deliveries.${index}.quantity`)} />
-                                  <Input disabled={!editable} placeholder="Unidade" {...form.register(`deliveries.${index}.unit`)} />
-                                  <Input disabled={!editable} placeholder="Município" {...form.register(`deliveries.${index}.municipality`)} />
-                                  <Input disabled={!editable} placeholder="Público beneficiado" {...form.register(`deliveries.${index}.beneficiaries`)} />
-                                </CardContent>
-                              </Card>
-                            ))}
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="internalComment" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                Observações / Justificativa da Devolução
+                              </label>
+                              <Textarea
+                                id="internalComment"
+                                placeholder="Caso devolva para o técnico, informe aqui o motivo ou o que precisa ser corrigido..."
+                                value={internalReviewComment}
+                                onChange={(e) => setInternalReviewComment(e.target.value)}
+                                className="min-h-[80px]"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="default"
+                                onClick={() => handleInternalApprove(current.id)}
+                                disabled={isActionReviewing}
+                                className="bg-emerald-600 text-white hover:bg-emerald-700"
+                              >
+                                {isActionReviewing ? (
+                                  <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                                ) : (
+                                  <CheckIcon data-icon="inline-start" className="size-4" />
+                                )}
+                                Aprovar e Enviar para SEPLAN
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => handleInternalReturn(current.id)}
+                                disabled={isActionReviewing || !internalReviewComment.trim()}
+                                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                {isActionReviewing ? (
+                                  <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
+                                ) : (
+                                  <Trash2Icon data-icon="inline-start" className="size-4" />
+                                )}
+                                Devolver ao Técnico
+                              </Button>
+                            </div>
+                            {!internalReviewComment.trim() && (
+                              <p className="text-[11px] text-muted-foreground">
+                                * O comentário é obrigatório para realizar a devolução.
+                              </p>
+                            )}
                           </div>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                            <InfoIcon className="size-4" />
+                            <span>
+                              Status atual: <strong>{statusLabels[current.status]}</strong>. Ações de revisão interna só estão disponíveis para itens aguardando revisão interna.
+                            </span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button type="button" variant="outline" disabled={!editable} onClick={form.handleSubmit(save)}>
-                              <SaveIcon data-icon="inline-start" />
-                              Salvar rascunho
-                            </Button>
-                            <Button type="submit" disabled={!editable}>
-                              <SendIcon data-icon="inline-start" />
-                              Enviar para SEPLAN
-                            </Button>
-                          </div>
-                        </FieldGroup>
-                      </form>
-                    </CardContent>
-                  </Card>
+                  <ValidationForm
+                    form={form}
+                    deliveries={deliveries}
+                    editable={editable}
+                    onSave={save}
+                  />
                 </>
               ) : (
                 <Card>
@@ -509,7 +793,7 @@ export default function SecretariaPage() {
                           <FileCheck2Icon />
                         </EmptyMedia>
                         <EmptyTitle>Nenhuma validação pendente</EmptyTitle>
-                        <EmptyDescription>Quando um ciclo for aberto pela SEPLAN, as ações aparecerão aqui.</EmptyDescription>
+                        <EmptyDescription>Selecione uma ação na lista para preencher a validação.</EmptyDescription>
                       </EmptyHeader>
                     </Empty>
                   </CardContent>
@@ -686,7 +970,7 @@ export default function SecretariaPage() {
                 <FieldGroup>
                   <Field>
                     <FieldLabel>Tema</FieldLabel>
-                    <Select value={assignment.theme} onValueChange={(value) => setAssignment({ ...assignment, theme: value as ThemeBudget, axis: '', classification: '' })}>
+                    <Select value={assignment.theme} onValueChange={(value) => setAssignment({ ...assignment, theme: value as ThemeBudget, axis: '', classification: '', weightingFactor: '' })}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
@@ -715,7 +999,17 @@ export default function SecretariaPage() {
                   </Field>
                   <Field>
                     <FieldLabel>Classificação</FieldLabel>
-                    <Select value={assignment.classification || 'UNSELECTED'} onValueChange={(value) => setAssignment({ ...assignment, classification: value === 'UNSELECTED' ? '' : value })}>
+                    <Select
+                      value={assignment.classification || 'UNSELECTED'}
+                      onValueChange={(value) => {
+                        const classification = value === 'UNSELECTED' ? '' : value;
+                        setAssignment({
+                          ...assignment,
+                          classification,
+                          weightingFactor: isExclusiveAllocation(assignment.theme, classification) ? '1' : '',
+                        });
+                      }}
+                    >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
@@ -727,9 +1021,28 @@ export default function SecretariaPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field>
+                  <Field data-disabled={isExclusiveAllocation(assignment.theme, assignment.classification) || undefined}>
                     <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
-                    <Input id="weightingFactor" type="number" min="0" max="1" step="0.01" value={assignment.weightingFactor} onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })} placeholder="Opcional" />
+                    <Input
+                      id="weightingFactor"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={
+                        isExclusiveAllocation(assignment.theme, assignment.classification)
+                          ? '1'
+                          : assignment.weightingFactor
+                      }
+                      disabled={isExclusiveAllocation(assignment.theme, assignment.classification)}
+                      onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
+                      placeholder="Opcional"
+                    />
+                    {isExclusiveAllocation(assignment.theme, assignment.classification) ? (
+                      <FieldDescription>
+                        Dotação exclusiva: 100% do valor do programa (ponderador fixo em 1).
+                      </FieldDescription>
+                    ) : null}
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
@@ -746,6 +1059,7 @@ export default function SecretariaPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       disabled={
+                        userRole === 'SECRETARIA_REVISOR' ||
                         !selectedActionId ||
                         !assignment.axis ||
                         !assignment.classification ||
@@ -772,7 +1086,7 @@ export default function SecretariaPage() {
                           type="button"
                           variant="outline"
                           className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          disabled={isRemovingAssignment}
+                          disabled={isRemovingAssignment || userRole === 'SECRETARIA_REVISOR'}
                         >
                           <Trash2Icon data-icon="inline-start" />
                           Remover classificação
@@ -788,20 +1102,6 @@ export default function SecretariaPage() {
       </Tabs>
     </main>
   );
-}
-
-function blankDelivery() {
-  return { description: '', quantity: 0, unit: '', municipality: '', beneficiaries: '' };
-}
-
-function emptyValues(): FormInput {
-  return {
-    executionStatus: 'EM_EXECUCAO',
-    realizedDescription: '',
-    informedExecutedValue: 0,
-    observations: '',
-    deliveries: [blankDelivery()],
-  };
 }
 
 function normalize(value: string) {

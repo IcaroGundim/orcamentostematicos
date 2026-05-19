@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
+import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment } from '@/lib/store';
+import { mapAssignment, getOrCreateImplicitCycle } from '@/lib/store';
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const action = await prisma.budgetAction.findUnique({
     where: { id: body.actionId },
-    select: { organizationCode: true, unitCode: true },
+    select: { organizationCode: true, unitCode: true, year: true },
   });
   if (!action) return badRequest('Ação orçamentária não encontrada.');
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
@@ -53,17 +54,51 @@ export async function POST(req: NextRequest) {
     return badRequest('Esta ação já foi classificada para este orçamento temático.');
   }
 
-  const row = await prisma.thematicAssignment.create({
-    data: {
-      actionId: body.actionId,
-      theme: body.theme,
-      axis: body.axis,
-      classification: body.classification,
-      weightingFactor: body.weightingFactor ?? null,
-      justification: body.justification ?? null,
-      status: body.status ?? 'PRONTO_PARA_VALIDACAO',
-      createdBy: user.id,
-    },
+  // Ciclo implícito do par tema/exercício — substitui a antiga "liberação" manual.
+  const cycle = await getOrCreateImplicitCycle(body.theme, action.year);
+
+  const row = await prisma.$transaction(async (tx) => {
+    const assignment = await tx.thematicAssignment.create({
+      data: {
+        actionId: body.actionId,
+        theme: body.theme,
+        axis: body.axis,
+        classification: body.classification,
+        weightingFactor: resolveWeightingFactor(
+          body.theme,
+          body.classification,
+          body.weightingFactor ?? null,
+        ),
+        justification: body.justification ?? null,
+        status: body.status ?? 'PRONTO_PARA_VALIDACAO',
+        createdBy: user.id,
+      },
+    });
+
+    // A validação é gerada automaticamente: a secretaria já a vê na aba
+    // Validações sem depender de a SEPLAN abrir um ciclo.
+    const alreadyExists = await tx.actionValidation.findFirst({
+      where: { assignmentId: assignment.id },
+      select: { id: true },
+    });
+    if (!alreadyExists) {
+      await tx.actionValidation.create({
+        data: {
+          cycleId: cycle.id,
+          actionId: body.actionId,
+          assignmentId: assignment.id,
+          organizationCode: action.organizationCode,
+          unitCode: action.unitCode,
+          theme: body.theme,
+          status: 'RASCUNHO',
+          deliveries: [],
+          evidences: [],
+        },
+      });
+    }
+
+    return assignment;
   });
+
   return ok(mapAssignment(row));
 }

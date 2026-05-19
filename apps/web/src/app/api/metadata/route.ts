@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     themes: ['OCAD', 'OSG', 'CLIMATICO'],
     axes: THEME_AXES,
     classifications: THEME_CLASSIFICATIONS,
-    validationStatuses: ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'],
+    validationStatuses: ['RASCUNHO', 'ENVIADO_REVISOR', 'DEVOLVIDO_REVISOR', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'],
     vigenteImport: vigenteImport ? {
       id: vigenteImport.id,
       filename: vigenteImport.filename,

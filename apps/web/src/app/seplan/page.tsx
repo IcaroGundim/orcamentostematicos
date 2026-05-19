@@ -3,17 +3,17 @@
 import {
   BarChart3Icon,
   BookOpenIcon,
-  CalendarIcon,
   CheckCircle2Icon,
   CheckIcon,
   ChevronDownIcon,
   ClipboardCheckIcon,
   DatabaseIcon,
   ExternalLinkIcon,
+  FileBarChart2Icon,
+  FileDownIcon,
   FileSpreadsheetIcon,
   FolderCogIcon,
   GaugeIcon,
-  LockIcon,
   LogOutIcon,
   RefreshCwIcon,
   RotateCcwIcon,
@@ -23,7 +23,7 @@ import {
   UploadIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
 import {
@@ -35,13 +35,14 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { DeliveryReviewList } from '@/components/domain/delivery-review-list';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -73,12 +74,28 @@ import {
 } from '@/components/ui/sidebar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
-import type { BudgetAction, BudgetImport, Metadata, QddPeriodType, Summary, ThematicAssignment, ThemeBudget, ValidationCycle, ValidationItem } from '@/types/domain';
+import { isExclusiveAllocation, resolveWeightingFactor } from '@/lib/classification-rules';
+import {
+  appendActionAssignment,
+  decrementSummaryAssignments,
+  fetchCurationSnapshot,
+  incrementSummaryAssignments,
+  patchActionAssignments,
+} from '@/lib/curation-actions';
+import type { BudgetAction, BudgetImport, Metadata, QddPeriodType, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
+import {
+  buildResultsRows,
+  defaultExportFilename,
+  exportResultsCsv,
+  exportResultsXlsx,
+  type ResultsThemeSummary,
+} from '@/lib/results-export';
 
 type ImportPreview = {
   previewId: string;
@@ -105,7 +122,7 @@ function formatPeriod(referenceMonth: number, year: number, periodType: QddPerio
     : `${month}/${year}`;
 }
 
-type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | 'reports';
+type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | 'results' | 'reports';
 
 type ActionsTabFilters = {
   organizationCode: string;
@@ -154,7 +171,6 @@ export default function SeplanPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [actions, setActions] = useState<BudgetAction[]>([]);
   const [validations, setValidations] = useState<ValidationItem[]>([]);
-  const [cycles, setCycles] = useState<ValidationCycle[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
@@ -168,7 +184,6 @@ export default function SeplanPage() {
   const [selectedReferenceMonth, setSelectedReferenceMonth] = useState(new Date().getMonth() + 1);
   const [selectedActionId, setSelectedActionId] = useState('');
   const [assignment, setAssignment] = useState(initialAssignment);
-  const [cycle, setCycle] = useState({ name: 'Ciclo de Validação 2026', year: 2026, theme: 'OSG' as ThemeBudget });
   const [filter, setFilter] = useState('');
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
   const [actionsFilters, setActionsFilters] = useState<ActionsTabFilters>(initialActionsFilters);
@@ -186,6 +201,16 @@ export default function SeplanPage() {
   const managementCardsRef = useRef<HTMLDivElement | null>(null);
   const [orgSearch, setOrgSearch] = useState('');
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+  const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
+
+  function toggleResultRow(id: string) {
+    setExpandedResultRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleOrg(code: string) {
     setExpandedOrgs((prev) => {
@@ -219,20 +244,18 @@ export default function SeplanPage() {
   }, [router]);
 
   async function load() {
-    const [meta, summaryData, actionData, validationData, importsData, cyclesData] = await Promise.all([
+    const [meta, summaryData, actionData, validationData, importsData] = await Promise.all([
       api<Metadata>('/metadata'),
       api<Summary>('/reports/summary'),
       api<BudgetAction[]>('/budget-actions'),
       api<ValidationItem[]>('/validations/my'),
       api<BudgetImport[]>('/imports/qdd'),
-      api<ValidationCycle[]>('/validation-cycles'),
     ]);
     setMetadata(meta);
     setSummary(summaryData);
     setActions(actionData);
     setValidations(validationData);
     setImportHistory(importsData);
-    setCycles(cyclesData);
     const firstAction = actionData[0]?.id ?? '';
     setSelectedActionId((current) => current || firstAction);
     setAssignment((current) => ({ ...current, actionId: current.actionId || firstAction }));
@@ -299,18 +322,33 @@ export default function SeplanPage() {
   }
 
   async function createAssignment() {
+    if (!selectedActionId) return;
+    const snapshot = actions;
     try {
-      await api<ThematicAssignment>('/thematic-assignments', {
+      const created = await api<ThematicAssignment>('/thematic-assignments', {
         method: 'POST',
         body: JSON.stringify({
           ...assignment,
           actionId: selectedActionId,
-          weightingFactor: assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          weightingFactor: resolveWeightingFactor(
+            assignment.theme,
+            assignment.classification,
+            assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          ),
         }),
       });
       toast.success('Ação classificada no orçamento temático.');
-      await load();
+      setActions((current) => appendActionAssignment(current, selectedActionId, created));
+      setSummary((current) => incrementSummaryAssignments(current, 1));
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+      } catch {
+        /* mantém estado otimista */
+      }
     } catch (err) {
+      setActions(snapshot);
       toast.error(err instanceof Error ? err.message : 'Erro ao classificar ação.');
     }
   }
@@ -320,58 +358,64 @@ export default function SeplanPage() {
     if (!selectedActionId || isRemovingAssignment || !action) return;
     const validIds = new Set(action.assignments.map((a) => a.id));
     const idsToRemove = assignmentIdsPendingRemoval.filter((id) => validIds.has(id));
-    if (idsToRemove.length === 0) return;
+    if (idsToRemove.length === 0) {
+      toast.warning('Marque ao menos uma classificação para remover.');
+      return;
+    }
 
+    const snapshot = actions;
+    const actionId = selectedActionId;
     setIsRemovingAssignment(true);
-    let removedCount = 0;
+
     try {
-      for (const id of idsToRemove) {
-        try {
-          await api(`/thematic-assignments/${id}`, { method: 'DELETE' });
-          removedCount++;
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Erro ao remover a classificação.');
-          if (removedCount > 0) {
-            toast.warning(`${removedCount} classificação(ões) removida(s) antes do erro.`);
-          }
-          await load();
-          return;
-        }
-      }
-      toast.success(
-        removedCount === 1 ? 'Classificação removida.' : `${removedCount} classificações removidas.`,
+      const results = await Promise.allSettled(
+        idsToRemove.map((id) => api(`/thematic-assignments/${id}`, { method: 'DELETE' })),
       );
-      setRemovePopoverOpen(false);
-      setAssignmentIdsPendingRemoval([]);
-      await load();
+
+      const succeeded: string[] = [];
+      let firstError: string | null = null;
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          succeeded.push(idsToRemove[index]!);
+        } else if (!firstError) {
+          firstError =
+            result.reason instanceof Error ? result.reason.message : 'Erro ao remover a classificação.';
+        }
+      });
+
+      if (succeeded.length > 0) {
+        setActions((prev) => patchActionAssignments(prev, actionId, succeeded));
+        setSummary((prev) => decrementSummaryAssignments(prev, succeeded.length));
+      } else {
+        setActions(snapshot);
+      }
+
+      if (firstError) {
+        toast.error(firstError);
+        if (succeeded.length > 0) {
+          toast.warning(`${succeeded.length} classificação(ões) removida(s) antes do erro.`);
+        }
+      } else {
+        toast.success(
+          succeeded.length === 1 ? 'Classificação removida.' : `${succeeded.length} classificações removidas.`,
+        );
+        setRemovePopoverOpen(false);
+        setAssignmentIdsPendingRemoval([]);
+      }
+
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+      } catch {
+        /* mantém estado otimista */
+      }
+    } catch (err) {
+      setActions(snapshot);
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover classificações.');
     } finally {
       setIsRemovingAssignment(false);
     }
-  }
-
-  async function createCycle() {
-    try {
-      await api('/validation-cycles', {
-        method: 'POST',
-        body: JSON.stringify(cycle),
-      });
-      toast.success('Ciclo aberto e validações geradas.');
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao abrir ciclo de validação.');
-    }
-  }
-
-  async function closeCycleById(id: string) {
-    await api(`/validation-cycles/${id}/close`, { method: 'POST' });
-    toast.success('Ciclo encerrado com sucesso.');
-    await load();
-  }
-
-  async function deleteCycleById(id: string) {
-    await api(`/validation-cycles/${id}`, { method: 'DELETE' });
-    toast.success('Ciclo excluído.');
-    await load();
   }
 
   async function reviewValidation(id: string, decision: 'approve' | 'return') {
@@ -674,6 +718,112 @@ export default function SeplanPage() {
     });
   }, [actions]);
 
+  const trackingByYear = useMemo(() => {
+    const byYear = new Map<
+      number,
+      {
+        year: number;
+        total: number;
+        byStatus: Record<string, number>;
+        orgs: Map<string, { code: string; name: string; total: number; sent: number }>;
+      }
+    >();
+    for (const v of validations) {
+      const year = v.cycle?.year ?? v.action?.year ?? 0;
+      let entry = byYear.get(year);
+      if (!entry) {
+        entry = { year, total: 0, byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 }, orgs: new Map() };
+        byYear.set(year, entry);
+      }
+      entry.total += 1;
+      entry.byStatus[v.status] = (entry.byStatus[v.status] ?? 0) + 1;
+      const code = v.organizationCode || v.action?.organizationCode || '—';
+      let org = entry.orgs.get(code);
+      if (!org) {
+        org = { code, name: v.action?.organizationName ?? code, total: 0, sent: 0 };
+        entry.orgs.set(code, org);
+      }
+      org.total += 1;
+      if (v.status === 'ENVIADO' || v.status === 'APROVADO') org.sent += 1;
+    }
+    return [...byYear.values()]
+      .map((e) => ({ ...e, orgs: [...e.orgs.values()].sort((a, b) => a.code.localeCompare(b.code)) }))
+      .sort((a, b) => b.year - a.year);
+  }, [validations]);
+
+  const reviewByOrg = useMemo(() => {
+    const map = new Map<
+      string,
+      { code: string; name: string; items: ValidationItem[]; byStatus: Record<string, number> }
+    >();
+    for (const v of validations) {
+      const code = v.organizationCode || v.action?.organizationCode || '—';
+      let entry = map.get(code);
+      if (!entry) {
+        entry = { code, name: v.action?.organizationName ?? code, items: [], byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 } };
+        map.set(code, entry);
+      }
+      entry.items.push(v);
+      entry.byStatus[v.status] = (entry.byStatus[v.status] ?? 0) + 1;
+    }
+    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+  }, [validations]);
+
+  const approvedValidations = useMemo(
+    () => validations.filter((v) => v.status === 'APROVADO'),
+    [validations],
+  );
+
+  const resultsByTheme = useMemo<
+    (ResultsThemeSummary & { items: ValidationItem[] })[]
+  >(() => {
+    const themes: ThemeBudget[] = ['OSG', 'OCAD', 'CLIMATICO'];
+    return themes.map((theme) => {
+      const items = approvedValidations.filter((v) => v.theme === theme);
+      const actions = new Set<string>();
+      const orgs = new Set<string>();
+      let executed = 0;
+      let liquidated = 0;
+      let deliveriesCount = 0;
+      for (const v of items) {
+        actions.add(v.actionId);
+        orgs.add(v.organizationCode || v.action?.organizationCode || '');
+        executed += v.informedExecutedValue ?? 0;
+        liquidated += v.action?.totals?.liquidated ?? 0;
+        deliveriesCount += v.deliveries?.length ?? 0;
+      }
+      return {
+        theme,
+        label: themeLabels[theme] ?? theme,
+        items,
+        actionCount: actions.size,
+        orgCount: orgs.size,
+        executed,
+        liquidated,
+        deliveriesCount,
+      };
+    });
+  }, [approvedValidations]);
+
+  function handleExportXlsx() {
+    try {
+      exportResultsXlsx(approvedValidations, defaultExportFilename('xlsx'));
+      toast.success('Relatório XLSX exportado.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao exportar XLSX.');
+    }
+  }
+
+  function handleExportCsv() {
+    try {
+      const rows = buildResultsRows(approvedValidations);
+      exportResultsCsv(rows, defaultExportFilename('csv'));
+      toast.success('Relatório CSV exportado.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao exportar CSV.');
+    }
+  }
+
   const currentTheme = assignment.theme;
   const axes = metadata?.axes[currentTheme] ?? [];
   const classifications = metadata?.classifications[currentTheme] ?? [];
@@ -690,9 +840,13 @@ export default function SeplanPage() {
   }, [selectedAction?.id, assignmentsRemovalKey]);
 
   useEffect(() => {
-    if (!removePopoverOpen) return;
-    setAssignmentIdsPendingRemoval([]);
-  }, [removePopoverOpen]);
+    if (!removePopoverOpen) {
+      setAssignmentIdsPendingRemoval([]);
+      return;
+    }
+    const list = selectedAction?.assignments ?? [];
+    setAssignmentIdsPendingRemoval(list.map((item) => item.id));
+  }, [removePopoverOpen, selectedAction?.id, assignmentsRemovalKey]);
 
   useEffect(() => {
     setRemovePopoverOpen(false);
@@ -712,9 +866,10 @@ export default function SeplanPage() {
     { id: 'overview', label: 'Visão geral', icon: GaugeIcon },
     { id: 'structure', label: 'Estrutura vigente', icon: DatabaseIcon, badge: actions.length },
     { id: 'curation', label: 'Curadoria temática', icon: FolderCogIcon, badge: summary?.assignments ?? 0 },
-    { id: 'cycles', label: 'Ciclos', icon: SendIcon, badge: summary?.cycles ?? 0 },
+    { id: 'cycles', label: 'Acompanhamento', icon: SendIcon, badge: validations.filter((v) => v.status === 'ENVIADO').length },
     { id: 'review', label: 'Revisão', icon: ClipboardCheckIcon, badge: validations.length },
-    { id: 'reports', label: 'Relatórios', icon: BarChart3Icon },
+    { id: 'results', label: 'Resultados', icon: FileBarChart2Icon, badge: approvedValidations.length },
+    { id: 'reports', label: 'Informações Gerais', icon: BarChart3Icon },
   ];
 
   return (
@@ -733,7 +888,7 @@ export default function SeplanPage() {
             <SidebarGroupLabel>Painel</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {[navItems[0], navItems[5]].map((item) => {
+                {[navItems[0], navItems[6]].map((item) => {
                   const Icon = item.icon;
                   return (
                     <SidebarMenuItem key={item.id}>
@@ -781,7 +936,7 @@ export default function SeplanPage() {
             <SidebarGroupLabel>Validação</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {[navItems[3], navItems[4]].map((item) => {
+                {[navItems[3], navItems[4], navItems[5]].map((item) => {
                   const Icon = item.icon;
                   return (
                     <SidebarMenuItem key={item.id}>
@@ -905,7 +1060,7 @@ export default function SeplanPage() {
               >
                 <TabsList className="w-fit shrink-0">
                   <TabsTrigger value="management">Gerenciamento</TabsTrigger>
-                  <TabsTrigger value="actions">Ações</TabsTrigger>
+                  <TabsTrigger value="actions">Dados de Orçamento</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="management" className="mt-0 min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
@@ -1376,7 +1531,7 @@ export default function SeplanPage() {
                   <FieldGroup>
                     <Field>
                       <FieldLabel>Tema</FieldLabel>
-                      <Select value={assignment.theme} onValueChange={(value) => setAssignment({ ...assignment, theme: value as ThemeBudget, axis: '', classification: '' })}>
+                      <Select value={assignment.theme} onValueChange={(value) => setAssignment({ ...assignment, theme: value as ThemeBudget, axis: '', classification: '', weightingFactor: '' })}>
                         <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
@@ -1405,7 +1560,17 @@ export default function SeplanPage() {
                     </Field>
                     <Field>
                       <FieldLabel>Classificação</FieldLabel>
-                      <Select value={assignment.classification || 'UNSELECTED'} onValueChange={(value) => setAssignment({ ...assignment, classification: value === 'UNSELECTED' ? '' : value })}>
+                      <Select
+                        value={assignment.classification || 'UNSELECTED'}
+                        onValueChange={(value) => {
+                          const classification = value === 'UNSELECTED' ? '' : value;
+                          setAssignment({
+                            ...assignment,
+                            classification,
+                            weightingFactor: isExclusiveAllocation(assignment.theme, classification) ? '1' : '',
+                          });
+                        }}
+                      >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
@@ -1417,9 +1582,28 @@ export default function SeplanPage() {
                         </SelectContent>
                       </Select>
                     </Field>
-                    <Field>
+                    <Field data-disabled={isExclusiveAllocation(assignment.theme, assignment.classification) || undefined}>
                       <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
-                      <Input id="weightingFactor" type="number" min="0" max="1" step="0.01" value={assignment.weightingFactor} onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })} placeholder="Opcional" />
+                      <Input
+                        id="weightingFactor"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={
+                          isExclusiveAllocation(assignment.theme, assignment.classification)
+                            ? '1'
+                            : assignment.weightingFactor
+                        }
+                        disabled={isExclusiveAllocation(assignment.theme, assignment.classification)}
+                        onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
+                        placeholder="Opcional"
+                      />
+                      {isExclusiveAllocation(assignment.theme, assignment.classification) ? (
+                        <FieldDescription>
+                          Dotação exclusiva: 100% do valor do programa (ponderador fixo em 1).
+                        </FieldDescription>
+                      ) : null}
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
@@ -1477,154 +1661,404 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'cycles' ? (
-            <section className="grid min-h-0 flex-1 gap-5 overflow-y-auto xl:grid-cols-[430px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
-              <div className="flex flex-col gap-5">
-                <Card >
-                  <CardHeader>
-                    <CardTitle>Abrir ciclo</CardTitle>
-                    <CardDescription>Gere validações para as secretarias a partir das ações classificadas no exercício.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <FieldGroup>
-                      <Field>
-                        <FieldLabel htmlFor="cycleName">Nome do ciclo</FieldLabel>
-                        <Input id="cycleName" value={cycle.name} onChange={(event) => setCycle({ ...cycle, name: event.target.value })} />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="cycleYear">Exercício</FieldLabel>
-                        <Input id="cycleYear" type="number" value={cycle.year} onChange={(event) => setCycle({ ...cycle, year: Number(event.target.value) })} />
-                      </Field>
-                      <Field>
-                        <FieldLabel>Tema orçamentário</FieldLabel>
-                        <Select value={cycle.theme} onValueChange={(value) => setCycle({ ...cycle, theme: value as ThemeBudget })}>
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              {metadata?.themes.map((theme) => (
-                                <SelectItem key={theme} value={theme}>{themeLabels[theme]}</SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                      <Alert className="border-primary/25 bg-primary/5">
-                        <SendIcon />
-                        <AlertDescription className="text-xs">
-                          Ao abrir um ciclo, são geradas automaticamente validações para todas as ações classificadas como
-                          <strong> {themeLabels[cycle.theme]}</strong> no exercício <strong>{cycle.year}</strong> que estejam prontas para validação.
-                        </AlertDescription>
-                      </Alert>
-                      <Button onClick={() => void createCycle()}>
-                        <SendIcon data-icon="inline-start" />
-                        Abrir ciclo de validação
-                      </Button>
-                    </FieldGroup>
-                  </CardContent>
-                </Card>
-
-                <Card >
-                  <CardHeader>
-                    <CardTitle>Situação atual</CardTitle>
-                    <CardDescription>Panorama das classificações e ciclos registrados no sistema.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <MiniStat label="Ações classificadas" value={summary?.assignments ?? 0} />
-                      <MiniStat label="Ciclos abertos" value={cycles.filter((c) => c.status === 'ABERTO').length} />
-                    </div>
-                    <Separator />
-                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Validações por status</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {summary?.validationsByStatus.map((item) => (
-                        <div key={item.status} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
-                          <StatusBadge status={item.status} />
-                          <span className="text-lg font-semibold">{item.count}</span>
+            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              {trackingByYear.length === 0 ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon"><SendIcon /></EmptyMedia>
+                    <EmptyTitle>Sem dados de validação</EmptyTitle>
+                    <EmptyDescription>Assim que as secretarias classificarem ações, o acompanhamento aparecerá aqui.</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                trackingByYear.map((year) => {
+                  const orgsSent = year.orgs.filter((o) => o.sent > 0).length;
+                  return (
+                    <Card key={year.year}>
+                      <CardHeader>
+                        <CardTitle>Exercício {year.year}</CardTitle>
+                        <CardDescription>
+                          {orgsSent} de {year.orgs.length} secretaria{year.orgs.length !== 1 ? 's' : ''} já enviaram informações — {year.total} validaç{year.total !== 1 ? 'ões' : 'ão'} no total.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                          {(['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as const).map((status) => (
+                            <div key={status} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
+                              <StatusBadge status={status} />
+                              <span className="text-lg font-semibold">{year.byStatus[status] ?? 0}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card >
-                <CardHeader>
-                  <CardTitle>Ciclos de validação</CardTitle>
-                  <CardDescription>
-                    {cycles.length === 0
-                      ? 'Nenhum ciclo registrado. Use o formulário ao lado para criar o primeiro.'
-                      : `${cycles.length} ciclo${cycles.length !== 1 ? 's' : ''} registrado${cycles.length !== 1 ? 's' : ''} — ${cycles.filter((c) => c.status === 'ABERTO').length} aberto${cycles.filter((c) => c.status === 'ABERTO').length !== 1 ? 's' : ''}.`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {cycles.length === 0 ? (
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon"><SendIcon /></EmptyMedia>
-                        <EmptyTitle>Nenhum ciclo aberto</EmptyTitle>
-                        <EmptyDescription>Classifique ações temáticas e abra o primeiro ciclo de validação.</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  ) : (
-                    <ScrollArea className="h-[640px] pr-1">
-                      <div className="flex flex-col gap-3">
-                        {cycles.map((c) => (
-                          <CycleCard key={c.id} cycle={c} onClose={() => void closeCycleById(c.id)} onDelete={() => void deleteCycleById(c.id)} />
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </CardContent>
-              </Card>
+                        <Separator />
+                        <div className="flex flex-col gap-2">
+                          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Progresso por secretaria</p>
+                          {year.orgs.map((org) => (
+                            <div key={org.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5 text-sm">
+                              <span className="font-medium">{org.code} - {org.name}</span>
+                              <span className="text-muted-foreground">{org.sent} de {org.total} enviada{org.total !== 1 ? 's' : ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
             </section>
           ) : null}
 
           {activeSection === 'review' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              {reviewByOrg.length === 0 ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SendIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>Nenhuma validação enviada pelas secretarias ainda</EmptyTitle>
+                    <EmptyDescription>As entregas aparecerão aqui agrupadas por secretaria assim que forem enviadas.</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                (() => {
+                  const defaultOpen = reviewByOrg
+                    .filter((o) => (o.byStatus['ENVIADO'] ?? 0) > 0)
+                    .map((o) => o.code);
+                  return (
+                    <Accordion type="multiple" defaultValue={defaultOpen} className="flex flex-col gap-3">
+                      {reviewByOrg.map((org) => {
+                        const pending = org.byStatus['ENVIADO'] ?? 0;
+                        const total = org.items.length;
+                        return (
+                          <AccordionItem key={org.code} value={org.code}>
+                            <AccordionTrigger>
+                              <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pr-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold leading-snug">{org.code} - {org.name}</p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {total} validaç{total !== 1 ? 'ões' : 'ão'}
+                                    {pending > 0 ? ` · ${pending} pendente${pending !== 1 ? 's' : ''} de revisão` : ''}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {pending > 0 ? (
+                                    <Badge className="bg-primary text-primary-foreground">{pending} a revisar</Badge>
+                                  ) : null}
+                                  {(['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as const)
+                                    .filter((s) => (org.byStatus[s] ?? 0) > 0)
+                                    .map((s) => (
+                                      <span key={s} className="flex items-center gap-1.5 text-xs">
+                                        <StatusBadge status={s} />
+                                        <span className="font-semibold tabular-nums">{org.byStatus[s]}</span>
+                                      </span>
+                                    ))}
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="grid gap-3">
+                                {org.items.map((validation) => {
+                                  const municipalities = Array.from(
+                                    new Set(
+                                      (validation.deliveries ?? [])
+                                        .map((d) => d.municipality?.trim())
+                                        .filter((m): m is string => Boolean(m)),
+                                    ),
+                                  );
+                                  const municipalitiesLabel =
+                                    municipalities.length === 0
+                                      ? '—'
+                                      : municipalities.length <= 2
+                                        ? municipalities.join(', ')
+                                        : `${municipalities.slice(0, 2).join(', ')} +${municipalities.length - 2}`;
+                                  const deliveriesCount = validation.deliveries?.length ?? 0;
+                                  const hasExecValue =
+                                    typeof validation.informedExecutedValue === 'number' && validation.informedExecutedValue > 0;
+                                  return (
+                                    <Card key={validation.id} size="sm">
+                                      <CardHeader>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <ThemeBadge theme={validation.theme} />
+                                          <StatusBadge status={validation.status} />
+                                        </div>
+                                        <CardTitle className="mt-2">{validation.action?.application}</CardTitle>
+                                        <CardDescription>
+                                          {validation.action?.projectActivity}
+                                          {validation.action?.unitCode ? ` · ${validation.action.unitCode} - ${validation.action.unitName}` : ''}
+                                        </CardDescription>
+                                        <CardAction className="flex flex-wrap gap-2">
+                                          <Button
+                                            variant="outline"
+                                            disabled={validation.status !== 'ENVIADO'}
+                                            onClick={() => void reviewValidation(validation.id, 'approve')}
+                                          >
+                                            <CheckCircle2Icon data-icon="inline-start" />
+                                            Aprovar
+                                          </Button>
+                                          <Button
+                                            variant="destructive"
+                                            disabled={validation.status !== 'ENVIADO'}
+                                            onClick={() => void reviewValidation(validation.id, 'return')}
+                                          >
+                                            <RotateCcwIcon data-icon="inline-start" />
+                                            Devolver
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            className="text-muted-foreground"
+                                            disabled={validation.status !== 'APROVADO'}
+                                            onClick={() => void revertApproval(validation.id)}
+                                          >
+                                            <RotateCcwIcon data-icon="inline-start" />
+                                            Reverter aprovação
+                                          </Button>
+                                        </CardAction>
+                                      </CardHeader>
+                                      <CardContent className="flex flex-col gap-3">
+                                        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Entregas</p>
+                                            <p className="mt-0.5 text-base font-semibold tabular-nums">{deliveriesCount}</p>
+                                          </div>
+                                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor executado</p>
+                                            <p className="mt-0.5 text-base font-semibold tabular-nums">
+                                              {hasExecValue ? formatMoney(validation.informedExecutedValue!) : '—'}
+                                            </p>
+                                          </div>
+                                          <div className="rounded-md border bg-muted/30 px-3 py-2" title={municipalities.join(', ')}>
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Municípios</p>
+                                            <p className="mt-0.5 truncate text-base font-semibold">{municipalitiesLabel}</p>
+                                          </div>
+                                        </div>
+                                        {validation.realizedDescription ? (
+                                          <div className="rounded-md border bg-muted/15 px-3 py-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Descrição informada</p>
+                                            <p className="mt-1 text-sm leading-snug text-foreground">{validation.realizedDescription}</p>
+                                          </div>
+                                        ) : null}
+                                        <DeliveryReviewList
+                                          deliveries={validation.deliveries}
+                                          informedExecutedValue={validation.informedExecutedValue}
+                                        />
+                                      </CardContent>
+                                    </Card>
+                                  );
+                                })}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  );
+                })()
+              )}
+            </section>
+          ) : null}
 
-              <div className="grid gap-3">
-                {validations.map((validation) => (
-                  <Card key={validation.id} size="sm" >
-                    <CardHeader>
-                      <CardTitle>{validation.action?.application}</CardTitle>
-                      <CardDescription>{validation.action?.organizationCode} - {validation.action?.organizationName}</CardDescription>
-                      <CardAction className="flex gap-2">
-                        <StatusBadge status={validation.status} />
-                        <ThemeBadge theme={validation.theme} />
-                      </CardAction>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                      {validation.realizedDescription ? <p className="text-sm text-muted-foreground">{validation.realizedDescription}</p> : null}
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" disabled={validation.status !== 'ENVIADO'} onClick={() => void reviewValidation(validation.id, 'approve')}>
-                          <CheckCircle2Icon data-icon="inline-start" />
-                          Aprovar
+          {activeSection === 'results' ? (
+            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resultados finais dos Orçamentos Temáticos</CardTitle>
+                  <CardDescription>
+                    Programas classificados, com entregas registradas e validações aprovadas — encerramento do ciclo de curadoria, validação e revisão.
+                  </CardDescription>
+                  <CardAction>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button disabled={approvedValidations.length === 0}>
+                          <FileDownIcon data-icon="inline-start" />
+                          Exportar
+                          <ChevronDownIcon className="ml-1 size-4 opacity-70" />
                         </Button>
-                        <Button variant="destructive" disabled={validation.status !== 'ENVIADO'} onClick={() => void reviewValidation(validation.id, 'return')}>
-                          <RotateCcwIcon data-icon="inline-start" />
-                          Devolver
-                        </Button>
-                        <Button variant="outline" className="text-muted-foreground" disabled={validation.status !== 'APROVADO'} onClick={() => void revertApproval(validation.id)}>
-                          <RotateCcwIcon data-icon="inline-start" />
-                          Reverter aprovação
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {!validations.length ? (
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <SendIcon />
-                      </EmptyMedia>
-                      <EmptyTitle>Nenhuma validação gerada</EmptyTitle>
-                      <EmptyDescription>Abra um ciclo depois de classificar as ações temáticas.</EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                ) : null}
-              </div>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" side="bottom" className="w-56 p-2">
+                        <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                          Formato do relatório
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleExportXlsx}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                        >
+                          <FileSpreadsheetIcon className="size-4 text-muted-foreground" />
+                          <span className="flex-1 text-left">XLSX</span>
+                          <span className="text-xs text-muted-foreground">Planilha</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportCsv}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                        >
+                          <FileDownIcon className="size-4 text-muted-foreground" />
+                          <span className="flex-1 text-left">CSV</span>
+                          <span className="text-xs text-muted-foreground">Texto</span>
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                  </CardAction>
+                </CardHeader>
+              </Card>
+
+              {approvedValidations.length === 0 ? (
+                <Empty>
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon"><FileBarChart2Icon /></EmptyMedia>
+                    <EmptyTitle>Nenhum resultado consolidado ainda</EmptyTitle>
+                    <EmptyDescription>
+                      Aprove validações na seção Revisão para que apareçam aqui no relatório final.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                resultsByTheme.map((entry) => {
+                  const hasItems = entry.items.length > 0;
+                  return (
+                    <Card key={entry.theme}>
+                      <CardHeader>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ThemeBadge theme={entry.theme} />
+                        </div>
+                        <CardTitle className="mt-2">{entry.label}</CardTitle>
+                        <CardDescription>
+                          {hasItems
+                            ? `${entry.actionCount} aç${entry.actionCount !== 1 ? 'ões' : 'ão'} validada${entry.actionCount !== 1 ? 's' : ''} em ${entry.orgCount} secretaria${entry.orgCount !== 1 ? 's' : ''}.`
+                            : 'Sem validações aprovadas para este tema.'}
+                        </CardDescription>
+                        <CardAction>
+                          <Badge variant={hasItems ? 'default' : 'secondary'}>
+                            {entry.items.length} validaç{entry.items.length !== 1 ? 'ões' : 'ão'}
+                          </Badge>
+                        </CardAction>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                          {[
+                            { label: 'Ações validadas', value: entry.actionCount.toLocaleString('pt-BR') },
+                            { label: 'Secretarias', value: entry.orgCount.toLocaleString('pt-BR') },
+                            { label: 'Entregas', value: entry.deliveriesCount.toLocaleString('pt-BR') },
+                            { label: 'Valor liquidado', value: formatMoney(entry.liquidated) },
+                            { label: 'Valor executado', value: formatMoney(entry.executed) },
+                          ].map((kpi) => (
+                            <div key={kpi.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">{kpi.label}</p>
+                              <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{kpi.value}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {hasItems ? (
+                          <div className="min-w-0 overflow-hidden rounded-lg border">
+                            <ScrollArea className="w-full">
+                              <Table className="min-w-[60rem]">
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="h-9 w-8 px-2" aria-label="Expandir" />
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Secretaria</TableHead>
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Unidade</TableHead>
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Ação</TableHead>
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Eixo</TableHead>
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Classificação</TableHead>
+                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Pond.</TableHead>
+                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Entregas</TableHead>
+                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Liquidado</TableHead>
+                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Executado</TableHead>
+                                    <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Ciclo</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {entry.items.map((v) => {
+                                    const isExpanded = expandedResultRows.has(v.id);
+                                    const hasDeliveries = (v.deliveries?.length ?? 0) > 0;
+                                    return (
+                                    <Fragment key={v.id}>
+                                    <TableRow>
+                                      <TableCell className="w-8 px-2 py-2 align-top">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleResultRow(v.id)}
+                                          disabled={!hasDeliveries}
+                                          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                                          aria-label={isExpanded ? 'Recolher entregas' : 'Expandir entregas'}
+                                          aria-expanded={isExpanded}
+                                        >
+                                          <ChevronDownIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
+                                        </button>
+                                      </TableCell>
+                                      <TableCell className="py-2 align-top text-sm">
+                                        <span className="block font-medium leading-snug">{v.action?.organizationCode}</span>
+                                        <span className="block text-xs text-muted-foreground">{v.action?.organizationName}</span>
+                                      </TableCell>
+                                      <TableCell className="py-2 align-top text-sm">
+                                        <span className="block">{v.action?.unitCode}</span>
+                                        <span className="block text-xs text-muted-foreground">{v.action?.unitName}</span>
+                                      </TableCell>
+                                      <TableCell className="py-2 align-top text-sm">
+                                        <span className="block font-medium leading-snug">{v.action?.application}</span>
+                                        <span className="block text-xs text-muted-foreground">{v.action?.projectActivity}</span>
+                                      </TableCell>
+                                      <TableCell className="py-2 align-top text-sm">{v.assignment?.axis ?? '—'}</TableCell>
+                                      <TableCell className="py-2 align-top text-sm">{v.assignment?.classification ?? '—'}</TableCell>
+                                      <TableCell className="py-2 text-right align-top text-sm tabular-nums">
+                                        {typeof v.assignment?.weightingFactor === 'number'
+                                          ? v.assignment.weightingFactor.toLocaleString('pt-BR')
+                                          : '—'}
+                                      </TableCell>
+                                      <TableCell className="py-2 text-right align-top text-sm tabular-nums">
+                                        {v.deliveries?.length ?? 0}
+                                      </TableCell>
+                                      <TableCell className="py-2 text-right align-top text-sm tabular-nums">
+                                        {formatMoney(v.action?.totals?.liquidated ?? 0)}
+                                      </TableCell>
+                                      <TableCell className="py-2 text-right align-top text-sm tabular-nums">
+                                        {formatMoney(v.informedExecutedValue ?? 0)}
+                                      </TableCell>
+                                      <TableCell className="py-2 align-top text-sm">
+                                        <span className="block">{v.cycle?.name ?? '—'}</span>
+                                        <span className="block text-xs text-muted-foreground">{v.cycle?.year ?? v.action?.year ?? ''}</span>
+                                      </TableCell>
+                                    </TableRow>
+                                    {isExpanded && hasDeliveries ? (
+                                      <TableRow className="bg-muted/20 hover:bg-muted/20">
+                                        <TableCell />
+                                        <TableCell colSpan={10} className="py-3">
+                                          {v.realizedDescription ? (
+                                            <div className="mb-3 rounded-md border bg-background px-3 py-2">
+                                              <p className="text-xs uppercase tracking-wide text-muted-foreground">Descrição informada</p>
+                                              <p className="mt-1 text-sm leading-snug text-foreground">{v.realizedDescription}</p>
+                                            </div>
+                                          ) : null}
+                                          <DeliveryReviewList
+                                            deliveries={v.deliveries}
+                                            informedExecutedValue={v.informedExecutedValue}
+                                          />
+                                        </TableCell>
+                                      </TableRow>
+                                    ) : null}
+                                    </Fragment>
+                                    );
+                                  })}
+                                  <TableRow className="bg-muted/40 font-semibold">
+                                    <TableCell />
+                                    <TableCell className="py-2 text-sm" colSpan={6}>Total do tema</TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{entry.deliveriesCount}</TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(entry.liquidated)}</TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(entry.executed)}</TableCell>
+                                    <TableCell />
+                                  </TableRow>
+                                </TableBody>
+                              </Table>
+                            </ScrollArea>
+                          </div>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
             </section>
           ) : null}
 
@@ -1962,124 +2396,6 @@ function OrgaoCombobox({
             <div className="py-2 text-center text-sm text-muted-foreground">Nenhum resultado</div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border bg-card p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function CycleCard({ cycle, onClose, onDelete }: { cycle: ValidationCycle; onClose: () => void; onDelete: () => void }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const total = cycle.validationCount;
-  const approved = cycle.validationsByStatus.find((v) => v.status === 'APROVADO')?.count ?? 0;
-  const submitted = cycle.validationsByStatus.find((v) => v.status === 'ENVIADO')?.count ?? 0;
-  const returned = cycle.validationsByStatus.find((v) => v.status === 'DEVOLVIDO')?.count ?? 0;
-  const draft = cycle.validationsByStatus.find((v) => v.status === 'RASCUNHO')?.count ?? 0;
-  const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0;
-  const completedRate = total > 0 ? Math.round(((approved + returned) / total) * 100) : 0;
-  const isOpen = cycle.status === 'ABERTO';
-
-  return (
-    <div className={cn('rounded-lg border border-border bg-card p-4 flex flex-col gap-3 shadow-sm', isOpen && 'border-primary')}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{cycle.name}</span>
-            <ThemeBadge theme={cycle.theme} />
-            <Badge variant={isOpen ? 'default' : 'secondary'}>
-              {isOpen ? 'Aberto' : 'Encerrado'}
-            </Badge>
-          </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <CalendarIcon className="size-3" />
-              Exercício {cycle.year}
-            </span>
-            <span>Aberto em {new Date(cycle.openedAt).toLocaleDateString('pt-BR')}</span>
-            {cycle.closedAt ? (
-              <span>Encerrado em {new Date(cycle.closedAt).toLocaleDateString('pt-BR')}</span>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {isOpen ? (
-            <Button variant="outline" size="sm" onClick={onClose}>
-              <LockIcon data-icon="inline-start" />
-              Encerrar
-            </Button>
-          ) : null}
-          {confirmDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-destructive">Confirmar exclusão?</span>
-              <Button variant="destructive" size="sm" onClick={() => { setConfirmDelete(false); onDelete(); }}>
-                Excluir
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                Cancelar
-              </Button>
-            </div>
-          ) : (
-            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-              Excluir
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <Separator />
-
-      {total > 0 ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {approved} aprovada{approved !== 1 ? 's' : ''} de {total} validaç{total !== 1 ? 'ões' : 'ão'}
-              </span>
-              <span className="font-medium">{approvalRate}% aprovado</span>
-            </div>
-            <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="absolute left-0 top-0 h-full rounded-full bg-primary/40 transition-all"
-                style={{ width: `${completedRate}%` }}
-              />
-              <div
-                className="absolute left-0 top-0 h-full rounded-full bg-primary transition-all"
-                style={{ width: `${approvalRate}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{completedRate}% revisado (aprovado + devolvido)</span>
-              <span>{total - approved - returned - submitted} pendente{total - approved - returned - submitted !== 1 ? 's' : ''} de envio</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-2">
-            {[
-              { label: 'Rascunho', value: draft, status: 'RASCUNHO' as const },
-              { label: 'Enviado', value: submitted, status: 'ENVIADO' as const },
-              { label: 'Devolvido', value: returned, status: 'DEVOLVIDO' as const },
-              { label: 'Aprovado', value: approved, status: 'APROVADO' as const },
-            ].map((item) => (
-              <div key={item.status} className="flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-2.5 text-center">
-                <StatusBadge status={item.status} />
-                <p className="text-xl font-semibold">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Nenhuma validação gerada para este ciclo. Verifique se existem ações classificadas como <strong>{themeLabels[cycle.theme]}</strong> no exercício <strong>{cycle.year}</strong>.
-        </p>
       )}
     </div>
   );

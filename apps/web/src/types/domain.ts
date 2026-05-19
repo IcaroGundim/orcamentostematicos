@@ -1,6 +1,12 @@
-export type UserRole = 'SEPLAN_ADMIN' | 'SECRETARIA_REPRESENTANTE';
+export type UserRole = 'SEPLAN_ADMIN' | 'SECRETARIA_REPRESENTANTE' | 'SECRETARIA_REVISOR';
 export type ThemeBudget = 'OCAD' | 'OSG' | 'CLIMATICO';
-export type ValidationStatus = 'RASCUNHO' | 'ENVIADO' | 'DEVOLVIDO' | 'APROVADO';
+export type ValidationStatus =
+  | 'RASCUNHO'
+  | 'ENVIADO_REVISOR'
+  | 'DEVOLVIDO_REVISOR'
+  | 'ENVIADO'
+  | 'DEVOLVIDO'
+  | 'APROVADO';
 export type QddPeriodType = 'MES_ISOLADO' | 'ACUMULADO_ANUAL';
 
 export interface BudgetImport {
@@ -106,6 +112,7 @@ export interface ValidationItem {
   evidences: Evidence[];
   observations?: string;
   reviewerComment?: string;
+  internalReviewerComment?: string;
   action: BudgetAction;
   assignment: ThematicAssignment;
   cycle: { id: string; name: string; year: number; theme: ThemeBudget; status: string };
@@ -113,9 +120,9 @@ export interface ValidationItem {
 
 export interface DeliveryReport {
   id?: string;
+  name?: string;
   description: string;
   quantity: number;
-  unit: string;
   municipality: string;
   beneficiaries: string;
 }

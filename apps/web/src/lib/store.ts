@@ -33,8 +33,11 @@ export async function listActions(user: { role: string; organizationCode?: strin
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
     if (!user.organizationCode) return [];
-    if (user.organizationCode) where['organizationCode'] = user.organizationCode;
+    where['organizationCode'] = user.organizationCode;
     if (user.unitCode) where['unitCode'] = user.unitCode;
+  } else if (user.role === 'SECRETARIA_REVISOR') {
+    if (!user.organizationCode) return [];
+    where['organizationCode'] = user.organizationCode;
   } else {
     if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
     if (filters.unitCode) where['unitCode'] = filters.unitCode;
@@ -86,7 +89,7 @@ export async function getSummary(user: { role: string; organizationCode?: string
   const userAssignments = uniqueAssignmentsByActionTheme(assignments.filter((a) => actionIds.has(a.actionId)));
 
   const themes = ['OCAD', 'OSG', 'CLIMATICO'];
-  const statuses = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
+  const statuses = ['RASCUNHO', 'ENVIADO_REVISOR', 'DEVOLVIDO_REVISOR', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
 
   return {
     actions: actions.length,
@@ -113,6 +116,8 @@ export async function listValidations(user: { role: string; organizationCode?: s
   if (user.role === 'SECRETARIA_REPRESENTANTE' && user.organizationCode) {
     where['organizationCode'] = user.organizationCode;
     if (user.unitCode) where['unitCode'] = user.unitCode;
+  } else if (user.role === 'SECRETARIA_REVISOR' && user.organizationCode) {
+    where['organizationCode'] = user.organizationCode;
   }
   const rows = await prisma.actionValidation.findMany({
     where,
@@ -124,6 +129,56 @@ export async function listValidations(user: { role: string; organizationCode?: s
     orderBy: { updatedAt: 'asc' },
   });
   return rows.map(mapValidation);
+}
+
+/**
+ * Retorna o ciclo de validação implícito do par tema/exercício, criando-o se
+ * ainda não existir. O ciclo deixou de ser aberto manualmente pela SEPLAN:
+ * agora ele só agrupa as validações geradas automaticamente na classificação.
+ */
+export async function getOrCreateImplicitCycle(theme: string, year: number): Promise<{ id: string }> {
+  const existing = await prisma.validationCycle.findFirst({
+    where: { theme: theme as any, year, status: 'ABERTO' },
+    select: { id: true },
+  });
+  if (existing) return existing;
+
+  try {
+    return await prisma.validationCycle.create({
+      data: { name: `Acompanhamento ${theme} ${year}`, year, theme: theme as any, status: 'ABERTO' },
+      select: { id: true },
+    });
+  } catch {
+    // Corrida: outra classificação simultânea pode ter criado o ciclo.
+    const created = await prisma.validationCycle.findFirst({
+      where: { theme: theme as any, year, status: 'ABERTO' },
+      select: { id: true },
+    });
+    if (created) return created;
+    throw new Error('Não foi possível obter o ciclo de validação para este tema/exercício.');
+  }
+}
+
+/**
+ * Uma validação RASCUNHO "vazia" é aquela auto-criada na classificação e ainda
+ * não tocada pela secretaria. Só essas podem ser apagadas junto da classificação.
+ */
+export function isEmptyDraftValidation(v: {
+  status: string;
+  deliveries?: unknown;
+  realizedDescription?: string | null;
+  executionStatus?: string | null;
+  observations?: string | null;
+  informedExecutedValue?: number | null;
+}): boolean {
+  if (v.status !== 'RASCUNHO') return false;
+  const deliveries = Array.isArray(v.deliveries) ? v.deliveries : [];
+  if (deliveries.length > 0) return false;
+  if (v.realizedDescription) return false;
+  if (v.executionStatus) return false;
+  if (v.observations) return false;
+  if (v.informedExecutedValue != null && v.informedExecutedValue !== 0) return false;
+  return true;
 }
 
 // ── Mappers ──────────────────────────────────────────────────────────────────
@@ -209,6 +264,7 @@ export function mapValidation(row: any) {
     evidences: Array.isArray(row.evidences) ? row.evidences : [],
     observations: row.observations ?? undefined,
     reviewerComment: row.reviewerComment ?? undefined,
+    internalReviewerComment: row.internalReviewerComment ?? undefined,
     action: row.action ? mapAction(row.action) : undefined,
     assignment: row.assignment ? mapAssignment(row.assignment) : undefined,
     cycle: row.cycle ? mapCycle(row.cycle) : undefined,
@@ -291,9 +347,13 @@ async function createInBatches(model: { createMany: (args: { data: any[] }) => P
 }
 
 function uniqueAssignmentsByActionTheme<T extends { actionId: string; theme: string; createdAt?: Date | string }>(assignments: T[]) {
-  return [...assignments]
-    .sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')))
-    .filter((assignment, index, list) => (
-      list.findIndex((item) => item.actionId === assignment.actionId && item.theme === assignment.theme) === index
-    ));
+  const byKey = new Map<string, T>();
+  for (const assignment of assignments) {
+    const key = `${assignment.actionId}:${assignment.theme}`;
+    const existing = byKey.get(key);
+    if (!existing || String(assignment.createdAt ?? '') > String(existing.createdAt ?? '')) {
+      byKey.set(key, assignment);
+    }
+  }
+  return [...byKey.values()];
 }

@@ -73,6 +73,8 @@ export const themeLabels = {
 
 export const statusLabels = {
   RASCUNHO: 'Rascunho',
+  ENVIADO_REVISOR: 'Aguardando Revisão Interna',
+  DEVOLVIDO_REVISOR: 'Devolvido pelo Revisor',
   ENVIADO: 'Enviado',
   DEVOLVIDO: 'Devolvido',
   APROVADO: 'Aprovado',

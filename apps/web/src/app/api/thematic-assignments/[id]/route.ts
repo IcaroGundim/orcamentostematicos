@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, conflict } from '@/lib/auth-server';
+import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment } from '@/lib/store';
+import { mapAssignment, isEmptyDraftValidation } from '@/lib/store';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -11,12 +12,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
+  const existing = await prisma.thematicAssignment.findUnique({ where: { id } });
+  if (!existing) return notFound('Atribuição temática não encontrada.');
+
+  const theme = body.theme ?? existing.theme;
+  const classification = body.classification ?? existing.classification;
+  const weightingFactor =
+    body.weightingFactor !== undefined || body.classification !== undefined
+      ? resolveWeightingFactor(theme, classification, body.weightingFactor ?? existing.weightingFactor)
+      : undefined;
+
   const row = await prisma.thematicAssignment.update({
     where: { id },
     data: {
       ...(body.axis !== undefined && { axis: body.axis }),
       ...(body.classification !== undefined && { classification: body.classification }),
-      ...(body.weightingFactor !== undefined && { weightingFactor: body.weightingFactor }),
+      ...(weightingFactor !== undefined && { weightingFactor }),
       ...(body.justification !== undefined && { justification: body.justification }),
       ...(body.status && { status: body.status }),
     },
@@ -48,16 +59,23 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return forbidden();
   }
 
-  const validationCount = await prisma.actionValidation.count({
+  // Toda classificação agora nasce com uma validação RASCUNHO automática.
+  // Só bloqueamos a remoção quando essa validação já recebeu dados da
+  // secretaria; validações RASCUNHO vazias são apagadas junto.
+  const validations = await prisma.actionValidation.findMany({
     where: { assignmentId: id },
   });
 
-  if (validationCount > 0) {
+  const withData = validations.filter((v) => !isEmptyDraftValidation(v));
+  if (withData.length > 0) {
     return conflict(
-      `Não é possível remover esta classificação: ${validationCount} validação${validationCount !== 1 ? 'ões' : ''} de execução ${validationCount !== 1 ? 'estão' : 'está'} vinculada${validationCount !== 1 ? 's' : ''} a ela.`,
+      'Não é possível remover esta classificação: ela possui validação de execução com dados preenchidos pela secretaria.',
     );
   }
 
-  await prisma.thematicAssignment.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.actionValidation.deleteMany({ where: { assignmentId: id } }),
+    prisma.thematicAssignment.delete({ where: { id } }),
+  ]);
   return ok({ success: true });
 }
