@@ -15,6 +15,7 @@ import {
   SendIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  Undo2Icon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -709,7 +710,7 @@ export default function SecretariaPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-destructive/40 text-destructive bg-destructive/5 hover:bg-destructive/10 hover:text-destructive shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  className="border-amber-500/40 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 hover:text-amber-800 shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                   disabled={
                     isReviewingAll ||
                     !validations.some((v) => v.status === 'ENVIADO_REVISOR')
@@ -719,7 +720,7 @@ export default function SecretariaPage() {
                   {isReviewingAll ? (
                     <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
                   ) : (
-                    <Trash2Icon data-icon="inline-start" className="size-4" />
+                    <Undo2Icon data-icon="inline-start" className="size-4" />
                   )}
                   Devolver Tudo ao Técnico
                 </Button>
