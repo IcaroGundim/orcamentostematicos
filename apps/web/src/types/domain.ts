@@ -126,6 +126,7 @@ export interface DeliveryReport {
   quantity: number;
   municipality: string;
   beneficiaries: string;
+  executedValue?: number;
 }
 
 export interface Evidence {

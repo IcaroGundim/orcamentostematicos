@@ -5,7 +5,7 @@ import type { DeliveryReport } from '@/types/domain';
 export type DeliveryReviewCardProps = {
   delivery: DeliveryReport;
   index: number;
-  /** Validation-level executed value; shown when there is a single delivery. */
+  /** Fallback when delivery has no per-delivery value (e.g. single delivery, Cat. 1/3). */
   executedValue?: number;
 };
 
@@ -26,7 +26,8 @@ function formatExecutedValue(value: number | undefined) {
 export function DeliveryReviewCard({ delivery, index, executedValue }: DeliveryReviewCardProps) {
   const label = delivery.name?.trim() || `Entrega ${index + 1}`;
   const hasDescription = Boolean(delivery.description?.trim());
-  const valueLabel = formatExecutedValue(executedValue);
+  const displayValue = delivery.executedValue ?? executedValue;
+  const valueLabel = formatExecutedValue(displayValue);
 
   return (
     <li className="rounded-md border border-border/80 bg-muted/20 px-4 py-3">

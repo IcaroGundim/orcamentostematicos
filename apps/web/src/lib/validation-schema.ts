@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { isAcreMunicipalityOption, normalizeMunicipality } from '@/lib/acre-municipalities';
+import { sumDeliveryExecutedValues, usesDeliveryValues } from '@/lib/classification-rules';
 import { getValidationDraft } from '@/lib/validation-draft-cache';
-import type { ValidationItem } from '@/types/domain';
+import type { ThemeBudget, ValidationItem } from '@/types/domain';
 
 export const validationFormSchema = z.object({
-  executionStatus: z.string().min(1, 'Informe o status da execução.'),
   realizedDescription: z.string().optional(),
   informedExecutedValue: z.coerce.number().min(0, 'Informe um valor válido.'),
   observations: z.string().optional(),
@@ -20,6 +20,7 @@ export const validationFormSchema = z.object({
           .min(1, 'Selecione o município.')
           .refine(isAcreMunicipalityOption, 'Selecione o município.'),
         beneficiaries: z.string().min(1, 'Informe o público beneficiado.'),
+        executedValue: z.coerce.number().optional(),
       }),
     )
     .min(1, 'Cadastre ao menos uma entrega.'),
@@ -28,6 +29,11 @@ export const validationFormSchema = z.object({
 export type ValidationFormInput = z.input<typeof validationFormSchema>;
 export type ValidationFormValues = z.output<typeof validationFormSchema>;
 
+export type ValidationFormContext = {
+  theme?: ThemeBudget | string;
+  classification?: string;
+};
+
 export function blankDelivery(sequence = 1) {
   return {
     name: `Entrega ${sequence}`,
@@ -35,24 +41,33 @@ export function blankDelivery(sequence = 1) {
     quantity: 0,
     municipality: '',
     beneficiaries: '',
+    executedValue: undefined as number | undefined,
   };
 }
 
 export function normalizeDeliveries(
-  deliveries: Array<{ name?: string; id?: string; description: string; quantity: number; municipality: string; beneficiaries: string }>,
+  deliveries: Array<{
+    name?: string;
+    id?: string;
+    description: string;
+    quantity: number;
+    municipality: string;
+    beneficiaries: string;
+    executedValue?: number;
+  }>,
 ) {
   return deliveries.length
     ? deliveries.map((delivery, index) => ({
         ...delivery,
         name: delivery.name?.trim() || `Entrega ${index + 1}`,
         municipality: normalizeMunicipality(delivery.municipality),
+        executedValue: delivery.executedValue,
       }))
     : [blankDelivery()];
 }
 
 export function emptyValidationFormValues(): ValidationFormInput {
   return {
-    executionStatus: 'EM_EXECUCAO',
     realizedDescription: '',
     informedExecutedValue: 0,
     observations: '',
@@ -61,7 +76,6 @@ export function emptyValidationFormValues(): ValidationFormInput {
 }
 
 const ROOT_FIELD_LABELS: Record<string, string> = {
-  executionStatus: 'Status da execução',
   realizedDescription: 'Descrição do realizado',
   informedExecutedValue: 'Valor executado informado',
   observations: 'Observações',
@@ -74,6 +88,7 @@ const DELIVERY_FIELD_LABELS: Record<string, string> = {
   quantity: 'Quantidade',
   municipality: 'Município',
   beneficiaries: 'Público beneficiado',
+  executedValue: 'Valor executado',
 };
 
 function formatValidationIssuePath(path: PropertyKey[]): string {
@@ -95,7 +110,6 @@ function formatValidationIssuePath(path: PropertyKey[]): string {
 
 export function toValidationFormInput(validation: ValidationItem): ValidationFormInput {
   return {
-    executionStatus: validation.executionStatus ?? 'EM_EXECUCAO',
     realizedDescription: validation.realizedDescription ?? '',
     informedExecutedValue: validation.informedExecutedValue ?? 0,
     observations: validation.observations ?? '',
@@ -103,20 +117,51 @@ export function toValidationFormInput(validation: ValidationItem): ValidationFor
   };
 }
 
-export function getValidationFormIssues(values: ValidationFormInput): string[] {
-  const result = validationFormSchema.safeParse(values);
-  if (result.success) return [];
+function pushUniqueIssue(issues: string[], seen: Set<string>, text: string) {
+  if (!seen.has(text)) {
+    seen.add(text);
+    issues.push(text);
+  }
+}
 
+export function getValidationFormIssues(
+  values: ValidationFormInput,
+  context?: ValidationFormContext,
+): string[] {
+  const usePerDelivery =
+    Boolean(context?.theme && context?.classification) &&
+    usesDeliveryValues(context!.theme!, context!.classification!);
+
+  const result = validationFormSchema.safeParse(values);
   const seen = new Set<string>();
   const issues: string[] = [];
-  for (const issue of result.error.issues) {
-    const label = formatValidationIssuePath(issue.path);
-    const text = label ? `${label}: ${issue.message}` : issue.message;
-    if (!seen.has(text)) {
-      seen.add(text);
-      issues.push(text);
+
+  if (!result.success) {
+    for (const issue of result.error.issues) {
+      const root = issue.path[0];
+      if (usePerDelivery && root === 'informedExecutedValue') continue;
+      const label = formatValidationIssuePath(issue.path);
+      const text = label ? `${label}: ${issue.message}` : issue.message;
+      pushUniqueIssue(issues, seen, text);
     }
   }
+
+  if (usePerDelivery) {
+    values.deliveries.forEach((delivery, index) => {
+      const value = Number(delivery.executedValue);
+      if (!Number.isFinite(value) || value <= 0) {
+        pushUniqueIssue(
+          issues,
+          seen,
+          `Entrega ${index + 1} — Valor executado: Informe um valor maior que zero.`,
+        );
+      }
+    });
+    if (sumDeliveryExecutedValues(values.deliveries) <= 0) {
+      pushUniqueIssue(issues, seen, 'Total das entregas: Informe valores nas entregas realizadas.');
+    }
+  }
+
   return issues;
 }
 
@@ -138,7 +183,10 @@ export function collectPendingValidationIssues(
         validation.id === currentId && currentFormValues
           ? currentFormValues
           : getValidationDraft(validation.id) ?? toValidationFormInput(validation);
-      const items = getValidationFormIssues(values);
+      const items = getValidationFormIssues(values, {
+        theme: validation.theme,
+        classification: validation.assignment?.classification,
+      });
       if (!items.length) return null;
       return {
         validationId: validation.id,

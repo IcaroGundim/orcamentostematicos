@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
+import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { validationFormSchema } from '@/lib/validation-schema';
+import { getValidationFormIssues, type ValidationFormInput } from '@/lib/validation-schema';
 
 /**
  * Envio consolidado: a secretaria envia de uma vez todas as suas validações
@@ -23,20 +24,31 @@ export async function POST(req: NextRequest) {
       ...(user.unitCode ? { unitCode: user.unitCode } : {}),
       status: { in: targetStatuses as any },
     },
+    include: { assignment: true },
   });
 
   const completeIds: string[] = [];
   let incompletas = 0;
 
   for (const row of rows) {
-    const parsed = validationFormSchema.safeParse({
-      executionStatus: row.executionStatus ?? '',
+    const deliveries = (Array.isArray(row.deliveries) ? row.deliveries : []) as ValidationFormInput['deliveries'];
+    const classification = row.assignment?.classification ?? '';
+    const values: ValidationFormInput = {
       realizedDescription: row.realizedDescription ?? '',
-      informedExecutedValue: row.informedExecutedValue ?? 0,
+      informedExecutedValue: resolveInformedExecutedValue({
+        theme: row.theme,
+        classification,
+        deliveries,
+        informedExecutedValue: row.informedExecutedValue ?? 0,
+      }),
       observations: row.observations ?? undefined,
-      deliveries: Array.isArray(row.deliveries) ? row.deliveries : [],
+      deliveries,
+    };
+    const items = getValidationFormIssues(values, {
+      theme: row.theme,
+      classification,
     });
-    if (parsed.success) {
+    if (!items.length) {
       completeIds.push(row.id);
     } else {
       incompletas += 1;

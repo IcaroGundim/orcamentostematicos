@@ -25,7 +25,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from 'recharts';
+import { Cell, Pie, PieChart } from 'recharts';
+import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -35,12 +36,12 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { AxisExecutionByThemePanel } from '@/components/domain/axis-execution-by-theme-panel';
 import { DeliveryReviewList } from '@/components/domain/delivery-review-list';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -80,7 +81,13 @@ import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
-import { isExclusiveAllocation, resolveWeightingFactor } from '@/lib/classification-rules';
+import {
+  isWeightingFactorLocked,
+  lockedWeightingFactorLabel,
+  resolveWeightingFactor,
+  shouldHideWeightingFactor,
+  weightingFactorFormValue,
+} from '@/lib/classification-rules';
 import {
   appendActionAssignment,
   decrementSummaryAssignments,
@@ -88,6 +95,12 @@ import {
   incrementSummaryAssignments,
   patchActionAssignments,
 } from '@/lib/curation-actions';
+import {
+  buildAxisExecutionReport,
+  buildClassificationExecutionReport,
+  filterAxisReportByTheme,
+  themeAxisTotals,
+} from '@/lib/thematic-axis-report';
 import type { BudgetAction, BudgetImport, Metadata, QddPeriodType, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
 import {
   buildResultsRows,
@@ -151,13 +164,6 @@ const initialActionsFilters: ActionsTabFilters = {
   unitCode: allValue,
 };
 
-const chartConfig = {
-  liquidated: {
-    label: 'Liquidado',
-    color: 'var(--chart-1)',
-  },
-} satisfies ChartConfig;
-
 function gaugeColor(pct: number): string {
   if (pct >= 75) return 'var(--color-chart-1)';
   if (pct >= 40) return 'var(--color-chart-3)';
@@ -202,6 +208,8 @@ export default function SeplanPage() {
   const [orgSearch, setOrgSearch] = useState('');
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
   const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
+  const [reportsViewTab, setReportsViewTab] = useState<'overview' | 'by-axis'>('overview');
+  const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
 
   function toggleResultRow(id: string) {
     setExpandedResultRows((prev) => {
@@ -717,6 +725,16 @@ export default function SeplanPage() {
       return { key, label, liquidated, planned, pct };
     });
   }, [actions]);
+
+  const axisReport = useMemo(
+    () => buildAxisExecutionReport(actions, metadata),
+    [actions, metadata],
+  );
+
+  const classificationReport = useMemo(
+    () => buildClassificationExecutionReport(actions, metadata),
+    [actions, metadata],
+  );
 
   const trackingByYear = useMemo(() => {
     const byYear = new Map<
@@ -1567,7 +1585,7 @@ export default function SeplanPage() {
                           setAssignment({
                             ...assignment,
                             classification,
-                            weightingFactor: isExclusiveAllocation(assignment.theme, classification) ? '1' : '',
+                            weightingFactor: weightingFactorFormValue(assignment.theme, classification, ''),
                           });
                         }}
                       >
@@ -1582,29 +1600,43 @@ export default function SeplanPage() {
                         </SelectContent>
                       </Select>
                     </Field>
-                    <Field data-disabled={isExclusiveAllocation(assignment.theme, assignment.classification) || undefined}>
-                      <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
-                      <Input
-                        id="weightingFactor"
-                        type="number"
-                        min="0"
-                        max="1"
-                        step="0.01"
-                        value={
-                          isExclusiveAllocation(assignment.theme, assignment.classification)
-                            ? '1'
-                            : assignment.weightingFactor
+                    {shouldHideWeightingFactor(assignment.theme, assignment.classification) ? (
+                      lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
+                        <Field>
+                          <FieldDescription>
+                            {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
+                          </FieldDescription>
+                        </Field>
+                      ) : null
+                    ) : (
+                      <Field
+                        data-disabled={
+                          isWeightingFactorLocked(assignment.theme, assignment.classification) || undefined
                         }
-                        disabled={isExclusiveAllocation(assignment.theme, assignment.classification)}
-                        onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
-                        placeholder="Opcional"
-                      />
-                      {isExclusiveAllocation(assignment.theme, assignment.classification) ? (
-                        <FieldDescription>
-                          Dotação exclusiva: 100% do valor do programa (ponderador fixo em 1).
-                        </FieldDescription>
-                      ) : null}
-                    </Field>
+                      >
+                        <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
+                        <Input
+                          id="weightingFactor"
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.01"
+                          value={weightingFactorFormValue(
+                            assignment.theme,
+                            assignment.classification,
+                            assignment.weightingFactor,
+                          )}
+                          disabled={isWeightingFactorLocked(assignment.theme, assignment.classification)}
+                          onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
+                          placeholder="Opcional"
+                        />
+                        {lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
+                          <FieldDescription>
+                            {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
+                          </FieldDescription>
+                        ) : null}
+                      </Field>
+                    )}
                     <Field>
                       <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
                       <Textarea id="justification" value={assignment.justification} onChange={(event) => setAssignment({ ...assignment, justification: event.target.value })} />
@@ -1841,6 +1873,8 @@ export default function SeplanPage() {
                                         <DeliveryReviewList
                                           deliveries={validation.deliveries}
                                           informedExecutedValue={validation.informedExecutedValue}
+                                          theme={validation.theme}
+                                          classification={validation.assignment?.classification}
                                         />
                                       </CardContent>
                                     </Card>
@@ -2034,6 +2068,8 @@ export default function SeplanPage() {
                                           <DeliveryReviewList
                                             deliveries={v.deliveries}
                                             informedExecutedValue={v.informedExecutedValue}
+                                            theme={v.theme}
+                                            classification={v.assignment?.classification}
                                           />
                                         </TableCell>
                                       </TableRow>
@@ -2064,83 +2100,164 @@ export default function SeplanPage() {
 
           {activeSection === 'reports' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-              <Card >
-                <CardHeader>
-                  <CardTitle>Execução dos orçamentos temáticos</CardTitle>
-                  <CardDescription>Percentual de execução por tema — liquidado sobre a dotação atualizada.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                    {themeGaugeData.map(({ key, label, liquidated, planned, pct }) => (
-                      <div key={key} className="flex flex-col items-center gap-2">
-                        <div className="relative mx-auto w-[220px]">
-                          <PieChart width={220} height={120}>
-                            <Pie
-                              data={[{ value: pct }, { value: 100 - pct }]}
-                              cx={110}
-                              cy={110}
-                              startAngle={180}
-                              endAngle={0}
-                              innerRadius={68}
-                              outerRadius={100}
-                              dataKey="value"
-                              strokeWidth={0}
-                            >
-                              <Cell fill={gaugeColor(pct)} />
-                              <Cell fill="var(--color-muted)" />
-                            </Pie>
-                          </PieChart>
-                          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
-                            <p className="text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
+              <Tabs
+                value={reportsViewTab}
+                onValueChange={(value) => setReportsViewTab(value as 'overview' | 'by-axis')}
+              >
+                <TabsList className="w-fit">
+                  <TabsTrigger value="overview">Visão geral</TabsTrigger>
+                  <TabsTrigger value="by-axis">Execução por eixo</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="mt-5 flex flex-col gap-5">
+                  <Card >
+                    <CardHeader>
+                      <CardTitle>Execução dos orçamentos temáticos</CardTitle>
+                      <CardDescription>Percentual de execução por tema — liquidado sobre a dotação atualizada.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        {themeGaugeData.map(({ key, label, liquidated, planned, pct }) => (
+                          <div key={key} className="flex flex-col items-center gap-2">
+                            <div className="relative mx-auto w-[220px]">
+                              <PieChart width={220} height={120}>
+                                <Pie
+                                  data={[{ value: pct }, { value: 100 - pct }]}
+                                  cx={110}
+                                  cy={110}
+                                  startAngle={180}
+                                  endAngle={0}
+                                  innerRadius={68}
+                                  outerRadius={100}
+                                  dataKey="value"
+                                  strokeWidth={0}
+                                >
+                                  <Cell fill={gaugeColor(pct)} />
+                                  <Cell fill="var(--color-muted)" />
+                                </Pie>
+                              </PieChart>
+                              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
+                                <p className="text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm font-semibold">{key}</p>
+                              <p className="max-w-[180px] text-xs text-muted-foreground leading-snug">{label}</p>
+                              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                                {formatMoney(liquidated)} / {formatMoney(planned)}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm font-semibold">{key}</p>
-                          <p className="max-w-[180px] text-xs text-muted-foreground leading-snug">{label}</p>
-                          <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                            {formatMoney(liquidated)} / {formatMoney(planned)}
-                          </p>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
+                    <Card className="h-full">
+                      <CardHeader>
+                        <CardTitle>Resumo por tema</CardTitle>
+                        <CardDescription>Valores liquidados das ações classificadas por orçamento temático.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex min-h-0 flex-1 flex-col">
+                        <ThemeLiquidatedSummaryChart
+                          className="min-h-0 flex-1"
+                          data={summary?.totalsByTheme ?? []}
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card >
+                      <CardHeader>
+                        <CardTitle>Status das validações</CardTitle>
+                        <CardDescription>Distribuição atual dos formulários enviados às secretarias.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-3">
+                        {summary?.validationsByStatus.map((item) => (
+                          <div key={item.status} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+                            <StatusBadge status={item.status} />
+                            <span className="text-xl font-semibold">{item.count}</span>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
                   </div>
-                </CardContent>
-              </Card>
+                </TabsContent>
 
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-                <Card >
-                  <CardHeader>
-                    <CardTitle>Resumo por tema</CardTitle>
-                    <CardDescription>Valores liquidados das ações classificadas por orçamento temático.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ChartContainer config={chartConfig} className="h-96 w-full">
-                      <BarChart accessibilityLayer data={summary?.totalsByTheme ?? []}>
-                        <CartesianGrid vertical={false} />
-                        <XAxis dataKey="theme" tickLine={false} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} />
-                        <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatMoney(Number(value))} />} />
-                        <Bar dataKey="liquidated" fill="var(--color-liquidated)" radius={4} />
-                      </BarChart>
-                    </ChartContainer>
-                  </CardContent>
-                </Card>
+                <TabsContent value="by-axis" className="mt-5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Execução por eixo</CardTitle>
+                      <CardDescription>
+                        Valores liquidados e percentual de execução por eixo dentro de cada orçamento temático.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Tabs
+                        value={reportsThemeTab}
+                        onValueChange={(value) => setReportsThemeTab(value as ThemeBudget)}
+                      >
+                        <TabsList className="w-fit">
+                          {(['OCAD', 'OSG', 'CLIMATICO'] as const).map((theme) => {
+                            const tabTotals = themeAxisTotals(axisReport, theme, actions);
+                            return (
+                              <TabsTrigger key={theme} value={theme} className="gap-1.5">
+                                {themeLabels[theme]}
+                                {tabTotals.actionsCount > 0 ? (
+                                  <span
+                                    className="size-1.5 shrink-0 rounded-full bg-primary"
+                                    aria-hidden
+                                  />
+                                ) : null}
+                              </TabsTrigger>
+                            );
+                          })}
+                        </TabsList>
+                        {(['OCAD', 'OSG', 'CLIMATICO'] as const).map((theme) => {
+                          const themeRows = filterAxisReportByTheme(axisReport, theme);
+                          const totals = themeAxisTotals(axisReport, theme, actions);
+                          const classificationThemeRows = filterAxisReportByTheme(
+                            classificationReport,
+                            theme,
+                          );
+                          const classificationThemeTotals = themeAxisTotals(
+                            classificationReport,
+                            theme,
+                            actions,
+                          );
+                          const hasClassifications = totals.actionsCount > 0;
 
-                <Card >
-                  <CardHeader>
-                    <CardTitle>Status das validações</CardTitle>
-                    <CardDescription>Distribuição atual dos formulários enviados às secretarias.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    {summary?.validationsByStatus.map((item) => (
-                      <div key={item.status} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
-                        <StatusBadge status={item.status} />
-                        <span className="text-xl font-semibold">{item.count}</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
+                          return (
+                            <TabsContent key={theme} value={theme} className="mt-4">
+                              {hasClassifications ? (
+                                <AxisExecutionByThemePanel
+                                  theme={theme}
+                                  rows={themeRows}
+                                  totals={totals}
+                                  classificationRows={classificationThemeRows}
+                                  classificationTotals={classificationThemeTotals}
+                                />
+                              ) : (
+                                <Empty>
+                                  <EmptyHeader>
+                                    <EmptyMedia variant="icon">
+                                      <BarChart3Icon />
+                                    </EmptyMedia>
+                                    <EmptyTitle>Nenhuma ação classificada neste tema</EmptyTitle>
+                                    <EmptyDescription>
+                                      Classifique ações nos eixos de {themeLabels[theme]} para visualizar a execução por eixo.
+                                    </EmptyDescription>
+                                  </EmptyHeader>
+                                </Empty>
+                              )}
+                            </TabsContent>
+                          );
+                        })}
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </section>
           ) : null}
         </div>

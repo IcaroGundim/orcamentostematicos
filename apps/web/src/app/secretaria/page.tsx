@@ -12,10 +12,7 @@ import {
   LogOutIcon,
   RefreshCwIcon,
   SearchIcon,
-  SendIcon,
   Trash2Icon,
-  TriangleAlertIcon,
-  Undo2Icon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -38,15 +35,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, SummaryCountBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
+import { InternalReviewToolbar } from '@/components/domain/internal-review-toolbar';
+import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
 import { ValidationForm } from '@/components/domain/validation-form';
-import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, statusLabels } from '@/lib/api';
-import { isExclusiveAllocation, resolveWeightingFactor } from '@/lib/classification-rules';
+import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels } from '@/lib/api';
+import {
+  isWeightingFactorLocked,
+  lockedWeightingFactorLabel,
+  resolveInformedExecutedValue,
+  resolveWeightingFactor,
+  shouldHideWeightingFactor,
+  weightingFactorFormValue,
+} from '@/lib/classification-rules';
 import {
   appendActionAssignment,
   decrementSummaryAssignments,
@@ -105,10 +110,11 @@ export default function SecretariaPage() {
   const [submitIssuesOpen, setSubmitIssuesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('curation');
   const [userRole, setUserRole] = useState<string>('');
-  const [internalReviewComment, setInternalReviewComment] = useState('');
   const [isActionReviewing, setIsActionReviewing] = useState(false);
   const [isReviewingAll, setIsReviewingAll] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const prevCurrentIdRef = useRef<string | null>(null);
+  const currentIdRef = useRef<string>('');
   const current = useMemo(() => validations.find((item) => item.id === currentId) ?? validations[0], [validations, currentId]);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -152,9 +158,12 @@ export default function SecretariaPage() {
   }, [currentId, validations, form]);
 
   useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
+
+  useEffect(() => {
     setSubmitIssues([]);
     setSubmitIssuesOpen(false);
-    setInternalReviewComment('');
   }, [currentId]);
 
   async function handleInternalApprove(id: string) {
@@ -164,9 +173,8 @@ export default function SecretariaPage() {
       await api(`/validations/${id}/internal-approve`, {
         method: 'POST',
       });
-      toast.success('Validação aprovada e enviada com sucesso para a SEPLAN!');
+      toast.success('Validação aprovada com sucesso! Aguardando envio à SEPLAN pelo representante.');
       await load();
-      setInternalReviewComment('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao aprovar validação.');
     } finally {
@@ -174,9 +182,10 @@ export default function SecretariaPage() {
     }
   }
 
-  async function handleInternalReturn(id: string) {
+  async function handleInternalReturn(id: string, comment: string) {
     if (isActionReviewing) return;
-    if (!internalReviewComment.trim()) {
+    const trimmed = comment.trim();
+    if (!trimmed) {
       toast.warning('O comentário de devolução é obrigatório.');
       return;
     }
@@ -184,11 +193,10 @@ export default function SecretariaPage() {
     try {
       await api(`/validations/${id}/internal-return`, {
         method: 'POST',
-        body: JSON.stringify({ internalReviewerComment: internalReviewComment }),
+        body: JSON.stringify({ internalReviewerComment: trimmed }),
       });
       toast.success('Validação devolvida com sucesso para o técnico.');
       await load();
-      setInternalReviewComment('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao devolver validação.');
     } finally {
@@ -196,7 +204,7 @@ export default function SecretariaPage() {
     }
   }
 
-  async function reviewAll(approve: boolean) {
+  async function reviewAll(approve: boolean, reviewerComment?: string) {
     if (isReviewingAll) return;
 
     const pending = validations.filter((item) => item.status === 'ENVIADO_REVISOR');
@@ -205,15 +213,10 @@ export default function SecretariaPage() {
       return;
     }
 
-    let comment = '';
-    if (!approve) {
-      const userInput = prompt('Digite o comentário de devolução para todas as validações:');
-      if (userInput === null) return; // User cancelled
-      if (!userInput.trim()) {
-        toast.warning('O comentário de devolução é obrigatório para realizar a devolução.');
-        return;
-      }
-      comment = userInput;
+    const comment = reviewerComment?.trim() ?? '';
+    if (!approve && !comment) {
+      toast.warning('O comentário de devolução é obrigatório para realizar a devolução.');
+      return;
     }
 
     setIsReviewingAll(true);
@@ -269,6 +272,20 @@ export default function SecretariaPage() {
     router.push('/login');
   }
 
+  function toDraftPayload(values: FormValues) {
+    if (!current) return values;
+    const classification = current.assignment?.classification ?? '';
+    return {
+      ...values,
+      informedExecutedValue: resolveInformedExecutedValue({
+        theme: current.theme,
+        classification,
+        deliveries: values.deliveries,
+        informedExecutedValue: values.informedExecutedValue,
+      }),
+    };
+  }
+
   async function patch(values: FormValues) {
     if (!current) return;
     await api(`/validations/${current.id}/draft`, {
@@ -284,6 +301,7 @@ export default function SecretariaPage() {
 
   function selectValidation(id: string) {
     if (id === currentId) return;
+    if (isSavingDraft) return;
     cacheCurrentDraft();
     setCurrentId(id);
   }
@@ -297,31 +315,43 @@ export default function SecretariaPage() {
 
   async function save(values: FormValues) {
     if (!current) return;
-    await patch(values);
-    clearValidationDraft(current.id);
-    setValidations((prev) =>
-      prev.map((item) =>
-        item.id === current.id
-          ? {
-              ...item,
-              executionStatus: values.executionStatus,
-              realizedDescription: values.realizedDescription,
-              informedExecutedValue: values.informedExecutedValue,
-              observations: values.observations ?? '',
-              deliveries: values.deliveries.map((delivery) => ({
-                id: delivery.id,
-                name: delivery.name,
-                description: delivery.description,
-                quantity: delivery.quantity,
-                municipality: delivery.municipality,
-                beneficiaries: delivery.beneficiaries,
-              })),
-            }
-          : item,
-      ),
-    );
-    form.reset(values);
-    toast.success('Rascunho salvo.');
+    if (isSavingDraft) return;
+    const savedId = current.id;
+    const payload = toDraftPayload(values);
+    setIsSavingDraft(true);
+    try {
+      await patch(payload);
+      setValidations((prev) =>
+        prev.map((item) =>
+          item.id === savedId
+            ? {
+                ...item,
+                realizedDescription: payload.realizedDescription,
+                informedExecutedValue: payload.informedExecutedValue,
+                observations: payload.observations ?? '',
+                deliveries: payload.deliveries.map((delivery) => ({
+                  id: delivery.id,
+                  name: delivery.name,
+                  description: delivery.description,
+                  quantity: delivery.quantity,
+                  municipality: delivery.municipality,
+                  beneficiaries: delivery.beneficiaries,
+                  executedValue: delivery.executedValue,
+                })),
+              }
+            : item,
+        ),
+      );
+      if (currentIdRef.current === savedId) {
+        clearValidationDraft(savedId);
+        form.reset(payload);
+      } else {
+        setValidationDraft(savedId, payload);
+      }
+      toast.success('Rascunho salvo.');
+    } finally {
+      setIsSavingDraft(false);
+    }
   }
 
   async function submitAll(toSeplan: boolean) {
@@ -338,8 +368,11 @@ export default function SecretariaPage() {
     setIsSubmittingAll(true);
     try {
       if (editableNow && current && form.formState.isDirty) {
-        await patch(form.getValues() as FormValues);
-        form.reset(form.getValues());
+        const draft = toDraftPayload(form.getValues() as FormValues);
+        if (draft) {
+          await patch(draft as FormValues);
+          form.reset(draft);
+        }
       }
 
       if (editableNow && current) {
@@ -357,7 +390,7 @@ export default function SecretariaPage() {
       if (issues.length > 0) {
         const fieldCount = issues.reduce((total, issue) => total + issue.items.length, 0);
         toast.warning(
-          `${issues.length} validação${issues.length !== 1 ? 'ões' : ''} com pendências (${fieldCount} campo${fieldCount !== 1 ? 's' : ''}). Veja o balão ao lado do botão de envio.`,
+          `${issues.length} validação${issues.length !== 1 ? 'ões' : ''} com pendências (${fieldCount} campo${fieldCount !== 1 ? 's' : ''}). Veja o botão Pendências ao lado.`,
         );
       }
 
@@ -376,7 +409,7 @@ export default function SecretariaPage() {
           );
         }
         const reminder =
-          issues.length > 0 ? ' Confira o balão de pendências ao lado do botão de envio.' : '';
+          issues.length > 0 ? ' Confira o botão Pendências ao lado.' : '';
         toast.success(
           toSeplan
             ? `Respostas enviadas para SEPLAN: ${parts.join(', ')}.${reminder}`
@@ -550,6 +583,24 @@ export default function SecretariaPage() {
     setRemovePopoverOpen(false);
   }, [selectedActionId]);
 
+  const lastSyncedAssignmentKeyRef = useRef<string>('');
+  useEffect(() => {
+    const key = `${selectedActionId}|${assignment.theme}`;
+    if (lastSyncedAssignmentKeyRef.current === key) return;
+    lastSyncedAssignmentKeyRef.current = key;
+    if (!selectedActionId) return;
+    const action = actions.find((a) => a.id === selectedActionId);
+    const existing = action?.assignments.find((a) => a.theme === assignment.theme);
+    setAssignment((prev) => ({
+      ...prev,
+      axis: existing?.axis ?? '',
+      classification: existing?.classification ?? '',
+      weightingFactor:
+        existing?.weightingFactor != null ? String(existing.weightingFactor) : '',
+      justification: existing?.justification ?? '',
+    }));
+  }, [selectedActionId, assignment.theme, actions]);
+
   return (
     <main className="min-h-screen bg-background">
       <header className="border-b border-primary/30 bg-primary text-primary-foreground shadow-sm">
@@ -600,181 +651,87 @@ export default function SecretariaPage() {
               <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
             </TabsList>
           ) : (
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Revisão de Entregas (Pasta)</h1>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Revisão de Entregas</h1>
           )}
           <div className="flex flex-wrap items-center gap-2">
+            {userRole === 'SECRETARIA_REVISOR' && activeTab === 'validations' && current ? (
+              <InternalReviewToolbar
+                validation={current}
+                isReviewing={isActionReviewing}
+                onApprove={handleInternalApprove}
+                onReturn={handleInternalReturn}
+              />
+            ) : null}
             <SummaryCountBadge count={validations.length} label="validações" />
             <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />
-            {userRole === 'SECRETARIA_REPRESENTANTE' && (
-              <div className="flex gap-2.5">
-                <Popover
-                  open={submitIssuesOpen}
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      setSubmitIssuesOpen(false);
-                      setSubmitIssues([]);
-                    }
-                  }}
-                >
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-amber-500/40 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 hover:text-amber-800 shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                      disabled={
-                        isSubmittingAll ||
-                        !validations.some((v) => v.status === 'RASCUNHO' || v.status === 'DEVOLVIDO' || v.status === 'DEVOLVIDO_REVISOR')
-                      }
-                      onClick={() => void submitAll(false)}
-                    >
-                      {isSubmittingAll ? (
-                        <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                      ) : (
-                        <SendIcon data-icon="inline-start" className="size-4" />
-                      )}
-                      {isSubmittingAll ? 'Enviando...' : 'Enviar para Revisão Interna'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    align="end"
-                    side="bottom"
-                    className="flex w-[min(96vw,28rem)] flex-col gap-3 border-destructive/30 bg-popover p-4 shadow-lg"
-                  >
-                    <div className="flex items-start gap-2">
-                      <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="font-semibold leading-none text-destructive">Itens pendentes antes do envio</p>
-                        <p className="text-sm text-muted-foreground">
-                          Complete os campos abaixo antes de enviar para Revisão Interna.
-                        </p>
-                      </div>
-                    </div>
-                    <ScrollArea className="max-h-[min(50vh,16rem)] w-full rounded-lg border border-destructive/20 bg-muted">
-                      <div className="flex flex-col gap-4 p-3 text-sm">
-                        {submitIssues.map((group) => (
-                          <div key={group.validationId}>
-                            <p className="font-medium text-foreground">
-                              {group.title}
-                              {group.isSelected ? (
-                                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                                  (validação selecionada)
-                                </span>
-                              ) : null}
-                            </p>
-                            <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                              {group.items.map((item) => (
-                                <li key={item}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                    <div className="flex justify-end border-t border-destructive/20 pt-3">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSubmitIssuesOpen(false);
-                          setSubmitIssues([]);
-                        }}
-                      >
-                        Fechar
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold tracking-wide transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  disabled={
-                    isSubmittingAll ||
-                    !validations.some((v) => v.status === 'APROVADO_REVISOR')
-                  }
-                  onClick={() => void submitAll(true)}
-                >
-                  {isSubmittingAll ? (
-                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                  ) : (
-                    <SendIcon data-icon="inline-start" className="size-4" />
-                  )}
-                  {isSubmittingAll ? 'Enviando...' : 'Enviar para SEPLAN'}
-                </Button>
-              </div>
+            {(userRole === 'SECRETARIA_REPRESENTANTE' || userRole === 'SECRETARIA_REVISOR') && (
+              <SecretariaBulkActions
+                role={userRole === 'SECRETARIA_REVISOR' ? 'REVISOR' : 'REPRESENTANTE'}
+                validations={validations}
+                isSubmittingAll={isSubmittingAll}
+                isReviewingAll={isReviewingAll}
+                submitIssues={submitIssues}
+                submitIssuesOpen={submitIssuesOpen}
+                onSubmitIssuesOpenChange={(open) => {
+                  setSubmitIssuesOpen(open);
+                  if (!open) setSubmitIssues([]);
+                }}
+                onSubmitInternal={() => void submitAll(false)}
+                onSubmitSeplan={() => void submitAll(true)}
+                onReviewAll={reviewAll}
+              />
             )}
 
-            {userRole === 'SECRETARIA_REVISOR' && (
-              <div className="flex gap-2.5">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-amber-500/40 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 hover:text-amber-800 shadow-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  disabled={
-                    isReviewingAll ||
-                    !validations.some((v) => v.status === 'ENVIADO_REVISOR')
-                  }
-                  onClick={() => void reviewAll(false)}
-                >
-                  {isReviewingAll ? (
-                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                  ) : (
-                    <Undo2Icon data-icon="inline-start" className="size-4" />
-                  )}
-                  Devolver para Correção
-                </Button>
-
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold tracking-wide transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  disabled={
-                    isReviewingAll ||
-                    !validations.some((v) => v.status === 'ENVIADO_REVISOR')
-                  }
-                  onClick={() => void reviewAll(true)}
-                >
-                  {isReviewingAll ? (
-                    <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                  ) : (
-                    <CheckIcon data-icon="inline-start" className="size-4" />
-                  )}
-                  Aprovar Tudo
-                </Button>
-              </div>
-            )}
           </div>
         </div>
 
         <TabsContent value="validations" forceMount className="mt-0 data-[state=inactive]:hidden">
-          <div className="grid w-full gap-5 xl:grid-cols-[430px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
-            <Card>
+          <div className="grid w-full gap-5 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)]">
+            <Card className="min-w-0">
               <CardHeader>
                 <CardTitle>Ações recebidas</CardTitle>
                 <CardDescription>Selecione uma ação para preencher a validação.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-0">
                 {validations.length ? (
-                  <ScrollArea className="h-[720px] pr-3">
-                    <div className="flex flex-col gap-2">
-                      {validations.map((validation) => (
-                        <button
-                          key={validation.id}
-                          className={cn(
-                            'rounded-lg border bg-card p-3 text-left text-sm transition-colors hover:bg-muted/50',
-                            current?.id === validation.id && 'border-primary bg-primary/5',
-                          )}
-                          onClick={() => selectValidation(validation.id)}
-                        >
-                          <div className="mb-2 flex flex-wrap gap-2">
-                            <StatusBadge status={validation.status} />
-                            <ThemeBadge theme={validation.theme} />
-                          </div>
-                          <p className="font-medium leading-snug">{validation.action?.application}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">{validation.action?.unitCode} - {validation.action?.unitName}</p>
-                        </button>
-                      ))}
-                    </div>
+                  <ScrollArea className="h-[720px] w-full">
+                    <ul role="list" className="flex flex-col gap-2 p-3">
+                      {validations.map((validation) => {
+                        const isActive = current?.id === validation.id;
+                        return (
+                          <li key={validation.id}>
+                            <button
+                              type="button"
+                              onClick={() => selectValidation(validation.id)}
+                              aria-pressed={isActive}
+                              disabled={isSavingDraft && !isActive}
+                              className={cn(
+                                'group/item flex w-full gap-3 rounded-lg border border-border bg-card px-3 py-3 text-left shadow-sm transition-all hover:border-foreground/30 hover:shadow focus-visible:border-foreground/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60',
+                                isActive && 'border-foreground bg-muted/40 shadow-md',
+                              )}
+                            >
+                              <div className="flex min-w-0 flex-col gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <StatusBadge status={validation.status} />
+                                  <ThemeBadge theme={validation.theme} />
+                                </div>
+                                <p className="break-words text-sm font-semibold leading-5 text-foreground">
+                                  {validation.action?.application}
+                                </p>
+                                <div className="flex min-w-0 items-baseline gap-2 border-t border-border/60 pt-2">
+                                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground tabular-nums">
+                                    {validation.action?.unitCode}
+                                  </span>
+                                  <span className="truncate text-[11px] text-muted-foreground" title={validation.action?.unitName}>
+                                    {validation.action?.unitName}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </ScrollArea>
                 ) : (
                   <Empty>
@@ -797,7 +754,24 @@ export default function SecretariaPage() {
                     <CardHeader>
                       <CardTitle>{current.action?.application}</CardTitle>
                       <CardDescription>{current.action?.projectActivity} | {current.action?.organizationName}</CardDescription>
-                      <CardAction className="flex gap-2">
+                      <CardAction className="flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const value = current.assignment?.classification;
+                          if (!value) {
+                            return (
+                              <Badge variant="outline" className="italic text-muted-foreground">
+                                Não classificado
+                              </Badge>
+                            );
+                          }
+                          const label = metadata?.classifications?.[current.theme as ThemeBudget]
+                            ?.find((opt) => opt.value === value)?.label ?? value;
+                          return (
+                            <Badge variant="outline" title={label} className="font-medium">
+                              {label}
+                            </Badge>
+                          );
+                        })()}
                         <ThemeBadge theme={current.theme} />
                         <StatusBadge status={current.status} />
                       </CardAction>
@@ -814,7 +788,7 @@ export default function SecretariaPage() {
                             <p className="text-2xl font-semibold">{formatMoney(current.action?.totals.initialBudget ?? 0)}</p>
                           </div>
                           <div>
-                            <p className="text-sm text-muted-foreground">Liquidado no QDD</p>
+                            <p className="text-sm text-muted-foreground">Liquidado</p>
                             <p className="text-2xl font-semibold">{formatMoney(current.action?.totals.liquidated ?? 0)}</p>
                           </div>
                         </div>
@@ -836,80 +810,15 @@ export default function SecretariaPage() {
                     </CardContent>
                   </Card>
 
-                  {userRole === 'SECRETARIA_REVISOR' && (
-                    <Card className="border-primary/30 bg-primary/[0.02]">
-                      <CardHeader>
-                        <CardTitle className="text-base font-semibold">Painel de Revisão Interna</CardTitle>
-                        <CardDescription>
-                          Examine os dados preenchidos pelo técnico. Você pode aprovar o envio para a SEPLAN ou devolver para ajustes.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-4">
-                        {current.status === 'ENVIADO_REVISOR' ? (
-                          <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-1.5">
-                              <label htmlFor="internalComment" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Observações / Justificativa da Devolução
-                              </label>
-                              <Textarea
-                                id="internalComment"
-                                placeholder="Caso devolva para o técnico, informe aqui o motivo ou o que precisa ser corrigido..."
-                                value={internalReviewComment}
-                                onChange={(e) => setInternalReviewComment(e.target.value)}
-                                className="min-h-[80px]"
-                              />
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="default"
-                                onClick={() => handleInternalApprove(current.id)}
-                                disabled={isActionReviewing}
-                                className="bg-emerald-600 text-white hover:bg-emerald-700"
-                              >
-                                {isActionReviewing ? (
-                                  <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                                ) : (
-                                  <CheckIcon data-icon="inline-start" className="size-4" />
-                                )}
-                                Aprovar e Enviar para SEPLAN
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => handleInternalReturn(current.id)}
-                                disabled={isActionReviewing || !internalReviewComment.trim()}
-                                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                {isActionReviewing ? (
-                                  <RefreshCwIcon data-icon="inline-start" className="animate-spin size-4" />
-                                ) : (
-                                  <Trash2Icon data-icon="inline-start" className="size-4" />
-                                )}
-                                Devolver ao Técnico
-                              </Button>
-                            </div>
-                            {!internalReviewComment.trim() && (
-                              <p className="text-[11px] text-muted-foreground">
-                                * O comentário é obrigatório para realizar a devolução.
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
-                            <InfoIcon className="size-4" />
-                            <span>
-                              Status atual: <strong>{statusLabels[current.status]}</strong>. Ações de revisão interna só estão disponíveis para itens aguardando revisão interna.
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
                   <ValidationForm
                     form={form}
                     deliveries={deliveries}
                     editable={editable}
+                    theme={current.theme}
+                    classification={current.assignment?.classification ?? ''}
+                    programName={current.action?.application}
                     onSave={save}
+                    isSaving={isSavingDraft}
                   />
                 </>
               ) : (
@@ -982,81 +891,66 @@ export default function SecretariaPage() {
                 {actions.length ? (
                   <>
                     <ScrollArea className="h-[700px] w-full">
-                      <div className="overflow-x-auto">
-                        <Table className="w-full table-fixed">
-                          <colgroup>
-                            <col className="w-[80px]" />
-                            <col className="w-[32%]" />
-                            <col className="w-[140px]" />
-                            <col className="w-[140px]" />
-                            <col className="w-[90px]" />
-                          </colgroup>
-                          <TableHeader className="sticky top-0 z-10 bg-card">
-                            <TableRow>
-                              <TableHead className="h-9 pl-4 text-xs uppercase tracking-[0.12em] text-muted-foreground">Unidade</TableHead>
-                              <TableHead className="h-9 min-w-0 whitespace-normal break-words text-xs uppercase tracking-[0.12em] text-muted-foreground">Programa / ação</TableHead>
-                              <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Planejado</TableHead>
-                              <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Execução</TableHead>
-                              <TableHead className="h-9 pr-4 text-xs uppercase tracking-[0.12em] text-muted-foreground">Temas</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredActions.map((action) => (
-                              <TableRow key={action.id} className={cn(selectedActionId === action.id && 'bg-primary/5')}>
-                                <TableCell className="py-3 pl-4 align-top">
-                                  <span className="block text-sm font-semibold tabular-nums">{action.unitCode}</span>
-                                  <span className="block truncate text-xs text-muted-foreground" title={action.unitName}>{action.unitName}</span>
-                                </TableCell>
-                                <TableCell className="min-w-0 whitespace-normal break-words py-3 align-top">
-                                  <button
-                                    type="button"
-                                    className="flex min-w-0 w-full flex-col gap-0.5 text-left text-sm font-medium leading-5 text-primary break-words hover:underline"
-                                    title={`${action.projectActivity} - ${action.application}`}
-                                    onClick={() => setSelectedActionId(action.id)}
-                                  >
-                                    <span className="font-semibold tabular-nums">{action.projectActivity}</span>
-                                    <span className="line-clamp-3 break-words font-normal">{action.application}</span>
-                                  </button>
-                                  <p className="mt-0.5 truncate text-xs text-muted-foreground" title={action.functionalProgram}>{action.functionalProgram}</p>
-                                </TableCell>
-                                <TableCell className="py-3 text-right align-top text-sm">
-                                  <div className="flex flex-col gap-0.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] text-muted-foreground">Inicial</span>
-                                      <span className="tabular-nums">{formatMoney(action.totals.initialBudget)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] text-muted-foreground">Atualizado</span>
-                                      <span className="tabular-nums font-medium">{formatMoney(action.totals.updatedBudget)}</span>
-                                    </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="py-3 text-right align-top text-sm">
-                                  <div className="flex flex-col gap-0.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] text-muted-foreground">Liquidado</span>
-                                      <span className="tabular-nums">{formatMoney(action.totals.liquidated)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] text-muted-foreground">Disponível</span>
-                                      <span className="tabular-nums font-medium">{formatMoney(action.totals.available)}</span>
-                                    </div>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="py-3 pr-4 align-top">
-                                  <div className="flex flex-wrap gap-1">
-                                    {action.assignments.length ? (
-                                      action.assignments.map((item) => <ThemeBadge key={item.id} theme={item.theme} />)
-                                    ) : (
-                                      <Badge variant="secondary">Sem tema</Badge>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
+                      <ul role="list" className="flex flex-col gap-2 p-3">
+                        {filteredActions.map((action) => (
+                          <li key={action.id}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedActionId(action.id)}
+                              aria-pressed={selectedActionId === action.id}
+                              className={cn(
+                                'group/item flex w-full flex-col gap-2 rounded-lg border-2 border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:border-primary focus-visible:bg-muted/50 focus-visible:outline-none',
+                                selectedActionId === action.id && 'border-primary bg-primary/5 hover:bg-primary/5',
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-baseline gap-2">
+                                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground tabular-nums">
+                                    {action.unitCode}
+                                  </span>
+                                  <span className="truncate text-[11px] text-muted-foreground" title={action.unitName}>
+                                    {action.unitName}
+                                  </span>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                                  {action.assignments.length ? (
+                                    action.assignments.map((item) => <ThemeBadge key={item.id} theme={item.theme} />)
+                                  ) : (
+                                    <Badge variant="secondary">Sem tema</Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="min-w-0">
+                                <p className="break-words text-base font-semibold leading-6 text-primary group-hover/item:underline">
+                                  {action.application}
+                                </p>
+                                <p className="mt-0.5 text-[11px] font-medium leading-4 tabular-nums text-muted-foreground">
+                                  {action.projectActivity}
+                                </p>
+                                <p className="truncate text-[11px] text-muted-foreground" title={action.functionalProgram}>
+                                  {action.functionalProgram}
+                                </p>
+                              </div>
+
+                              <dl className="grid grid-cols-3 divide-x divide-border/60 rounded-md border border-border/60 bg-background">
+                                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Inicial</dt>
+                                  <dd className="text-base font-bold tabular-nums text-foreground">{formatMoney(action.totals.initialBudget)}</dd>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Atualizado</dt>
+                                  <dd className="text-base font-bold tabular-nums text-foreground">{formatMoney(action.totals.updatedBudget)}</dd>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Liquidado</dt>
+                                  <dd className="text-base font-bold tabular-nums text-foreground">{formatMoney(action.totals.liquidated)}</dd>
+                                </div>
+                              </dl>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     </ScrollArea>
                     {filteredActions.length === 0 ? (
                       <div className="px-4 pb-4">
@@ -1088,14 +982,27 @@ export default function SecretariaPage() {
               </CardContent>
             </Card>
 
-            <Card className="min-w-0">
-              <CardHeader>
-                <CardTitle>Curadoria temática</CardTitle>
-                <CardDescription>
-                  {selectedAction ? `${selectedAction.projectActivity} - ${selectedAction.application}` : 'Selecione uma ação da secretaria.'}
+            <Card className="min-w-0 gap-0">
+              <CardHeader className="relative z-10 border-b border-border bg-card shadow-sm">
+                <CardTitle className="font-sans text-base font-bold uppercase tracking-[0.16em] text-muted-foreground leading-tight">
+                  Classificação da Ação
+                </CardTitle>
+                <CardDescription className="mt-3">
+                  {selectedAction ? (
+                    <span className="flex flex-col gap-1 rounded-lg border border-primary/20 bg-primary/5 py-1.5 pl-2 pr-3">
+                      <span className="text-sm font-semibold text-foreground">
+                        {selectedAction.application}
+                      </span>
+                      <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
+                        {selectedAction.projectActivity}
+                      </span>
+                    </span>
+                  ) : (
+                    'Selecione uma ação da secretaria.'
+                  )}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 <FieldGroup>
                   <Field>
                     <FieldLabel>Tema</FieldLabel>
@@ -1112,9 +1019,9 @@ export default function SecretariaPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field>
+                  <Field data-disabled={selectedActionHasTheme || undefined}>
                     <FieldLabel>Eixo</FieldLabel>
-                    <Select value={assignment.axis || 'UNSELECTED'} onValueChange={(value) => setAssignment({ ...assignment, axis: value === 'UNSELECTED' ? '' : value })}>
+                    <Select value={assignment.axis || 'UNSELECTED'} disabled={selectedActionHasTheme} onValueChange={(value) => setAssignment({ ...assignment, axis: value === 'UNSELECTED' ? '' : value })}>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
@@ -1126,16 +1033,17 @@ export default function SecretariaPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field>
+                  <Field data-disabled={selectedActionHasTheme || undefined}>
                     <FieldLabel>Classificação</FieldLabel>
                     <Select
                       value={assignment.classification || 'UNSELECTED'}
+                      disabled={selectedActionHasTheme}
                       onValueChange={(value) => {
                         const classification = value === 'UNSELECTED' ? '' : value;
                         setAssignment({
                           ...assignment,
                           classification,
-                          weightingFactor: isExclusiveAllocation(assignment.theme, classification) ? '1' : '',
+                          weightingFactor: weightingFactorFormValue(assignment.theme, classification, ''),
                         });
                       }}
                     >
@@ -1150,38 +1058,54 @@ export default function SecretariaPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field data-disabled={isExclusiveAllocation(assignment.theme, assignment.classification) || undefined}>
-                    <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
-                    <Input
-                      id="weightingFactor"
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={
-                        isExclusiveAllocation(assignment.theme, assignment.classification)
-                          ? '1'
-                          : assignment.weightingFactor
+                  {shouldHideWeightingFactor(assignment.theme, assignment.classification) ? (
+                    lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
+                      <Field>
+                        <FieldDescription>
+                          {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
+                        </FieldDescription>
+                      </Field>
+                    ) : null
+                  ) : (
+                    <Field
+                      data-disabled={
+                        selectedActionHasTheme ||
+                        isWeightingFactorLocked(assignment.theme, assignment.classification) ||
+                        undefined
                       }
-                      disabled={isExclusiveAllocation(assignment.theme, assignment.classification)}
-                      onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
-                      placeholder="Opcional"
-                    />
-                    {isExclusiveAllocation(assignment.theme, assignment.classification) ? (
-                      <FieldDescription>
-                        Dotação exclusiva: 100% do valor do programa (ponderador fixo em 1).
-                      </FieldDescription>
-                    ) : null}
-                  </Field>
-                  <Field>
+                    >
+                      <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
+                      <Input
+                        id="weightingFactor"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={weightingFactorFormValue(
+                          assignment.theme,
+                          assignment.classification,
+                          assignment.weightingFactor,
+                        )}
+                        disabled={selectedActionHasTheme || isWeightingFactorLocked(assignment.theme, assignment.classification)}
+                        onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
+                        placeholder="Opcional"
+                      />
+                      {lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
+                        <FieldDescription>
+                          {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
+                        </FieldDescription>
+                      ) : null}
+                    </Field>
+                  )}
+                  <Field data-disabled={selectedActionHasTheme || undefined}>
                     <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
-                    <Textarea id="justification" value={assignment.justification} onChange={(event) => setAssignment({ ...assignment, justification: event.target.value })} />
+                    <Textarea id="justification" disabled={selectedActionHasTheme} value={assignment.justification} onChange={(event) => setAssignment({ ...assignment, justification: event.target.value })} />
                   </Field>
                   {selectedActionHasTheme ? (
                     <Alert className="border-primary/25 bg-primary/5">
                       <FolderCogIcon />
                       <AlertDescription className="text-xs">
-                        Esta ação já possui classificação para <strong>{themeLabels[assignment.theme]}</strong>. Use &quot;Remover classificação&quot; para excluí-la quando não houver validações vinculadas — assim você poderá classificar novamente neste tema.
+                        Os campos acima mostram a classificação gravada para <strong>{themeLabels[assignment.theme]}</strong> (somente leitura). Para alterar, use &quot;Remover classificação&quot; e classifique novamente — só é possível quando não houver validações com dados preenchidos.
                       </AlertDescription>
                     </Alert>
                   ) : null}
