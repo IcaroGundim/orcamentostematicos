@@ -2,541 +2,15 @@
   "schema_version": "1.0.0",
   "workspaceRoot": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos",
   "nodes": {
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/scripts/generate-qdd-seed.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/scripts/generate-qdd-seed.ts",
-      "moduleName": "apps/api/scripts/generate-qdd-seed.ts",
-      "exports": [
-        "qddVigenteImport",
-        "qddVigenteActions"
-      ],
-      "imports": [
-        "node:fs",
-        "node:path",
-        "../src/common/domain",
-        "../src/imports/qdd-parser"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T19:12:13.259Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "moduleName": "apps/api/src/app.module.ts",
-      "exports": [
-        "AppModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "./auth/auth.module",
-        "./budget/budget.module",
-        "./imports/imports.module",
-        "./store/store.module",
-        "./validations/validations.module"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:00:41.438Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.controller.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.controller.ts",
-      "moduleName": "apps/api/src/auth/auth.controller.ts",
-      "exports": [
-        "AuthController"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "class-validator",
-        "./auth.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:02:36.413Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "moduleName": "apps/api/src/auth/auth.guard.ts",
-      "exports": [
-        "AuthGuard",
-        "AuthGuard.canActivate"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "./auth.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:02:36.414Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "moduleName": "apps/api/src/auth/auth.module.ts",
-      "exports": [
-        "AuthModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "./auth.controller",
-        "./auth.guard",
-        "./roles.guard",
-        "./auth.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:02:42.216Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts",
-      "moduleName": "apps/api/src/auth/auth.service.ts",
-      "exports": [
-        "AuthService",
-        "AuthService.login",
-        "AuthService.if",
-        "AuthService.authenticate",
-        "AuthService.if",
-        "AuthService.if"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "node:crypto",
-        "../store/store.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T18:39:14.465Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/current-user.decorator.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/current-user.decorator.ts",
-      "moduleName": "apps/api/src/auth/current-user.decorator.ts",
-      "exports": [
-        "CurrentUser"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../common/domain"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:02:36.414Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "moduleName": "apps/api/src/auth/roles.guard.ts",
-      "exports": [
-        "ROLES_KEY",
-        "Roles",
-        "RolesGuard",
-        "RolesGuard.canActivate",
-        "RolesGuard.if"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "@nestjs/core",
-        "../common/domain"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T18:39:12.625Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "moduleName": "apps/api/src/budget/budget.controller.ts",
-      "exports": [
-        "BudgetController",
-        "BudgetController.metadata",
-        "BudgetController.themes",
-        "BudgetController.axes",
-        "BudgetController.classifications",
-        "BudgetController.assignmentStatuses",
-        "BudgetController.validationStatuses",
-        "BudgetController.organizations",
-        "BudgetController.year",
-        "BudgetController.assignments",
-        "BudgetController.status",
-        "BudgetController.createdBy"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "class-validator",
-        "../auth/current-user.decorator",
-        "../auth/auth.guard",
-        "../auth/roles.guard",
-        "../common/domain",
-        "../store/store.service",
-        "./budget.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-14T18:06:28.492Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts",
-      "moduleName": "apps/api/src/budget/budget.module.ts",
-      "exports": [
-        "BudgetModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../auth/auth.module",
-        "./budget.controller",
-        "./budget.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:03:15.168Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts",
-      "moduleName": "apps/api/src/budget/budget.service.ts",
-      "exports": [
-        "BudgetService",
-        "BudgetService.listOrganizations",
-        "BudgetService.user",
-        "BudgetService.filters",
-        "BudgetService.year",
-        "BudgetService.organizationCode",
-        "BudgetService.unitCode",
-        "BudgetService.theme",
-        "BudgetService.axis",
-        "BudgetService.validationStatus",
-        "BudgetService.assignments",
-        "BudgetService.expenseLinesCount",
-        "BudgetService.listAssignments",
-        "BudgetService.getSummary"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../store/store.service",
-        "../common/domain"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:03:15.169Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "moduleName": "apps/api/src/common/domain.ts",
-      "exports": [
-        "QddPeriodType",
-        "UserRole",
-        "ThemeBudget",
-        "AssignmentStatus",
-        "ValidationStatus",
-        "OcadAxis",
-        "OsgAxis",
-        "ClimaticoAxis",
-        "THEME_AXES",
-        "THEME_CLASSIFICATIONS",
-        "User",
-        "Organization",
-        "AdministrativeUnit",
-        "ExpenseLine",
-        "BudgetAction",
-        "BudgetTotals",
-        "BudgetImport",
-        "ThematicAssignment",
-        "ValidationCycle",
-        "Evidence",
-        "DeliveryReport",
-        "ActionValidation"
-      ],
-      "imports": [],
-      "language": "typescript",
-      "mtime": "2026-05-14T18:06:34.290Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "moduleName": "apps/api/src/imports/imports.controller.ts",
-      "exports": [
-        "ImportsController",
-        "ImportsController.listImports"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "@nestjs/platform-express",
-        "class-transformer",
-        "class-validator",
-        "../auth/roles.guard",
-        "../auth/auth.guard",
-        "../common/domain",
-        "../store/store.service",
-        "./imports.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T19:11:08.989Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts",
-      "moduleName": "apps/api/src/imports/imports.module.ts",
-      "exports": [
-        "ImportsModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "@nestjs/platform-express",
-        "../auth/auth.module",
-        "./imports.controller",
-        "./imports.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:04:06.953Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "moduleName": "apps/api/src/imports/imports.service.ts",
-      "exports": [
-        "ImportsService",
-        "ImportsService.preview",
-        "ImportsService.if",
-        "ImportsService.sampleActions",
-        "ImportsService.organizationsCount",
-        "ImportsService.unitsCount",
-        "ImportsService.confirm",
-        "ImportsService.if",
-        "ImportsService.import",
-        "ImportsService.organizationsCount",
-        "ImportsService.unitsCount",
-        "ImportsService.actionsCount"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../common/domain",
-        "../store/store.service",
-        "./qdd-parser"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T19:11:36.557Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/qdd-parser.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/qdd-parser.ts",
-      "moduleName": "apps/api/src/imports/qdd-parser.ts",
-      "exports": [
-        "ParsedQdd"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "xlsx",
-        "../common/domain"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T19:09:55.659Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/main.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/main.ts",
-      "moduleName": "apps/api/src/main.ts",
-      "exports": [],
-      "imports": [
-        "@nestjs/common",
-        "@nestjs/core",
-        "./app.module"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:00:41.438Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.module.ts",
-      "moduleName": "apps/api/src/store/store.module.ts",
-      "exports": [
-        "StoreModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "./store.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:02:08.992Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "moduleName": "apps/api/src/store/store.service.ts",
-      "exports": [
-        "DataStoreService",
-        "DataStoreService.users",
-        "DataStoreService.id",
-        "DataStoreService.name",
-        "DataStoreService.email",
-        "DataStoreService.password",
-        "DataStoreService.role",
-        "DataStoreService.id",
-        "DataStoreService.name",
-        "DataStoreService.email",
-        "DataStoreService.password",
-        "DataStoreService.role",
-        "DataStoreService.id",
-        "DataStoreService.name",
-        "DataStoreService.email",
-        "DataStoreService.password",
-        "DataStoreService.role",
-        "DataStoreService.organizationCode",
-        "DataStoreService.id",
-        "DataStoreService.name",
-        "DataStoreService.email",
-        "DataStoreService.password",
-        "DataStoreService.role",
-        "DataStoreService.organizationCode",
-        "DataStoreService.constructor",
-        "DataStoreService.createId",
-        "DataStoreService.if",
-        "DataStoreService.for",
-        "DataStoreService.resetBudgetData",
-        "DataStoreService.upsertOrganizations",
-        "DataStoreService.for",
-        "DataStoreService.id",
-        "DataStoreService.code",
-        "DataStoreService.name",
-        "DataStoreService.organizationCode",
-        "DataStoreService.if",
-        "DataStoreService.id",
-        "DataStoreService.code",
-        "DataStoreService.name",
-        "DataStoreService.units",
-        "DataStoreService.addImportedBudget",
-        "DataStoreService.if",
-        "DataStoreService.if",
-        "DataStoreService.for",
-        "DataStoreService.listImports",
-        "DataStoreService.getImportActions",
-        "DataStoreService.listOrganizations",
-        "DataStoreService.listActions",
-        "DataStoreService.if",
-        "DataStoreService.getActionOrThrow",
-        "DataStoreService.if",
-        "DataStoreService.createAssignment",
-        "DataStoreService.id",
-        "DataStoreService.status",
-        "DataStoreService.createdAt",
-        "DataStoreService.updatedAt",
-        "DataStoreService.updateAssignment",
-        "DataStoreService.if",
-        "DataStoreService.deleteAssignment",
-        "DataStoreService.if",
-        "DataStoreService.if",
-        "DataStoreService.createCycle",
-        "DataStoreService.id",
-        "DataStoreService.status",
-        "DataStoreService.openedAt",
-        "DataStoreService.for",
-        "DataStoreService.if",
-        "DataStoreService.if",
-        "DataStoreService.id",
-        "DataStoreService.cycleId",
-        "DataStoreService.actionId",
-        "DataStoreService.assignmentId",
-        "DataStoreService.organizationCode",
-        "DataStoreService.unitCode",
-        "DataStoreService.status",
-        "DataStoreService.deliveries",
-        "DataStoreService.evidences",
-        "DataStoreService.updatedAt",
-        "DataStoreService.listValidations",
-        "DataStoreService.if",
-        "DataStoreService.getValidationOrThrow",
-        "DataStoreService.if",
-        "DataStoreService.updateValidation",
-        "DataStoreService.updatedAt",
-        "DataStoreService.getSummary",
-        "DataStoreService.actions",
-        "DataStoreService.assignments",
-        "DataStoreService.cycles",
-        "DataStoreService.validations",
-        "DataStoreService.totalsByTheme",
-        "DataStoreService.validationsByStatus",
-        "DataStoreService.count",
-        "ActionFilters",
-        "canReadAction"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "node:crypto",
-        "../common/domain",
-        "../seeds/qdd-vigente.seed"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T19:10:48.804Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "moduleName": "apps/api/src/validations/validations.controller.ts",
-      "exports": [
-        "ValidationsController",
-        "ValidationsController.listCycles",
-        "ValidationsController.if",
-        "ValidationsController.deliveries",
-        "ValidationsController.evidences"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "class-transformer",
-        "class-validator",
-        "node:crypto",
-        "../auth/auth.guard",
-        "../auth/current-user.decorator",
-        "../auth/roles.guard",
-        "../common/domain",
-        "./validations.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-14T20:04:33.304Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts",
-      "moduleName": "apps/api/src/validations/validations.module.ts",
-      "exports": [
-        "ValidationsModule"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../auth/auth.module",
-        "./validations.controller",
-        "./validations.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-13T14:04:48.171Z"
-    },
-    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts": {
-      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts",
-      "moduleName": "apps/api/src/validations/validations.service.ts",
-      "exports": [
-        "ValidationsService",
-        "ValidationsService.createCycle",
-        "ValidationsService.listCycles",
-        "ValidationsService.validationCount",
-        "ValidationsService.validationsByStatus",
-        "ValidationsService.count",
-        "ValidationsService.closeCycle",
-        "ValidationsService.deleteCycle",
-        "ValidationsService.for",
-        "ValidationsService.getCycle",
-        "ValidationsService.if",
-        "ValidationsService.validations",
-        "ValidationsService.listMine",
-        "ValidationsService.saveDraft",
-        "ValidationsService.submit",
-        "ValidationsService.status",
-        "ValidationsService.submittedAt",
-        "ValidationsService.approve",
-        "ValidationsService.status",
-        "ValidationsService.reviewedAt",
-        "ValidationsService.returnToSecretary",
-        "ValidationsService.status",
-        "ValidationsService.reviewedAt",
-        "ValidationsService.revertApproval",
-        "ValidationsService.if",
-        "ValidationsService.status",
-        "ValidationsService.reviewerComment",
-        "ValidationsService.reviewedAt",
-        "ValidationsService.action",
-        "ValidationsService.assignment",
-        "ValidationsService.cycle",
-        "ValidationsService.if",
-        "ValidationsService.if",
-        "ValidationsService.if"
-      ],
-      "imports": [
-        "@nestjs/common",
-        "../common/domain",
-        "../store/store.service"
-      ],
-      "language": "typescript",
-      "mtime": "2026-05-14T20:27:53.506Z"
-    },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/next-env.d.ts": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/next-env.d.ts",
       "moduleName": "apps/web/next-env.d.ts",
       "exports": [],
       "imports": [
-        "./.next/dev/types/routes.d.ts"
+        "./.next/types/routes.d.ts"
       ],
       "language": "typescript",
-      "mtime": "2026-05-15T00:50:23.331Z"
+      "mtime": "2026-05-18T15:15:46.709Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/next.config.ts": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/next.config.ts",
@@ -557,6 +31,372 @@
       "imports": [],
       "language": "javascript",
       "mtime": "2026-05-13T14:05:35.100Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/prisma.config.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/prisma.config.ts",
+      "moduleName": "apps/web/prisma.config.ts",
+      "exports": [
+        "defineConfig"
+      ],
+      "imports": [
+        "prisma/config"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:32:50.079Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/prisma/seed.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/prisma/seed.ts",
+      "moduleName": "apps/web/prisma/seed.ts",
+      "exports": [],
+      "imports": [
+        "dotenv/config",
+        "@prisma/client",
+        "@prisma/adapter-pg"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:26:21.658Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/auth/login/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/auth/login/route.ts",
+      "moduleName": "apps/web/src/app/api/auth/login/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "node:crypto",
+        "@/lib/prisma",
+        "@/lib/auth-server"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:28:22.970Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/auth/me/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/auth/me/route.ts",
+      "moduleName": "apps/web/src/app/api/auth/me/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:28:27.776Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/budget-actions/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/budget-actions/route.ts",
+      "moduleName": "apps/web/src/app/api/budget-actions/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:29:20.342Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/health/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/health/route.ts",
+      "moduleName": "apps/web/src/app/api/health/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth-server"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:28:33.129Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/[importId]/actions/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/[importId]/actions/route.ts",
+      "moduleName": "apps/web/src/app/api/imports/qdd/[importId]/actions/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:30:26.654Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/[importId]/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/[importId]/route.ts",
+      "moduleName": "apps/web/src/app/api/imports/qdd/[importId]/route.ts",
+      "exports": [
+        "runtime",
+        "maxDuration",
+        "DELETE"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T18:22:27.743Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/confirm/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/confirm/route.ts",
+      "moduleName": "apps/web/src/app/api/imports/qdd/confirm/route.ts",
+      "exports": [
+        "runtime",
+        "maxDuration",
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T18:08:29.881Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/preview/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/preview/route.ts",
+      "moduleName": "apps/web/src/app/api/imports/qdd/preview/route.ts",
+      "exports": [
+        "runtime",
+        "maxDuration",
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/qdd-parser",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T18:08:24.349Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/imports/qdd/route.ts",
+      "moduleName": "apps/web/src/app/api/imports/qdd/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:30:20.830Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/metadata/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/metadata/route.ts",
+      "moduleName": "apps/web/src/app/api/metadata/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:39:17.340Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/organizations/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/organizations/route.ts",
+      "moduleName": "apps/web/src/app/api/organizations/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:29:14.187Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/reports/summary/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/reports/summary/route.ts",
+      "moduleName": "apps/web/src/app/api/reports/summary/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:29:31.114Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/thematic-assignments/[id]/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/thematic-assignments/[id]/route.ts",
+      "moduleName": "apps/web/src/app/api/thematic-assignments/[id]/route.ts",
+      "exports": [
+        "PATCH",
+        "DELETE"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:03.772Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/thematic-assignments/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/thematic-assignments/route.ts",
+      "moduleName": "apps/web/src/app/api/thematic-assignments/route.ts",
+      "exports": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-18T14:14:41.327Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/[id]/close/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/[id]/close/route.ts",
+      "moduleName": "apps/web/src/app/api/validation-cycles/[id]/close/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:32.574Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/[id]/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/[id]/route.ts",
+      "moduleName": "apps/web/src/app/api/validation-cycles/[id]/route.ts",
+      "exports": [
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:26.977Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validation-cycles/route.ts",
+      "moduleName": "apps/web/src/app/api/validation-cycles/route.ts",
+      "exports": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@prisma/client",
+        "@/lib/auth-server",
+        "@/lib/prisma",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-18T12:59:54.013Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/approve/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/approve/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/[id]/approve/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:56.844Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/draft/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/draft/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/[id]/draft/route.ts",
+      "exports": [
+        "PATCH"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:45.651Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/return/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/return/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/[id]/return/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:32:03.197Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/revert/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/revert/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/[id]/revert/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:32:09.143Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/submit/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/[id]/submit/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/[id]/submit/route.ts",
+      "exports": [
+        "POST"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:50.923Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/my/route.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/api/validations/my/route.ts",
+      "moduleName": "apps/web/src/app/api/validations/my/route.ts",
+      "exports": [
+        "GET"
+      ],
+      "imports": [
+        "next/server",
+        "@/lib/auth-server",
+        "@/lib/store"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:31:37.699Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/layout.tsx": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/layout.tsx",
@@ -598,7 +438,7 @@
         "@/lib/api"
       ],
       "language": "typescript",
-      "mtime": "2026-05-15T03:54:31.868Z"
+      "mtime": "2026-05-15T18:25:30.643Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/page.tsx": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/page.tsx",
@@ -637,13 +477,15 @@
         "@/components/ui/scroll-area",
         "@/components/ui/select",
         "@/components/ui/separator",
+        "@/components/ui/table",
+        "@/components/ui/tabs",
         "@/components/ui/textarea",
         "@/lib/utils",
         "@/components/domain/badges",
         "@/lib/api"
       ],
       "language": "typescript",
-      "mtime": "2026-05-15T03:39:05.082Z"
+      "mtime": "2026-05-18T15:44:43.103Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/seplan/page.tsx": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/seplan/page.tsx",
@@ -680,7 +522,20 @@
         "@/lib/api"
       ],
       "language": "typescript",
-      "mtime": "2026-05-15T14:02:42.842Z"
+      "mtime": "2026-05-18T14:59:51.226Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/charts/LiquidatedByAxisChart.tsx": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/charts/LiquidatedByAxisChart.tsx",
+      "moduleName": "apps/web/src/components/charts/LiquidatedByAxisChart.tsx",
+      "exports": [],
+      "imports": [
+        "recharts",
+        "@/components/ui/chart",
+        "@/types/chart-data",
+        "@/lib/api"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-18T14:17:31.266Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/domain/badges.tsx": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/domain/badges.tsx",
@@ -890,7 +745,7 @@
         "lucide-react"
       ],
       "language": "typescript",
-      "mtime": "2026-05-13T20:33:05.736Z"
+      "mtime": "2026-05-15T14:38:02.854Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/ui/skeleton.tsx": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/components/ui/skeleton.tsx",
@@ -989,7 +844,78 @@
       ],
       "imports": [],
       "language": "typescript",
-      "mtime": "2026-05-15T03:38:05.119Z"
+      "mtime": "2026-05-15T18:07:54.407Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/auth-server.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/auth-server.ts",
+      "moduleName": "apps/web/src/lib/auth-server.ts",
+      "exports": [
+        "AuthUser",
+        "getAuthUser",
+        "unauthorized",
+        "forbidden",
+        "notFound",
+        "badRequest",
+        "ok",
+        "requireRoles"
+      ],
+      "imports": [
+        "next/server",
+        "./prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:28:12.967Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/prisma.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/prisma.ts",
+      "moduleName": "apps/web/src/lib/prisma.ts",
+      "exports": [
+        "prisma"
+      ],
+      "imports": [
+        "@prisma/client",
+        "@prisma/adapter-pg"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:28:04.564Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/qdd-parser.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/qdd-parser.ts",
+      "moduleName": "apps/web/src/lib/qdd-parser.ts",
+      "exports": [
+        "BudgetTotals",
+        "ExpenseLine",
+        "BudgetAction",
+        "ParsedQdd"
+      ],
+      "imports": [
+        "xlsx"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-15T17:30:05.669Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/store.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/store.ts",
+      "moduleName": "apps/web/src/lib/store.ts",
+      "exports": [
+        "createId",
+        "getVigenteImportId",
+        "listOrganizations",
+        "getSummary",
+        "listValidations",
+        "mapAction",
+        "mapAssignment",
+        "mapImport",
+        "mapCycle",
+        "mapValidation",
+        "addImportedBudget"
+      ],
+      "imports": [
+        "node:crypto",
+        "./prisma"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-18T14:17:48.157Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/utils.ts": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/utils.ts",
@@ -1003,6 +929,22 @@
       ],
       "language": "typescript",
       "mtime": "2026-05-13T14:26:33.310Z"
+    },
+    "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/chart-data.ts": {
+      "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/chart-data.ts",
+      "moduleName": "apps/web/src/types/chart-data.ts",
+      "exports": [
+        "ThematicAxisValue",
+        "ThematicBudgetChartData",
+        "mockThematicChartData",
+        "FlatThematicChartRow",
+        "mockFlatThematicData"
+      ],
+      "imports": [
+        "./domain"
+      ],
+      "language": "typescript",
+      "mtime": "2026-05-18T13:09:46.933Z"
     },
     "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/domain.ts": {
       "filePath": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/domain.ts",
@@ -1027,332 +969,14 @@
       ],
       "imports": [],
       "language": "typescript",
-      "mtime": "2026-05-14T18:06:39.712Z"
+      "mtime": "2026-05-15T15:54:11.352Z"
     }
   },
   "edges": [
     {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/scripts/generate-qdd-seed.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../src/common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/scripts/generate-qdd-seed.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/qdd-parser.ts",
-      "importSpecifier": "../src/imports/qdd-parser",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "importSpecifier": "./auth/auth.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts",
-      "importSpecifier": "./budget/budget.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts",
-      "importSpecifier": "./imports/imports.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.module.ts",
-      "importSpecifier": "./store/store.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts",
-      "importSpecifier": "./validations/validations.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts",
-      "importSpecifier": "./auth.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts",
-      "importSpecifier": "./auth.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.controller.ts",
-      "importSpecifier": "./auth.controller",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "importSpecifier": "./auth.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts",
-      "importSpecifier": "./auth.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "importSpecifier": "./roles.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/current-user.decorator.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "importSpecifier": "../auth/auth.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/current-user.decorator.ts",
-      "importSpecifier": "../auth/current-user.decorator",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "importSpecifier": "../auth/roles.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts",
-      "importSpecifier": "./budget.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "importSpecifier": "../auth/auth.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.controller.ts",
-      "importSpecifier": "./budget.controller",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts",
-      "importSpecifier": "./budget.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/budget/budget.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "importSpecifier": "../auth/auth.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "importSpecifier": "../auth/roles.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "importSpecifier": "./imports.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "importSpecifier": "../auth/auth.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.controller.ts",
-      "importSpecifier": "./imports.controller",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "importSpecifier": "./imports.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/imports.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/qdd-parser.ts",
-      "importSpecifier": "./qdd-parser",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/imports/qdd-parser.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/main.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/app.module.ts",
-      "importSpecifier": "./app.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "./store.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/seeds/qdd-vigente.seed.ts",
-      "importSpecifier": "../seeds/qdd-vigente.seed",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.guard.ts",
-      "importSpecifier": "../auth/auth.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/current-user.decorator.ts",
-      "importSpecifier": "../auth/current-user.decorator",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/roles.guard.ts",
-      "importSpecifier": "../auth/roles.guard",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts",
-      "importSpecifier": "./validations.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/auth/auth.module.ts",
-      "importSpecifier": "../auth/auth.module",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.controller.ts",
-      "importSpecifier": "./validations.controller",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.module.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts",
-      "importSpecifier": "./validations.service",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/common/domain.ts",
-      "importSpecifier": "../common/domain",
-      "importType": "named"
-    },
-    {
-      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/validations/validations.service.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/api/src/store/store.service.ts",
-      "importSpecifier": "../store/store.service",
-      "importType": "named"
-    },
-    {
       "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/next-env.d.ts",
-      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/.next/dev/types/routes.d.ts",
-      "importSpecifier": "./.next/dev/types/routes.d.ts",
+      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/.next/types/routes.d.ts",
+      "importSpecifier": "./.next/types/routes.d.ts",
       "importType": "sideeffect"
     },
     {
@@ -1360,12 +984,30 @@
       "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/app/globals.css",
       "importSpecifier": "./globals.css",
       "importType": "sideeffect"
+    },
+    {
+      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/auth-server.ts",
+      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/prisma.ts",
+      "importSpecifier": "./prisma",
+      "importType": "named"
+    },
+    {
+      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/store.ts",
+      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/lib/prisma.ts",
+      "importSpecifier": "./prisma",
+      "importType": "named"
+    },
+    {
+      "source": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/chart-data.ts",
+      "target": "/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos/apps/web/src/types/domain.ts",
+      "importSpecifier": "./domain",
+      "importType": "named"
     }
   ],
   "metadata": {
-    "generatedAt": "2026-05-15T14:03:12.354Z",
+    "generatedAt": "2026-05-18T15:44:43.138Z",
     "generator": "repo-graph",
-    "nodeCount": 56,
-    "edgeCount": 55
+    "nodeCount": 65,
+    "edgeCount": 5
   }
 }

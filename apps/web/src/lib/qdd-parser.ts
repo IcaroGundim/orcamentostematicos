@@ -72,7 +72,9 @@ export function parseQdd(
       payableToLiquidate: toNumber(record['A Liquidar ( A+B-D )']),
       paid: toNumber(record['Pago ( E )']),
       payable: toNumber(record['A Pagar ( C-E )']),
-      available: toNumber(record['Disponível (A-C)']),
+      available:
+        toNumber(record['Ini+Sup+Cor-Red (B)']) -
+        toNumber(record['Liquidado ( D )']),
     });
   }
 

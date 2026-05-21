@@ -88,7 +88,7 @@ const DELIVERY_FIELD_LABELS: Record<string, string> = {
   quantity: 'Quantidade',
   municipality: 'Município',
   beneficiaries: 'Público beneficiado',
-  executedValue: 'Valor executado',
+  executedValue: 'Valor Executado na Ação',
 };
 
 function formatValidationIssuePath(path: PropertyKey[]): string {
@@ -153,7 +153,7 @@ export function getValidationFormIssues(
         pushUniqueIssue(
           issues,
           seen,
-          `Entrega ${index + 1} — Valor executado: Informe um valor maior que zero.`,
+          `Entrega ${index + 1} — Valor Executado na Ação: Informe um valor maior que zero.`,
         );
       }
     });

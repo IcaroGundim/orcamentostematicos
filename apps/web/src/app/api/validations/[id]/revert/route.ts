@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const row = await prisma.actionValidation.update({
     where: { id },
-    data: { status: 'RASCUNHO', reviewedAt: null, reviewerComment: null },
+    data: { status: 'ENVIADO', reviewedAt: null, reviewerComment: null },
   }).catch(() => null);
 
   if (!row) return notFound('Validação não encontrada.');

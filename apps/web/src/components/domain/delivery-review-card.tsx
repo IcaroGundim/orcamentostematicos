@@ -30,7 +30,7 @@ export function DeliveryReviewCard({ delivery, index, executedValue }: DeliveryR
   const valueLabel = formatExecutedValue(displayValue);
 
   return (
-    <li className="rounded-md border border-border/80 bg-muted/20 px-4 py-3">
+    <li className="rounded-md border border-border/80 bg-card px-4 py-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1.5 text-base font-semibold leading-snug text-foreground">
         {hasDescription ? delivery.description : 'Sem descrição informada.'}

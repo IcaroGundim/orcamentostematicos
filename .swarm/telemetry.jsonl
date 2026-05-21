@@ -102,3 +102,69 @@
 {"timestamp":"2026-05-15T14:03:06.756Z","event":"heartbeat","sessionId":"ses_1d41387a6ffeLz9UCuKOACm4ua"}
 {"timestamp":"2026-05-15T14:03:12.374Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/1.1.json","agent":"coder","taskId":"1.1","attempt":0}
 {"timestamp":"2026-05-15T14:03:12.383Z","event":"delegation_end","sessionId":"ses_1d4186714ffeRE3fuaB1ssOQZF","agentName":"architect","taskId":"","result":"completed"}
+{"timestamp":"2026-05-18T15:09:10.709Z","event":"session_started","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"plan"}
+{"timestamp":"2026-05-18T15:09:10.710Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"plan","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:09:12.011Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:09:12.050Z","event":"session_started","sessionId":"ses_1c45db61effeD4i0GhLG51Zc7p","agentName":"curator_init"}
+{"timestamp":"2026-05-18T15:09:12.050Z","event":"delegation_begin","sessionId":"ses_1c45db61effeD4i0GhLG51Zc7p","agentName":"curator_init","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:09:43.036Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:10:16.113Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:11:37.451Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:12:08.439Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:13:19.935Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:13:50.247Z","event":"agent_activated","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","oldName":"plan"}
+{"timestamp":"2026-05-18T15:13:50.247Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:13:50.454Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:14:27.082Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:15:13.888Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:15:57.226Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/build/evidence.json","agent":"evidence-manager","taskId":"build","attempt":0}
+{"timestamp":"2026-05-18T15:15:57.610Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:20:59.539Z","event":"agent_activated","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"architect","oldName":"build"}
+{"timestamp":"2026-05-18T15:21:00.007Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:21:42.833Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:22:18.044Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:23:31.316Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:24:49.116Z","event":"session_started","sessionId":"ses_1c44f69c7ffed9dNENtD2n6XsJ","agentName":"coder"}
+{"timestamp":"2026-05-18T15:24:49.116Z","event":"delegation_begin","sessionId":"ses_1c44f69c7ffed9dNENtD2n6XsJ","agentName":"coder","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:24:49.429Z","event":"heartbeat","sessionId":"ses_1c44f69c7ffed9dNENtD2n6XsJ"}
+{"timestamp":"2026-05-18T15:25:43.784Z","event":"heartbeat","sessionId":"ses_1c44f69c7ffed9dNENtD2n6XsJ"}
+{"timestamp":"2026-05-18T15:26:19.958Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/1.1.json","agent":"coder","taskId":"1.1","attempt":0}
+{"timestamp":"2026-05-18T15:26:19.967Z","event":"delegation_end","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"architect","taskId":"","result":"completed"}
+{"timestamp":"2026-05-18T15:26:20.413Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:26:56.526Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/build/evidence.json","agent":"evidence-manager","taskId":"build","attempt":0}
+{"timestamp":"2026-05-18T15:26:56.876Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:27:14.659Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/sast_scan/evidence.json","agent":"evidence-manager","taskId":"sast_scan","attempt":0}
+{"timestamp":"2026-05-18T15:27:14.659Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/quality_budget/evidence.json","agent":"evidence-manager","taskId":"quality_budget","attempt":0}
+{"timestamp":"2026-05-18T15:27:14.661Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/secretscan/evidence.json","agent":"evidence-manager","taskId":"secretscan","attempt":0}
+{"timestamp":"2026-05-18T15:27:30.412Z","event":"session_started","sessionId":"ses_1c44cf3a1ffefVhveUTtEDXXrT","agentName":"reviewer"}
+{"timestamp":"2026-05-18T15:27:30.412Z","event":"delegation_begin","sessionId":"ses_1c44cf3a1ffefVhveUTtEDXXrT","agentName":"reviewer","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:27:30.601Z","event":"heartbeat","sessionId":"ses_1c44cf3a1ffefVhveUTtEDXXrT"}
+{"timestamp":"2026-05-18T15:28:17.475Z","event":"heartbeat","sessionId":"ses_1c44cf3a1ffefVhveUTtEDXXrT"}
+{"timestamp":"2026-05-18T15:28:51.715Z","event":"heartbeat","sessionId":"ses_1c44cf3a1ffefVhveUTtEDXXrT"}
+{"timestamp":"2026-05-18T15:28:56.034Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/build/evidence.json","agent":"evidence-manager","taskId":"build","attempt":0}
+{"timestamp":"2026-05-18T15:29:12.693Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/1.1.json","agent":"reviewer","taskId":"1.1","attempt":0}
+{"timestamp":"2026-05-18T15:29:12.694Z","event":"gate_passed","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","gate":"reviewer","taskId":"1.1"}
+{"timestamp":"2026-05-18T15:29:12.700Z","event":"delegation_end","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"architect","taskId":"","result":"completed"}
+{"timestamp":"2026-05-18T15:29:12.971Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:29:23.026Z","event":"session_started","sessionId":"ses_1c44b3bb9ffen0XZPpYzFpyGPb","agentName":"test_engineer"}
+{"timestamp":"2026-05-18T15:29:23.026Z","event":"delegation_begin","sessionId":"ses_1c44b3bb9ffen0XZPpYzFpyGPb","agentName":"test_engineer","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:29:48.228Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:33:38.583Z","event":"agent_activated","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","oldName":"architect"}
+{"timestamp":"2026-05-18T15:33:38.583Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:33:38.817Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:37:41.575Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:37:41.798Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:38:30.718Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:39:08.661Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/build/evidence.json","agent":"evidence-manager","taskId":"build","attempt":0}
+{"timestamp":"2026-05-18T15:39:08.929Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:40:16.293Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:40:16.480Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:42:01.894Z","event":"agent_activated","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"plan","oldName":"build"}
+{"timestamp":"2026-05-18T15:42:01.895Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"plan","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:42:02.165Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:43:32.339Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:44:16.125Z","event":"agent_activated","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","oldName":"plan"}
+{"timestamp":"2026-05-18T15:44:16.125Z","event":"delegation_begin","sessionId":"ses_1c45dbb8dffePWrXolqj1609le","agentName":"build","taskId":"unknown"}
+{"timestamp":"2026-05-18T15:44:17.366Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}
+{"timestamp":"2026-05-18T15:45:11.492Z","event":"evidence_lock_acquired","directory":"/home/icarogundim/Documentos/Projetos/Sistema dos Orçamentos Temáticos","evidencePath":"evidence/build/evidence.json","agent":"evidence-manager","taskId":"build","attempt":0}
+{"timestamp":"2026-05-18T15:45:12.024Z","event":"heartbeat","sessionId":"ses_1c45dbb8dffePWrXolqj1609le"}

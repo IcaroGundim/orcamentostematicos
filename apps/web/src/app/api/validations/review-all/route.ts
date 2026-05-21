@@ -1,11 +1,13 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
+import { scopeWhere } from '@/lib/store';
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== 'SECRETARIA_REVISOR' || !user.organizationCode) return forbidden();
+  if (user.role !== 'SECRETARIA_REVISOR') return forbidden();
+  if (!user.organizationCode) return forbidden();
 
   const body = await req.json().catch(() => null);
   const approve = !!body?.approve;
@@ -15,9 +17,10 @@ export async function POST(req: NextRequest) {
     return ok({ error: 'O comentário de devolução é obrigatório.' });
   }
 
+  const scope = await scopeWhere(user);
   const validations = await prisma.actionValidation.findMany({
     where: {
-      organizationCode: user.organizationCode,
+      ...scope,
       status: 'ENVIADO_REVISOR',
     },
   });

@@ -2,6 +2,7 @@
  * Shared data-access helpers used by Next.js API Route Handlers.
  */
 import { randomUUID } from 'node:crypto';
+import { listGovernmentStructure } from './government-structure';
 import { prisma } from './prisma';
 
 export function createId(prefix: string) {
@@ -18,9 +19,66 @@ export async function getVigenteImportId(): Promise<string | null> {
   return row?.id ?? null;
 }
 
+// ── Scope (Órgão Executor) ───────────────────────────────────────────────────
+
+export type ScopedUser = {
+  role: string;
+  organizationCode?: string | null;
+  unitCode?: string | null;
+};
+
+/**
+ * Retorna a lista de (organizationCode, unitCode) que o usuário pode acessar.
+ * - SEPLAN_ADMIN: retorna `null` (sem restrição, vê tudo).
+ * - Demais roles: consulta `UnitExecutor` cujo executor seja igual ao escopo do
+ *   usuário (`executorOrgCode = user.organizationCode` e
+ *   `executorUnitCode` igual a `user.unitCode` — ambos NULL = secretaria;
+ *   ambos preenchidos = unidade autônoma).
+ *   Sem `organizationCode` definido, retorna array vazio (nada acessível).
+ */
+export async function getAllowedUnits(user: ScopedUser): Promise<Array<{ organizationCode: string; unitCode: string }> | null> {
+  if (user.role === 'SEPLAN_ADMIN') return null;
+  if (!user.organizationCode) return [];
+  const rows = await prisma.unitExecutor.findMany({
+    where: {
+      executorOrgCode: user.organizationCode,
+      executorUnitCode: user.unitCode ?? null,
+    },
+    select: { organizationCode: true, unitCode: true },
+  });
+  return rows;
+}
+
+/**
+ * Devolve um fragmento Prisma `where` que restringe `organizationCode`+`unitCode`
+ * ao escopo do usuário. Para SEPLAN_ADMIN retorna `{}` (sem restrição).
+ */
+export async function scopeWhere(user: ScopedUser): Promise<Record<string, unknown>> {
+  const allowed = await getAllowedUnits(user);
+  if (allowed === null) return {};
+  if (allowed.length === 0) {
+    // Força match vazio: nenhum registro tem organizationCode === ''
+    return { organizationCode: '__NONE__' };
+  }
+  return {
+    OR: allowed.map((u) => ({ organizationCode: u.organizationCode, unitCode: u.unitCode })),
+  };
+}
+
+/**
+ * Verifica se o usuário controla a unidade indicada (point-check usado para
+ * autorização em mutations sobre um único registro).
+ */
+export async function userControlsUnit(user: ScopedUser, organizationCode: string, unitCode: string): Promise<boolean> {
+  if (user.role === 'SEPLAN_ADMIN') return true;
+  const allowed = await getAllowedUnits(user);
+  if (!allowed) return true;
+  return allowed.some((u) => u.organizationCode === organizationCode && u.unitCode === unitCode);
+}
+
 // ── Actions ──────────────────────────────────────────────────────────────────
 
-export async function listActions(user: { role: string; organizationCode?: string | null; unitCode?: string | null }, filters: {
+export async function listActions(user: ScopedUser, filters: {
   year?: number;
   organizationCode?: string;
   unitCode?: string;
@@ -28,17 +86,11 @@ export async function listActions(user: { role: string; organizationCode?: strin
   const vigenteId = await getVigenteImportId();
   if (!vigenteId) return [];
 
-  const where: Record<string, unknown> = { importId: vigenteId };
+  const scope = await scopeWhere(user);
+  const where: Record<string, unknown> = { importId: vigenteId, ...scope };
   if (filters.year) where['year'] = filters.year;
 
-  if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    if (!user.organizationCode) return [];
-    where['organizationCode'] = user.organizationCode;
-    if (user.unitCode) where['unitCode'] = user.unitCode;
-  } else if (user.role === 'SECRETARIA_REVISOR') {
-    if (!user.organizationCode) return [];
-    where['organizationCode'] = user.organizationCode;
-  } else {
+  if (user.role === 'SEPLAN_ADMIN') {
     if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
     if (filters.unitCode) where['unitCode'] = filters.unitCode;
   }
@@ -54,30 +106,25 @@ export async function listActions(user: { role: string; organizationCode?: strin
 // ── Organizations ────────────────────────────────────────────────────────────
 
 export async function listOrganizations() {
-  const vigenteId = await getVigenteImportId();
-  if (!vigenteId) return [];
-
-  const actions = await prisma.budgetAction.findMany({
-    where: { importId: vigenteId },
-    select: { organizationCode: true, organizationName: true, unitCode: true, unitName: true },
-  });
-
-  const map = new Map<string, { id: string; code: string; name: string; units: { id: string; code: string; name: string; organizationCode: string }[] }>();
-  for (const a of actions) {
-    if (!map.has(a.organizationCode)) {
-      map.set(a.organizationCode, { id: a.organizationCode, code: a.organizationCode, name: a.organizationName, units: [] });
-    }
-    const org = map.get(a.organizationCode)!;
-    if (!org.units.some((u) => u.code === a.unitCode)) {
-      org.units.push({ id: `${a.organizationCode}-${a.unitCode}`, code: a.unitCode, name: a.unitName, organizationCode: a.organizationCode });
-    }
-  }
-  return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+  const structure = await listGovernmentStructure();
+  return structure.organizations
+    .map((org) => ({
+      id: org.code,
+      code: org.code,
+      name: org.name,
+      units: org.units.map((unit) => ({
+        id: `${org.code}-${unit.code}`,
+        code: unit.code,
+        name: unit.name,
+        organizationCode: org.code,
+      })),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
-export async function getSummary(user: { role: string; organizationCode?: string | null; unitCode?: string | null }) {
+export async function getSummary(user: ScopedUser) {
   const [actions, assignments, cycles, validations] = await Promise.all([
     listActions(user, {}),
     prisma.thematicAssignment.findMany(),
@@ -111,14 +158,8 @@ export async function getSummary(user: { role: string; organizationCode?: string
 
 // ── Validations ──────────────────────────────────────────────────────────────
 
-export async function listValidations(user: { role: string; organizationCode?: string | null; unitCode?: string | null }) {
-  const where: Record<string, unknown> = {};
-  if (user.role === 'SECRETARIA_REPRESENTANTE' && user.organizationCode) {
-    where['organizationCode'] = user.organizationCode;
-    if (user.unitCode) where['unitCode'] = user.unitCode;
-  } else if (user.role === 'SECRETARIA_REVISOR' && user.organizationCode) {
-    where['organizationCode'] = user.organizationCode;
-  }
+export async function listValidations(user: ScopedUser) {
+  const where: Record<string, unknown> = await scopeWhere(user);
   const rows = await prisma.actionValidation.findMany({
     where,
     include: {
@@ -269,6 +310,38 @@ export function mapValidation(row: any) {
     assignment: row.assignment ? mapAssignment(row.assignment) : undefined,
     cycle: row.cycle ? mapCycle(row.cycle) : undefined,
   };
+}
+
+// ── Executor reconciliation ──────────────────────────────────────────────────
+
+/**
+ * Após uma importação de QDD, garante que existe um `UnitExecutor` default para
+ * cada par (organizationCode, unitCode) presente em BudgetAction vigente. O
+ * default é "secretaria pai executa" (`executorOrgCode = organizationCode`,
+ * `executorUnitCode = NULL`). Mapeamentos já configurados (ex.: FEM controlando
+ * o Fundo Estadual de Cultura) são PRESERVADOS.
+ */
+export async function reconcileExecutorsForVigenteImport(): Promise<void> {
+  const units = await prisma.governmentUnit.findMany({
+    where: { active: true },
+    select: { organizationCode: true, code: true },
+  });
+  if (units.length === 0) return;
+
+  for (const row of units) {
+    await prisma.unitExecutor.upsert({
+      where: {
+        organizationCode_unitCode: { organizationCode: row.organizationCode, unitCode: row.code },
+      },
+      update: {},
+      create: {
+        organizationCode: row.organizationCode,
+        unitCode: row.code,
+        executorOrgCode: row.organizationCode,
+        executorUnitCode: null,
+      },
+    });
+  }
 }
 
 // ── addImportedBudget ────────────────────────────────────────────────────────

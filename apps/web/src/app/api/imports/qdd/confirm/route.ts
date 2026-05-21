@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
-import { addImportedBudget } from '@/lib/store';
+import { syncStructureFromImport } from '@/lib/government-structure';
+import { addImportedBudget, reconcileExecutorsForVigenteImport } from '@/lib/store';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
 
   const parsed = preview.data as any;
   await addImportedBudget(parsed.importRecord, parsed.actions);
+  await syncStructureFromImport(parsed.actions ?? []);
+  await reconcileExecutorsForVigenteImport();
   await prisma.importPreview.delete({ where: { id: body.previewId } });
 
   return ok({ import: parsed.importRecord, organizationsCount: parsed.organizationsCount, unitsCount: parsed.unitsCount, actionsCount: parsed.actions.length });

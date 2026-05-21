@@ -3,6 +3,7 @@ import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
 import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
 import { getValidationFormIssues, type ValidationFormInput } from '@/lib/validation-schema';
+import { scopeWhere } from '@/lib/store';
 
 /**
  * Envio consolidado: a secretaria envia de uma vez todas as suas validações
@@ -11,17 +12,18 @@ import { getValidationFormIssues, type ValidationFormInput } from '@/lib/validat
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== 'SECRETARIA_REPRESENTANTE' || !user.organizationCode) return forbidden();
+  if (user.role !== 'SECRETARIA_REPRESENTANTE') return forbidden();
+  if (!user.organizationCode) return forbidden();
 
   const body = await req.json().catch(() => null);
   const toSeplan = !!body?.toSeplan;
 
   const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
 
+  const scope = await scopeWhere(user);
   const rows = await prisma.actionValidation.findMany({
     where: {
-      organizationCode: user.organizationCode,
-      ...(user.unitCode ? { unitCode: user.unitCode } : {}),
+      ...scope,
       status: { in: targetStatuses as any },
     },
     include: { assignment: true },

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "scanned_at": "2026-05-13T19:59:46.994Z",
+  "scanned_at": "2026-05-18T15:09:11.915Z",
   "files": [
     {
       "path": "README.md",
       "title": "Sistema de Gestão dos Orçamentos Temáticos do Acre",
-      "summary": "MVP em monorepo para manter a estrutura vigente do QDD do Estado do Acre pré-carregada, consolidar ações orçamentárias, classificar manualmente nos orçamentos temáticos e validar entregas pelas sec...",
-      "lines": 49,
-      "mtime": 1778697521018.0525
+      "summary": "MVP em monorepo para importar a estrutura vigente do QDD do Estado do Acre, consolidar ações orçamentárias, classificar manualmente nos orçamentos temáticos e validar entregas pelas secretarias. - ...",
+      "lines": 44,
+      "mtime": 1778868819127.7427
     }
   ]
 }

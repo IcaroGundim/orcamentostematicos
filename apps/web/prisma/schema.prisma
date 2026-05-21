@@ -39,6 +39,50 @@ enum QddPeriodType {
   ACUMULADO_ANUAL
 }
 
+enum GovernmentEntityType {
+  SECRETARIA
+  AUTARQUIA
+  FUNDACAO
+  EMPRESA_PUBLICA
+  FUNDO
+  OUTRO
+}
+
+model GovernmentOrganization {
+  code      String               @id
+  name      String
+  type      GovernmentEntityType @default(SECRETARIA)
+  active    Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  units GovernmentUnit[]
+}
+
+model GovernmentUnit {
+  organizationCode String
+  code             String
+  name             String
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization GovernmentOrganization @relation(fields: [organizationCode], references: [code], onDelete: Cascade)
+
+  @@id([organizationCode, code])
+  @@index([organizationCode])
+}
+
+model UnitExecutor {
+  organizationCode String
+  unitCode         String
+  executorOrgCode  String
+  executorUnitCode String?
+
+  @@id([organizationCode, unitCode])
+  @@index([executorOrgCode, executorUnitCode])
+}
+
 model User {
   id               String   @id @default(cuid())
   name             String

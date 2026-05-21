@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound } from '@/lib/auth-server';
 import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
+import { userControlsUnit } from '@/lib/store';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -16,6 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     include: { assignment: true },
   });
   if (!existing) return notFound('Validação não encontrada.');
+  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode))) return forbidden();
 
   const deliveries = body.deliveries !== undefined ? body.deliveries : existing.deliveries;
   const classification = existing.assignment?.classification ?? '';

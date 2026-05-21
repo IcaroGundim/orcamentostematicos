@@ -2,12 +2,13 @@
 
 import { PackageIcon, PlusIcon, SaveIcon, Trash2Icon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { UseFieldArrayReturn, UseFormReturn } from 'react-hook-form';
+import { Controller, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import {
   Select,
   SelectContent,
@@ -342,14 +343,21 @@ function DeliveryItem({
 
         {perDeliveryValues ? (
           <Field data-disabled={!editable || undefined} data-invalid={!!rowErrors?.executedValue || undefined}>
-            <FieldLabel htmlFor={`delivery-executed-value-${index}`}>Valor executado</FieldLabel>
-            <Input
-              id={`delivery-executed-value-${index}`}
-              disabled={!editable}
-              type="number"
-              min={0}
-              step="0.01"
-              {...form.register(`deliveries.${index}.executedValue`)}
+            <FieldLabel htmlFor={`delivery-executed-value-${index}`}>Valor Executado na Ação</FieldLabel>
+            <Controller
+              name={`deliveries.${index}.executedValue`}
+              control={form.control}
+              render={({ field }) => (
+                <MoneyInput
+                  id={`delivery-executed-value-${index}`}
+                  name={field.name}
+                  disabled={!editable}
+                  value={typeof field.value === 'number' ? field.value : undefined}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  ref={field.ref}
+                />
+              )}
             />
             <FieldError errors={[rowErrors?.executedValue]} />
           </Field>

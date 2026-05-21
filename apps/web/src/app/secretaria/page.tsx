@@ -627,7 +627,7 @@ export default function SecretariaPage() {
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                    className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <span>{item.label}</span>
                     <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground" />

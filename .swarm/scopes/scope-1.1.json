@@ -1,9 +1,9 @@
 {
   "version": 1,
   "taskId": "1.1",
-  "declaredAt": 1778853363497,
-  "expiresAt": 1778939763497,
+  "declaredAt": 1779117822648,
+  "expiresAt": 1779204222648,
   "files": [
-    "apps/web/src/app/seplan/page.tsx"
+    "apps/web/src/app/secretaria/page.tsx"
   ]
 }

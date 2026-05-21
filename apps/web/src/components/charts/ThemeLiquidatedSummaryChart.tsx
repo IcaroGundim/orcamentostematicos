@@ -45,7 +45,7 @@ export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidated
     return (
       <div
         className={cn(
-          'flex min-h-[200px] flex-1 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground',
+          'flex h-[200px] min-h-[160px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground',
           className,
         )}
       >
@@ -55,10 +55,10 @@ export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidated
   }
 
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col gap-4', className)}>
+    <div className={cn('flex flex-col gap-4', className)}>
       <ChartContainer
         config={chartConfig}
-        className="aspect-auto h-full min-h-[160px] w-full flex-1 [&_.recharts-responsive-container]:!h-full"
+        className="aspect-auto h-[200px] min-h-[160px] w-full [&_.recharts-responsive-container]:!h-full"
       >
         <BarChart
           accessibilityLayer

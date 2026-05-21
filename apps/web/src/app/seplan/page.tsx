@@ -101,7 +101,22 @@ import {
   filterAxisReportByTheme,
   themeAxisTotals,
 } from '@/lib/thematic-axis-report';
-import type { BudgetAction, BudgetImport, Metadata, QddPeriodType, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
+import type {
+  BudgetAction,
+  BudgetImport,
+  ExecutionStructure,
+  GovernmentStructure,
+  Metadata,
+  QddPeriodType,
+  StructureDiff,
+  Summary,
+  ThematicAssignment,
+  ThemeBudget,
+  ValidationItem,
+} from '@/types/domain';
+import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
+import { GovernmentStructurePanel } from '@/components/domain/government-structure-panel';
+import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
 import {
   buildResultsRows,
   defaultExportFilename,
@@ -140,6 +155,7 @@ type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | '
 type ActionsTabFilters = {
   organizationCode: string;
   unitCode: string;
+  theme: string;
 };
 
 type ActionColumnFilters = {
@@ -162,6 +178,7 @@ const initialAssignment = {
 const initialActionsFilters: ActionsTabFilters = {
   organizationCode: allValue,
   unitCode: allValue,
+  theme: allValue,
 };
 
 function gaugeColor(pct: number): string {
@@ -179,6 +196,10 @@ export default function SeplanPage() {
   const [validations, setValidations] = useState<ValidationItem[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
+  const [executionStructure, setExecutionStructure] = useState<ExecutionStructure>({ organizations: [] });
+  const [governmentStructure, setGovernmentStructure] = useState<GovernmentStructure>({ organizations: [] });
+  const [structureDiff, setStructureDiff] = useState<StructureDiff | null>(null);
+  const [structureSubTab, setStructureSubTab] = useState('base');
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
@@ -194,7 +215,6 @@ export default function SeplanPage() {
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
   const [actionsFilters, setActionsFilters] = useState<ActionsTabFilters>(initialActionsFilters);
   const [actionsSearch, setActionsSearch] = useState('');
-  const [structureTab, setStructureTab] = useState<'management' | 'actions'>('management');
   const [columnFilters, setColumnFilters] = useState<ActionColumnFilters>({
     organizationCode: allValue,
     application: '',
@@ -203,10 +223,6 @@ export default function SeplanPage() {
   const [themePopoverOpen, setThemePopoverOpen] = useState(false);
   const [qddPopoverOpen, setQddPopoverOpen] = useState(false);
   const [importSheetOpen, setImportSheetOpen] = useState(false);
-  const [managementCardsHeight, setManagementCardsHeight] = useState<number | null>(null);
-  const managementCardsRef = useRef<HTMLDivElement | null>(null);
-  const [orgSearch, setOrgSearch] = useState('');
-  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
   const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
   const [reportsViewTab, setReportsViewTab] = useState<'overview' | 'by-axis'>('overview');
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
@@ -216,14 +232,6 @@ export default function SeplanPage() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleOrg(code: string) {
-    setExpandedOrgs((prev) => {
-      const next = new Set(prev);
-      next.has(code) ? next.delete(code) : next.add(code);
       return next;
     });
   }
@@ -251,22 +259,47 @@ export default function SeplanPage() {
     });
   }, [router]);
 
+  const loadStructureDiff = useCallback(
+    async (source: 'preview' | 'vigente', previewId?: string) => {
+      const params = new URLSearchParams({ source });
+      if (previewId) params.set('previewId', previewId);
+      try {
+        const diff = await api<StructureDiff>(`/government-structure/diff?${params.toString()}`);
+        setStructureDiff(diff);
+      } catch {
+        setStructureDiff(null);
+      }
+    },
+    [],
+  );
+
   async function load() {
-    const [meta, summaryData, actionData, validationData, importsData] = await Promise.all([
-      api<Metadata>('/metadata'),
-      api<Summary>('/reports/summary'),
-      api<BudgetAction[]>('/budget-actions'),
-      api<ValidationItem[]>('/validations/my'),
-      api<BudgetImport[]>('/imports/qdd'),
-    ]);
+    const [meta, summaryData, actionData, validationData, importsData, executionData, govStructure] =
+      await Promise.all([
+        api<Metadata>('/metadata'),
+        api<Summary>('/reports/summary'),
+        api<BudgetAction[]>('/budget-actions'),
+        api<ValidationItem[]>('/validations/my'),
+        api<BudgetImport[]>('/imports/qdd'),
+        api<ExecutionStructure>('/execution/structure').catch(() => ({ organizations: [] })),
+        api<GovernmentStructure>('/government-structure').catch(() => ({ organizations: [] })),
+      ]);
     setMetadata(meta);
     setSummary(summaryData);
     setActions(actionData);
     setValidations(validationData);
     setImportHistory(importsData);
+    setExecutionStructure(executionData);
+    setGovernmentStructure(govStructure);
     const firstAction = actionData[0]?.id ?? '';
     setSelectedActionId((current) => current || firstAction);
     setAssignment((current) => ({ ...current, actionId: current.actionId || firstAction }));
+
+    if (importsData.some((i) => i.status === 'VIGENTE') || actionData.length > 0) {
+      await loadStructureDiff('vigente');
+    } else {
+      setStructureDiff(null);
+    }
   }
 
   async function uploadQdd(file: File) {
@@ -281,6 +314,8 @@ export default function SeplanPage() {
         body: formData,
       });
       setPreview(result);
+      setStructureSubTab('reconciliation');
+      await loadStructureDiff('preview', result.previewId);
       toast.success('Prévia do QDD gerada com sucesso.');
       setActiveSection('structure');
     } catch (err) {
@@ -299,9 +334,11 @@ export default function SeplanPage() {
         body: JSON.stringify({ previewId: preview.previewId }),
       });
       setPreview(null);
+      setStructureSubTab('reconciliation');
       toast.success('QDD importado e registrado como vigente.');
       setActionsFilters(initialActionsFilters);
       await load();
+      await loadStructureDiff('vigente');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao confirmar a importação do QDD.');
     } finally {
@@ -569,70 +606,10 @@ export default function SeplanPage() {
   });
 
   const organizations = useMemo(() => {
-    return uniqueBy(actions, (action) => action.organizationCode)
-      .map((action) => ({ code: action.organizationCode, name: action.organizationName }))
+    return governmentStructure.organizations
+      .map((org) => ({ code: org.code, name: org.name }))
       .sort((a, b) => a.code.localeCompare(b.code));
-  }, [actions]);
-
-  const organizationUnitCounts = useMemo(() => {
-    const unitsByOrganization = new Map<string, Set<string>>();
-
-    for (const action of actions) {
-      const units = unitsByOrganization.get(action.organizationCode) ?? new Set<string>();
-      units.add(action.unitCode);
-      unitsByOrganization.set(action.organizationCode, units);
-    }
-
-    return unitsByOrganization;
-  }, [actions]);
-
-  const organizationUnits = useMemo(() => {
-    const map = new Map<string, { code: string; name: string }[]>();
-    for (const action of actions) {
-      if (!map.has(action.organizationCode)) map.set(action.organizationCode, []);
-      const list = map.get(action.organizationCode)!;
-      if (!list.some((u) => u.code === action.unitCode)) {
-        list.push({ code: action.unitCode, name: action.unitName });
-      }
-    }
-    for (const list of map.values()) list.sort((a, b) => a.code.localeCompare(b.code));
-    return map;
-  }, [actions]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (activeSection !== 'structure' || structureTab !== 'management') return;
-
-    const element = managementCardsRef.current;
-    if (!element) return;
-
-    const mediaQuery = window.matchMedia('(min-width: 1024px)');
-    let frameId = 0;
-
-    const updateHeight = () => {
-      window.cancelAnimationFrame(frameId);
-      frameId = window.requestAnimationFrame(() => {
-        if (!mediaQuery.matches) {
-          setManagementCardsHeight(null);
-          return;
-        }
-
-        setManagementCardsHeight(Math.ceil(element.getBoundingClientRect().height));
-      });
-    };
-
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(element);
-    mediaQuery.addEventListener('change', updateHeight);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      observer.disconnect();
-      mediaQuery.removeEventListener('change', updateHeight);
-    };
-  }, [activeSection, structureTab, preview, actions.length, organizations.length]);
+  }, [governmentStructure]);
 
   const units = useMemo(() => {
     return uniqueBy(
@@ -649,6 +626,7 @@ export default function SeplanPage() {
     return actions.filter((action) => {
       if (actionsFilters.organizationCode !== allValue && action.organizationCode !== actionsFilters.organizationCode) return false;
       if (actionsFilters.unitCode !== allValue && action.unitCode !== actionsFilters.unitCode) return false;
+      if (actionsFilters.theme !== allValue && !action.assignments.some((a) => a.theme === actionsFilters.theme)) return false;
       return true;
     });
   }, [actions, actionsFilters]);
@@ -663,6 +641,17 @@ export default function SeplanPage() {
         a.projectActivity.toLowerCase().includes(q)
     );
   }, [filteredStructureActions, actionsSearch]);
+
+  const structureActionsTotals = useMemo(() => {
+    return displayedStructureActions.reduce(
+      (acc, action) => ({
+        initialBudget: acc.initialBudget + action.totals.initialBudget,
+        updatedBudget: acc.updatedBudget + action.totals.updatedBudget,
+        liquidated: acc.liquidated + action.totals.liquidated,
+      }),
+      { initialBudget: 0, updatedBudget: 0, liquidated: 0 },
+    );
+  }, [displayedStructureActions]);
 
   const structureActionsShowUnit = actionsFilters.unitCode === allValue;
 
@@ -871,7 +860,12 @@ export default function SeplanPage() {
   }, [selectedActionId]);
 
   const filteredActionCount = table.getFilteredRowModel().rows.length;
-  const organizationCount = organizations.length;
+  const organizationCount = governmentStructure.organizations.length;
+  const catalogUnitCount = governmentStructure.organizations.reduce((s, o) => s + o.units.length, 0);
+  const vigenteImport = useMemo(
+    () => importHistory.find((imp) => imp.status === 'VIGENTE'),
+    [importHistory],
+  );
   const unitCount = uniqueBy(actions, (action) => `${action.organizationCode}-${action.unitCode}`).length;
   const expenseLineCount = actions.reduce((total, action) => total + (action.expenseLinesCount ?? action.expenseLines?.length ?? 0), 0);
 
@@ -1009,7 +1003,7 @@ export default function SeplanPage() {
             <div className="flex gap-2">
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="secondary">
+                  <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
                     <BookOpenIcon data-icon="inline-start" />
                     Legislação
                     <ChevronDownIcon className="ml-1 size-4 opacity-70" />
@@ -1023,7 +1017,7 @@ export default function SeplanPage() {
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                      className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
                     >
                       <span>{item.label}</span>
                       <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1031,7 +1025,11 @@ export default function SeplanPage() {
                   ))}
                 </PopoverContent>
               </Popover>
-              <Button variant="secondary" onClick={() => void load()}>
+              <Button
+                variant="secondary"
+                className="border-border/60 bg-white text-foreground hover:bg-white/90"
+                onClick={() => void load()}
+              >
                 <RefreshCwIcon data-icon="inline-start" />
                 Atualizar
               </Button>
@@ -1050,250 +1048,404 @@ export default function SeplanPage() {
 
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:px-6 2xl:px-8">
           {activeSection === 'overview' ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-              <ActionsTableCard
-                title="Ações orçamentárias consolidadas"
-                description={`${filteredActionCount} registros filtrados`}
-                table={table}
-                organizations={organizations}
-                themeSummary={summary?.totalsByTheme ?? []}
-                qddStats={{ organizationCount, unitCount, expenseLineCount, actionCount: actions.length }}
-                onOpenStructure={openStructureSection}
-                columnFilters={columnFilters}
-                onColumnFiltersChange={handleColumnFiltersChange}
-                themePopoverOpen={themePopoverOpen}
-                onThemePopoverOpenChange={setThemePopoverOpen}
-                qddPopoverOpen={qddPopoverOpen}
-                onQddPopoverOpenChange={setQddPopoverOpen}
-              />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <CardHeader className="shrink-0">
+                  <CardTitle>
+                    {actionsFilters.organizationCode === allValue
+                      ? 'Ações programadas'
+                      : selectedStructureOrganization
+                        ? `${selectedStructureOrganization.code} — ${selectedStructureOrganization.name}`
+                        : 'Ações programadas'}
+                  </CardTitle>
+                  <CardDescription>
+                    <span className="block">{structureActionsScopeDescription}</span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+                  <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+                    <OrgaoCombobox
+                      value={actionsFilters.organizationCode}
+                      organizations={organizations}
+                      onChange={(value) => {
+                        setActionsFilters({ ...actionsFilters, organizationCode: value, unitCode: allValue });
+                        setActionsSearch('');
+                      }}
+                      className="relative w-full min-w-0"
+                    />
+                    <Select
+                      value={actionsFilters.unitCode}
+                      onValueChange={(value) => setActionsFilters({ ...actionsFilters, unitCode: value })}
+                    >
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="Todas as unidades" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value={allValue}>Todas as unidades</SelectItem>
+                          {units.map((unit) => (
+                            <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
+                              {unit.code} - {unit.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex min-w-0 gap-2 sm:gap-3">
+                      <Select
+                        value={actionsFilters.theme}
+                        onValueChange={(value) => setActionsFilters({ ...actionsFilters, theme: value })}
+                      >
+                        <SelectTrigger className="w-full min-w-[8.5rem] shrink-0 sm:w-36">
+                          <SelectValue placeholder="Tema" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value={allValue}>Todos os temas</SelectItem>
+                            {Object.entries(themeLabels).map(([key, label]) => (
+                              <SelectItem key={key} value={key}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative min-w-0 flex-1">
+                        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar ação, programa funcional..."
+                          value={actionsSearch}
+                          onChange={(e) => setActionsSearch(e.target.value)}
+                          className="w-full min-w-0 pl-9"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
+                    {[
+                      {
+                        label: 'Ações',
+                        value: displayedStructureActions.length.toLocaleString('pt-BR'),
+                      },
+                      {
+                        label: 'Planejado inicial',
+                        value: formatMoney(structureActionsTotals.initialBudget),
+                      },
+                      {
+                        label: 'Orçamento atualizado',
+                        value: formatMoney(structureActionsTotals.updatedBudget),
+                      },
+                      {
+                        label: 'Liquidado',
+                        value: formatMoney(structureActionsTotals.liquidated),
+                      },
+                      {
+                        label: 'Disponível',
+                        value: formatMoney(
+                          structureActionsTotals.updatedBudget - structureActionsTotals.liquidated
+                        ),
+                      },
+                    ].map((stat) => (
+                      <div key={stat.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                        <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {displayedStructureActions.length === 0 ? (
+                    <Empty>
+                      <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
+                      <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
+                      <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
+                    </Empty>
+                  ) : (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <Separator className="shrink-0" />
+                      <ScrollArea className="min-h-0 min-w-0 flex-1 w-full">
+                        <div className="min-w-0">
+                          <Table className="table-fixed w-full min-w-[42rem]">
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="h-9 w-[38%] min-w-[12rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                  Ação
+                                </TableHead>
+                                {structureActionsShowUnit ? (
+                                  <TableHead className="h-9 w-[18%] max-w-[10rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                    Unidade
+                                  </TableHead>
+                                ) : null}
+                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                  Inicial
+                                </TableHead>
+                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                  Atualizado
+                                </TableHead>
+                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                  Liquidado
+                                </TableHead>
+                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                                  Disponível
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {displayedStructureActions.map((action) => (
+                                <TableRow key={action.id}>
+                                  <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
+                                    <div className="flex min-w-0 flex-col gap-0.5">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge variant="secondary" className="shrink-0 font-mono text-xs">
+                                          {action.projectActivity}
+                                        </Badge>
+                                        {action.assignments.map((item) => (
+                                          <ThemeBadge key={item.id} theme={item.theme} />
+                                        ))}
+                                      </div>
+                                      <p className="text-sm font-medium leading-snug">{action.application}</p>
+                                      <p className="text-xs text-muted-foreground">{action.functionalProgram}</p>
+                                    </div>
+                                  </TableCell>
+                                  {structureActionsShowUnit ? (
+                                    <TableCell className="w-[18%] max-w-[10rem] py-2 align-top text-sm">
+                                      <span className="text-xs text-muted-foreground">{action.unitCode}</span>
+                                      <p className="truncate text-xs" title={action.unitName}>
+                                        {action.unitName}
+                                      </p>
+                                    </TableCell>
+                                  ) : null}
+                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                    {formatMoney(action.totals.initialBudget)}
+                                  </TableCell>
+                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                    {formatMoney(action.totals.updatedBudget)}
+                                  </TableCell>
+                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                    {formatMoney(action.totals.liquidated)}
+                                  </TableCell>
+                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                                      {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
+                                    </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           ) : null}
 
           {activeSection === 'structure' ? (
-            <section className="flex min-h-0 flex-1 flex-col gap-5">
-              <Tabs
-                value={structureTab}
-                onValueChange={(v) => setStructureTab(v as 'management' | 'actions')}
-                className="flex min-h-0 flex-1 flex-col gap-3"
-              >
-                <TabsList className="w-fit shrink-0">
-                  <TabsTrigger value="management">Gerenciamento</TabsTrigger>
-                  <TabsTrigger value="actions">Dados de Orçamento</TabsTrigger>
+            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              <Tabs value={structureSubTab} onValueChange={setStructureSubTab} className="flex flex-col gap-5">
+                <TabsList>
+                  <TabsTrigger value="base">Base vigente</TabsTrigger>
+                  <TabsTrigger value="executors">Atribuição de execução</TabsTrigger>
+                  <TabsTrigger value="government">Estrutura de governo</TabsTrigger>
+                  <TabsTrigger value="reconciliation">Conferência com QDD</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="management" className="mt-0 min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)] lg:items-start">
-                    <div ref={managementCardsRef} className="flex min-h-0 flex-col gap-5">
-                      {/* Importar QDD */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Importar QDD</CardTitle>
-                          <CardDescription>Substitua a base vigente apenas quando houver uma nova versão oficial.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          <FieldGroup>
+                <TabsContent value="government">
+                  <GovernmentStructurePanel structure={governmentStructure} />
+                </TabsContent>
+
+                <TabsContent value="reconciliation">
+                  <QddStructureReconciliationPanel
+                    diff={structureDiff}
+                    source={preview ? 'preview' : 'vigente'}
+                    previewId={preview?.previewId}
+                    hasQddSource={Boolean(preview) || actions.length > 0}
+                    onApplied={async () => {
+                      const [govStructure, executionData] = await Promise.all([
+                        api<GovernmentStructure>('/government-structure'),
+                        api<ExecutionStructure>('/execution/structure').catch(() => ({ organizations: [] })),
+                      ]);
+                      setGovernmentStructure(govStructure);
+                      setExecutionStructure(executionData);
+                      const src = preview ? 'preview' : 'vigente';
+                      await loadStructureDiff(src, preview?.previewId);
+                    }}
+                  />
+                </TabsContent>
+
+                <TabsContent value="base" className="flex flex-col gap-5">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Resumo da base</CardTitle>
+                      <CardDescription>
+                        Indicadores do cadastro de estrutura e da programação do QDD vigente.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {[
+                          { label: 'Órgãos (cadastro)', value: organizationCount },
+                          { label: 'Unidades (cadastro)', value: catalogUnitCount },
+                          { label: 'Ações (QDD)', value: actions.length },
+                          { label: 'Linhas QDD', value: expenseLineCount },
+                        ].map((s) => (
+                          <div key={s.label} className="rounded-lg border bg-muted/30 p-3">
+                            <p className="text-xs text-muted-foreground">{s.label}</p>
+                            <p className="text-2xl font-semibold">{s.value.toLocaleString('pt-BR')}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Importar QDD</CardTitle>
+                        <CardDescription>
+                          Envie uma nova versão oficial para substituir a base vigente. A prévia pode ser conferida na aba
+                          Conferência com QDD antes de confirmar.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-3">
+                        <FieldGroup>
+                          <Field>
+                            <FieldLabel>Tipo de período</FieldLabel>
+                            <Select value={selectedPeriodType} onValueChange={(v) => setSelectedPeriodType(v as QddPeriodType)}>
+                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  <SelectItem value="ACUMULADO_ANUAL">Acumulado anual (jan a X)</SelectItem>
+                                  <SelectItem value="MES_ISOLADO">Mês isolado</SelectItem>
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </Field>
+                          {selectedPeriodType === 'MES_ISOLADO' ? (
                             <Field>
-                              <FieldLabel>Tipo de período</FieldLabel>
-                              <Select value={selectedPeriodType} onValueChange={(v) => setSelectedPeriodType(v as QddPeriodType)}>
+                              <FieldLabel>Mês de referência</FieldLabel>
+                              <Select value={String(selectedReferenceMonth)} onValueChange={(v) => setSelectedReferenceMonth(Number(v))}>
                                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectGroup>
-                                    <SelectItem value="ACUMULADO_ANUAL">Acumulado anual (jan a X)</SelectItem>
-                                    <SelectItem value="MES_ISOLADO">Mês isolado</SelectItem>
+                                    {MONTH_NAMES.map((name, i) => (
+                                      <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                                    ))}
                                   </SelectGroup>
                                 </SelectContent>
                               </Select>
                             </Field>
-                            {selectedPeriodType === 'MES_ISOLADO' && (
-                              <Field>
-                                <FieldLabel>Mês de referência</FieldLabel>
-                                <Select value={String(selectedReferenceMonth)} onValueChange={(v) => setSelectedReferenceMonth(Number(v))}>
-                                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      {MONTH_NAMES.map((name, i) => (
-                                        <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
-                              </Field>
-                            )}
-                          </FieldGroup>
-                          <Button
-                            asChild
-                            variant="outline"
-                            aria-disabled={isPreviewingImport || isConfirmingImport}
-                            className={cn(
-                              'h-20 w-full cursor-pointer border-dashed bg-primary/5 text-primary',
-                              (isPreviewingImport || isConfirmingImport) && 'pointer-events-none opacity-60',
-                            )}
-                          >
-                            <label>
-                              {isPreviewingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <UploadIcon data-icon="inline-start" />}
-                              {isPreviewingImport ? 'Processando QDD...' : 'Selecionar .xls ou .xlsx'}
-                              <input
-                                type="file"
-                                accept=".xls,.xlsx"
-                                className="hidden"
-                                disabled={isPreviewingImport || isConfirmingImport}
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0];
-                                  if (file) void uploadQdd(file);
-                                  event.target.value = '';
-                                }}
-                              />
-                            </label>
+                          ) : null}
+                        </FieldGroup>
+                        <Button
+                          asChild
+                          variant="outline"
+                          aria-disabled={isPreviewingImport || isConfirmingImport}
+                          className={cn(
+                            'h-20 w-full cursor-pointer border-dashed bg-primary/5 text-primary',
+                            (isPreviewingImport || isConfirmingImport) && 'pointer-events-none opacity-60',
+                          )}
+                        >
+                          <label>
+                            {isPreviewingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <UploadIcon data-icon="inline-start" />}
+                            {isPreviewingImport ? 'Processando QDD...' : 'Selecionar .xls ou .xlsx'}
+                            <input
+                              type="file"
+                              accept=".xls,.xlsx"
+                              className="hidden"
+                              disabled={isPreviewingImport || isConfirmingImport}
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) void uploadQdd(file);
+                                event.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </Button>
+                        {preview ? (
+                          <Alert className="relative border-primary/25 bg-primary/5">
+                            <FileSpreadsheetIcon />
+                            <AlertDescription>
+                              <span className="block font-medium text-foreground">Prévia: {preview.filename}</span>
+                              <span className="block">Período: {formatPeriod(preview.referenceMonth, preview.year, preview.periodType)}</span>
+                              <span className="block">
+                                {preview.rowCount.toLocaleString('pt-BR')} linhas · {preview.actionCount.toLocaleString('pt-BR')} ações ·{' '}
+                                {preview.organizationsCount.toLocaleString('pt-BR')} órgãos
+                              </span>
+                            </AlertDescription>
+                            <button
+                              type="button"
+                              onClick={() => setPreview(null)}
+                              className="absolute right-3 top-3 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              title="Remover arquivo"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                          </Alert>
+                        ) : null}
+                        {preview ? (
+                          <Button disabled={isConfirmingImport || isPreviewingImport} onClick={() => void confirmImport()}>
+                            {isConfirmingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <CheckCircle2Icon data-icon="inline-start" />}
+                            {isConfirmingImport ? 'Registrando QDD...' : 'Confirmar e registrar QDD'}
                           </Button>
-                          {preview ? (
-                            <Alert className="relative border-primary/25 bg-primary/5">
-                              <FileSpreadsheetIcon />
-                              <AlertDescription>
-                                <span className="block font-medium text-foreground">{preview.filename}</span>
-                                <span className="block">Período: {formatPeriod(preview.referenceMonth, preview.year, preview.periodType)}</span>
-                                <span className="block">{preview.rowCount} linhas · {preview.actionCount} ações · {preview.organizationsCount} órgãos</span>
-                              </AlertDescription>
-                              <button
-                                type="button"
-                                onClick={() => setPreview(null)}
-                                className="absolute right-3 top-3 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                title="Remover arquivo"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                              </button>
-                            </Alert>
-                          ) : null}
-                          {preview ? (
-                            <Button disabled={isConfirmingImport || isPreviewingImport} onClick={() => void confirmImport()}>
-                              {isConfirmingImport ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <CheckCircle2Icon data-icon="inline-start" />}
-                              {isConfirmingImport ? 'Registrando QDD...' : 'Confirmar e registrar QDD'}
-                            </Button>
-                          ) : null}
-                        </CardContent>
-                      </Card>
+                        ) : null}
+                      </CardContent>
+                    </Card>
 
-                      {/* Estatísticas da base */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Base vigente</CardTitle>
-                          <CardDescription>Cobertura administrativa e programática do QDD carregado.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-2 gap-3">
-                            {[
-                              { label: 'Órgãos', value: organizationCount },
-                              { label: 'Unidades', value: unitCount },
-                              { label: 'Ações', value: actions.length },
-                              { label: 'Linhas QDD', value: expenseLineCount },
-                            ].map((s) => (
-                              <div key={s.label} className="rounded-lg border bg-muted/30 p-3">
-                                <p className="text-xs text-muted-foreground">{s.label}</p>
-                                <p className="text-2xl font-semibold">{s.value.toLocaleString('pt-BR')}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <Card
-                      className="lg:min-h-0"
-                      style={managementCardsHeight ? { height: `${managementCardsHeight}px` } : undefined}
-                    >
+                    <Card>
                       <CardHeader>
-                        <CardTitle>Secretarias na estrutura</CardTitle>
-                        <CardDescription>
-                          {organizations.length} secretaria{organizations.length !== 1 ? 's' : ''} na base vigente.
-                        </CardDescription>
-                        {organizations.length > 0 && (
-                          <CardAction>
-                            <div className="relative">
-                              <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                placeholder="Buscar secretaria..."
-                                value={orgSearch}
-                                onChange={(e) => setOrgSearch(e.target.value)}
-                                className="w-48 pl-9"
-                              />
-                            </div>
-                          </CardAction>
-                        )}
+                        <CardTitle>QDD vigente</CardTitle>
+                        <CardDescription>Arquivo oficial em uso na programação e nos relatórios.</CardDescription>
                       </CardHeader>
-                      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
-                        {organizations.length === 0 ? (
-                          <Empty>
-                            <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
-                            <EmptyTitle>Nenhuma secretaria na base</EmptyTitle>
-                            <EmptyDescription>Importe um QDD acima para listar as secretarias da estrutura vigente.</EmptyDescription>
-                          </Empty>
-                        ) : (
-                          <div className="min-h-0 flex-1">
-                            <ScrollArea className="h-full w-full">
-                              <div className="flex flex-col gap-2 pr-4">
-                                {organizations
-                                  .filter((org) => {
-                                    const q = orgSearch.trim().toLowerCase();
-                                    if (!q) return true;
-                                    if (org.code.toLowerCase().includes(q) || org.name.toLowerCase().includes(q)) return true;
-                                    return (organizationUnits.get(org.code) ?? []).some(
-                                      (u) => u.code.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)
-                                    );
-                                  })
-                                  .map((organization) => {
-                                    const unitCount = organizationUnitCounts.get(organization.code)?.size ?? 0;
-                                    const allUnits = organizationUnits.get(organization.code) ?? [];
-
-                                    return (
-                                      <div key={organization.code} className="rounded-lg border">
-                                        <button
-                                          type="button"
-                                          onClick={() => toggleOrg(organization.code)}
-                                          className="flex w-full items-center justify-between gap-3 p-3 text-left"
-                                        >
-                                          <div className="min-w-0">
-                                            <p className="font-medium leading-snug">{organization.code} - {organization.name}</p>
-                                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                              {unitCount} unidade{unitCount !== 1 ? 's' : ''} vinculada{unitCount !== 1 ? 's' : ''}
-                                            </p>
-                                          </div>
-                                          <ChevronDownIcon
-                                            className={cn('size-4 shrink-0 text-muted-foreground transition-transform duration-200', expandedOrgs.has(organization.code) && 'rotate-180 text-primary')}
-                                          />
-                                        </button>
-                                        {expandedOrgs.has(organization.code) && (
-                                          <div className="border-t px-3 pb-3 pt-2">
-                                            <div className="flex flex-col gap-1.5">
-                                              {allUnits.map((unit) => (
-                                                <button
-                                                  key={unit.code}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActionsFilters({ organizationCode: organization.code, unitCode: unit.code });
-                                                    setStructureTab('actions');
-                                                  }}
-                                                  className="group flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 text-left"
-                                                >
-                                                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">{unit.code}</span>
-                                                  <span className="truncate text-xs">{unit.name}</span>
-                                                  <ExternalLinkIcon className="ml-auto shrink-0 size-3 text-muted-foreground/60 group-hover:text-primary" />
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                      <CardContent>
+                        {vigenteImport ? (
+                          <div className="flex flex-col gap-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge>Vigente</Badge>
+                              <span className="text-lg font-semibold">
+                                {formatPeriod(vigenteImport.referenceMonth, vigenteImport.year, vigenteImport.periodType)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {vigenteImport.periodType === 'ACUMULADO_ANUAL' ? 'Acumulado anual' : 'Mês isolado'}
+                              </span>
+                            </div>
+                            <dl className="grid gap-3 text-sm">
+                              <div>
+                                <dt className="text-xs text-muted-foreground">Arquivo</dt>
+                                <dd className="truncate font-medium" title={vigenteImport.filename}>
+                                  {vigenteImport.filename}
+                                </dd>
                               </div>
-                            </ScrollArea>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <dt className="text-xs text-muted-foreground">Ações</dt>
+                                  <dd className="font-semibold tabular-nums">{vigenteImport.actionCount.toLocaleString('pt-BR')}</dd>
+                                </div>
+                                <div>
+                                  <dt className="text-xs text-muted-foreground">Linhas</dt>
+                                  <dd className="font-semibold tabular-nums">{vigenteImport.rowCount.toLocaleString('pt-BR')}</dd>
+                                </div>
+                              </div>
+                              <div>
+                                <dt className="text-xs text-muted-foreground">Registrado em</dt>
+                                <dd>{new Date(vigenteImport.importedAt).toLocaleString('pt-BR')}</dd>
+                              </div>
+                            </dl>
                           </div>
+                        ) : (
+                          <Empty className="border-none p-0">
+                            <EmptyHeader>
+                              <EmptyMedia>
+                                <FileSpreadsheetIcon />
+                              </EmptyMedia>
+                            </EmptyHeader>
+                            <EmptyTitle>Nenhum QDD vigente</EmptyTitle>
+                            <EmptyDescription>Importe o primeiro arquivo ao lado para iniciar a base.</EmptyDescription>
+                          </Empty>
                         )}
                       </CardContent>
                     </Card>
                   </div>
 
-                  {/* Histórico de importações */}
-                  <Card className="mt-4">
+                  <Card>
                     <CardHeader>
                       <CardTitle>Histórico de importações</CardTitle>
                       <CardDescription>{importHistory.length} QDD{importHistory.length !== 1 ? 's' : ''} registrado{importHistory.length !== 1 ? 's' : ''}.</CardDescription>
@@ -1345,176 +1497,15 @@ export default function SeplanPage() {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="actions" className="mt-0 flex min-h-0 min-w-0 flex-1 flex-col">
-                    <Card className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                      <CardHeader className="shrink-0">
-                        <CardTitle>
-                          {actionsFilters.organizationCode === allValue
-                            ? 'Ações programadas'
-                            : selectedStructureOrganization
-                              ? `${selectedStructureOrganization.code} — ${selectedStructureOrganization.name}`
-                              : 'Ações programadas'}
-                        </CardTitle>
-                        <CardDescription>
-                          <span className="block">{structureActionsScopeDescription}</span>
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-                        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
-                          <OrgaoCombobox
-                            value={actionsFilters.organizationCode}
-                            organizations={organizations}
-                            onChange={(value) => {
-                              setActionsFilters({ organizationCode: value, unitCode: allValue });
-                              setActionsSearch('');
-                            }}
-                            className="relative w-full min-w-0"
-                          />
-                          <Select
-                            value={actionsFilters.unitCode}
-                            onValueChange={(value) => setActionsFilters({ ...actionsFilters, unitCode: value })}
-                          >
-                            <SelectTrigger className="w-full min-w-0">
-                              <SelectValue placeholder="Todas as unidades" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                <SelectItem value={allValue}>Todas as unidades</SelectItem>
-                                {units.map((unit) => (
-                                  <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
-                                    {unit.code} - {unit.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                          <div className="relative min-w-0">
-                            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Buscar ação, programa funcional..."
-                              value={actionsSearch}
-                              onChange={(e) => setActionsSearch(e.target.value)}
-                              className="w-full min-w-0 pl-9"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
-                          {[
-                            {
-                              label: 'Ações',
-                              value: filteredStructureActions.length.toLocaleString('pt-BR'),
-                            },
-                            {
-                              label: 'Planejado inicial',
-                              value: formatMoney(
-                                filteredStructureActions.reduce((s, a) => s + a.totals.initialBudget, 0)
-                              ),
-                            },
-                            {
-                              label: 'Orçamento atualizado',
-                              value: formatMoney(
-                                filteredStructureActions.reduce((s, a) => s + a.totals.updatedBudget, 0)
-                              ),
-                            },
-                            {
-                              label: 'Liquidado',
-                              value: formatMoney(
-                                filteredStructureActions.reduce((s, a) => s + a.totals.liquidated, 0)
-                              ),
-                            },
-                            {
-                              label: 'Disponível',
-                              value: formatMoney(
-                                filteredStructureActions.reduce((s, a) => s + a.totals.available, 0)
-                              ),
-                            },
-                          ].map((stat) => (
-                            <div key={stat.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
-                              <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-                              <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {displayedStructureActions.length === 0 ? (
-                          <Empty>
-                            <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
-                            <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
-                            <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
-                          </Empty>
-                        ) : (
-                          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                            <Separator className="shrink-0" />
-                            <ScrollArea className="min-h-0 min-w-0 flex-1 w-full">
-                              <div className="min-w-0">
-                                <Table className="table-fixed w-full min-w-[42rem]">
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="h-9 w-[38%] min-w-[12rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Ação
-                                  </TableHead>
-                                  {structureActionsShowUnit ? (
-                                    <TableHead className="h-9 w-[18%] max-w-[10rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                      Unidade
-                                    </TableHead>
-                                  ) : null}
-                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Inicial
-                                  </TableHead>
-                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Atualizado
-                                  </TableHead>
-                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Liquidado
-                                  </TableHead>
-                                  <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Disponível
-                                  </TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {displayedStructureActions.map((action) => (
-                                  <TableRow key={action.id}>
-                                    <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
-                                      <div className="flex min-w-0 flex-col gap-0.5">
-                                        <div className="flex items-center gap-2">
-                                          <Badge variant="secondary" className="shrink-0 font-mono text-xs">
-                                            {action.projectActivity}
-                                          </Badge>
-                                        </div>
-                                        <p className="text-sm font-medium leading-snug">{action.application}</p>
-                                        <p className="text-xs text-muted-foreground">{action.functionalProgram}</p>
-                                      </div>
-                                    </TableCell>
-                                    {structureActionsShowUnit ? (
-                                      <TableCell className="w-[18%] max-w-[10rem] py-2 align-top text-sm">
-                                        <span className="text-xs text-muted-foreground">{action.unitCode}</span>
-                                        <p className="truncate text-xs" title={action.unitName}>
-                                          {action.unitName}
-                                        </p>
-                                      </TableCell>
-                                    ) : null}
-                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                      {formatMoney(action.totals.initialBudget)}
-                                    </TableCell>
-                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                      {formatMoney(action.totals.updatedBudget)}
-                                    </TableCell>
-                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                      {formatMoney(action.totals.liquidated)}
-                                    </TableCell>
-                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                      {formatMoney(action.totals.available)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                              </div>
-                            </ScrollArea>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                <TabsContent value="executors">
+                  <ExecutionAssignmentCard
+                    structure={executionStructure}
+                    onChanged={() =>
+                      load().catch((err) => {
+                        toast.error(err instanceof Error ? err.message : 'Erro ao recarregar.');
+                      })
+                    }
+                  />
                 </TabsContent>
               </Tabs>
             </section>
@@ -1808,7 +1799,7 @@ export default function SeplanPage() {
                                   const hasExecValue =
                                     typeof validation.informedExecutedValue === 'number' && validation.informedExecutedValue > 0;
                                   return (
-                                    <Card key={validation.id} size="sm">
+                                    <Card key={validation.id} size="sm" className="bg-muted/40">
                                       <CardHeader>
                                         <div className="flex flex-wrap items-center gap-2">
                                           <ThemeBadge theme={validation.theme} />
@@ -1849,23 +1840,23 @@ export default function SeplanPage() {
                                       </CardHeader>
                                       <CardContent className="flex flex-col gap-3">
                                         <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                          <div className="rounded-md border bg-card px-3 py-2">
                                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Entregas</p>
                                             <p className="mt-0.5 text-base font-semibold tabular-nums">{deliveriesCount}</p>
                                           </div>
-                                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                          <div className="rounded-md border bg-card px-3 py-2">
                                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor executado</p>
                                             <p className="mt-0.5 text-base font-semibold tabular-nums">
                                               {hasExecValue ? formatMoney(validation.informedExecutedValue!) : '—'}
                                             </p>
                                           </div>
-                                          <div className="rounded-md border bg-muted/30 px-3 py-2" title={municipalities.join(', ')}>
+                                          <div className="rounded-md border bg-card px-3 py-2" title={municipalities.join(', ')}>
                                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Municípios</p>
                                             <p className="mt-0.5 truncate text-base font-semibold">{municipalitiesLabel}</p>
                                           </div>
                                         </div>
                                         {validation.realizedDescription ? (
-                                          <div className="rounded-md border bg-muted/15 px-3 py-2">
+                                          <div className="rounded-md border bg-card px-3 py-2">
                                             <p className="text-xs uppercase tracking-wide text-muted-foreground">Descrição informada</p>
                                             <p className="mt-1 text-sm leading-snug text-foreground">{validation.realizedDescription}</p>
                                           </div>
@@ -1916,7 +1907,7 @@ export default function SeplanPage() {
                         <button
                           type="button"
                           onClick={handleExportXlsx}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
                         >
                           <FileSpreadsheetIcon className="size-4 text-muted-foreground" />
                           <span className="flex-1 text-left">XLSX</span>
@@ -1925,7 +1916,7 @@ export default function SeplanPage() {
                         <button
                           type="button"
                           onClick={handleExportCsv}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
                         >
                           <FileDownIcon className="size-4 text-muted-foreground" />
                           <span className="flex-1 text-left">CSV</span>
@@ -2140,10 +2131,10 @@ export default function SeplanPage() {
                                 <p className="text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
                               </div>
                             </div>
-                            <div className="text-center">
-                              <p className="text-sm font-semibold">{key}</p>
-                              <p className="max-w-[180px] text-xs text-muted-foreground leading-snug">{label}</p>
-                              <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                            <div className="flex w-max min-w-[220px] max-w-full flex-col items-center gap-0.5 px-1 text-center">
+                              <p className="text-sm font-semibold leading-none">{key}</p>
+                              <p className="max-w-[220px] text-xs text-muted-foreground leading-snug">{label}</p>
+                              <p className="mt-1 max-w-full overflow-x-auto whitespace-nowrap text-xs text-muted-foreground tabular-nums">
                                 {formatMoney(liquidated)} / {formatMoney(planned)}
                               </p>
                             </div>
@@ -2154,25 +2145,22 @@ export default function SeplanPage() {
                   </Card>
 
                   <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
-                    <Card className="h-full">
+                    <Card className="flex h-full flex-col">
                       <CardHeader>
                         <CardTitle>Resumo por tema</CardTitle>
                         <CardDescription>Valores liquidados das ações classificadas por orçamento temático.</CardDescription>
                       </CardHeader>
-                      <CardContent className="flex min-h-0 flex-1 flex-col">
-                        <ThemeLiquidatedSummaryChart
-                          className="min-h-0 flex-1"
-                          data={summary?.totalsByTheme ?? []}
-                        />
+                      <CardContent>
+                        <ThemeLiquidatedSummaryChart data={summary?.totalsByTheme ?? []} />
                       </CardContent>
                     </Card>
 
-                    <Card >
+                    <Card className="flex h-full flex-col">
                       <CardHeader>
                         <CardTitle>Status das validações</CardTitle>
                         <CardDescription>Distribuição atual dos formulários enviados às secretarias.</CardDescription>
                       </CardHeader>
-                      <CardContent className="flex flex-col gap-3">
+                      <CardContent className="flex flex-1 flex-col gap-3">
                         {summary?.validationsByStatus.map((item) => (
                           <div key={item.status} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
                             <StatusBadge status={item.status} />

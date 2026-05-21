@@ -2,23 +2,15 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment, getOrCreateImplicitCycle } from '@/lib/store';
+import { mapAssignment, getOrCreateImplicitCycle, scopeWhere, userControlsUnit } from '@/lib/store';
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  if (user.role === 'SECRETARIA_REPRESENTANTE' && !user.organizationCode) return ok([]);
-
+  const actionScope = await scopeWhere(user);
   const rows = await prisma.thematicAssignment.findMany({
-    where: user.role === 'SECRETARIA_REPRESENTANTE'
-      ? {
-          action: {
-            organizationCode: user.organizationCode!,
-            ...(user.unitCode && { unitCode: user.unitCode }),
-          },
-        }
-      : undefined,
+    where: user.role === 'SEPLAN_ADMIN' ? undefined : { action: actionScope },
     orderBy: { createdAt: 'asc' },
   });
   return ok(rows.map(mapAssignment));
@@ -40,8 +32,8 @@ export async function POST(req: NextRequest) {
   });
   if (!action) return badRequest('Ação orçamentária não encontrada.');
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    if (!user.organizationCode || action.organizationCode !== user.organizationCode) return forbidden();
-    if (user.unitCode && action.unitCode !== user.unitCode) return forbidden();
+    const allowed = await userControlsUnit(user, action.organizationCode, action.unitCode);
+    if (!allowed) return forbidden();
   }
 
   const existing = await prisma.thematicAssignment.findFirst({

@@ -10,6 +10,90 @@ export type ValidationStatus =
   | 'APROVADO';
 export type QddPeriodType = 'MES_ISOLADO' | 'ACUMULADO_ANUAL';
 
+export type GovernmentEntityType =
+  | 'SECRETARIA'
+  | 'AUTARQUIA'
+  | 'FUNDACAO'
+  | 'EMPRESA_PUBLICA'
+  | 'FUNDO'
+  | 'OUTRO';
+
+export interface GovernmentUnitCatalog {
+  code: string;
+  name: string;
+  active: boolean;
+}
+
+export interface GovernmentOrganizationCatalog {
+  code: string;
+  name: string;
+  type: GovernmentEntityType;
+  active: boolean;
+  units: GovernmentUnitCatalog[];
+}
+
+export interface GovernmentStructure {
+  organizations: GovernmentOrganizationCatalog[];
+}
+
+export interface StructureDiff {
+  newOrganizations: Array<{ code: string; name: string }>;
+  newUnits: Array<{
+    organizationCode: string;
+    organizationName: string;
+    code: string;
+    name: string;
+  }>;
+  missingOrganizations: Array<{
+    code: string;
+    name: string;
+    type: GovernmentEntityType;
+  }>;
+  missingUnits: Array<{
+    organizationCode: string;
+    organizationName: string;
+    code: string;
+    name: string;
+  }>;
+  renamedOrganizations: Array<{ code: string; catalogName: string; qddName: string }>;
+  renamedUnits: Array<{
+    organizationCode: string;
+    code: string;
+    catalogName: string;
+    qddName: string;
+  }>;
+}
+
+export interface StructureDiffApplySelection {
+  newOrganizationCodes?: string[];
+  newUnits?: Array<{ organizationCode: string; code: string }>;
+  renamedOrganizationCodes?: string[];
+  renamedUnits?: Array<{ organizationCode: string; code: string }>;
+  deactivateOrganizationCodes?: string[];
+  deactivateUnits?: Array<{ organizationCode: string; code: string }>;
+}
+
+export interface UnitExecutionRow {
+  organizationCode: string;
+  organizationName: string;
+  unitCode: string;
+  unitName: string;
+  /**
+   * `null` = secretaria pai executa (default).
+   * Igual ao próprio `unitCode` = unidade autônoma (ex.: FEM).
+   * Outro `unitCode` = aquela unidade da mesma secretaria executa esta.
+   */
+  executorUnitCode: string | null;
+}
+
+export interface ExecutionStructure {
+  organizations: Array<{
+    code: string;
+    name: string;
+    units: UnitExecutionRow[];
+  }>;
+}
+
 export interface BudgetImport {
   id: string;
   filename: string;

@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, conflict } from '@/lib/auth-server';
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment, isEmptyDraftValidation } from '@/lib/store';
+import { mapAssignment, isEmptyDraftValidation, userControlsUnit } from '@/lib/store';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -53,8 +53,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!row) return notFound('Atribuição temática não encontrada.');
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    if (!user.organizationCode || row.action.organizationCode !== user.organizationCode) return forbidden();
-    if (user.unitCode && row.action.unitCode !== user.unitCode) return forbidden();
+    const allowed = await userControlsUnit(user, row.action.organizationCode, row.action.unitCode);
+    if (!allowed) return forbidden();
   } else if (user.role !== 'SEPLAN_ADMIN') {
     return forbidden();
   }

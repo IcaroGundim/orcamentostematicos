@@ -34,7 +34,7 @@ export function DeliveryReviewList({
     headerTotal != null && headerTotal > 0 ? formatMoney(headerTotal) : null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/15 px-3 py-2.5">
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-card px-3 py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h4 className="text-sm font-semibold">Entregas realizadas</h4>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-muted-foreground">

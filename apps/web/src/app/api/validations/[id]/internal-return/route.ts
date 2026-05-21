@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
+import { userControlsUnit } from '@/lib/store';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (!validation) return notFound('Validação não encontrada.');
-  if (validation.organizationCode !== user.organizationCode) return forbidden();
+  if (!(await userControlsUnit(user, validation.organizationCode, validation.unitCode))) return forbidden();
 
   const row = await prisma.actionValidation.update({
     where: { id },

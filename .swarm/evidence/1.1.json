@@ -4,5 +4,11 @@
     "reviewer",
     "test_engineer"
   ],
-  "gates": {}
+  "gates": {
+    "reviewer": {
+      "sessionId": "ses_1c45dbb8dffePWrXolqj1609le",
+      "timestamp": "2026-05-18T15:29:12.694Z",
+      "agent": "reviewer"
+    }
+  }
 }
