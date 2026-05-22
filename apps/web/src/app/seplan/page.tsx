@@ -12,6 +12,7 @@ import {
   FileBarChart2Icon,
   FileDownIcon,
   FileSpreadsheetIcon,
+  ChevronRightIcon,
   FolderCogIcon,
   GaugeIcon,
   LogOutIcon,
@@ -80,6 +81,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
+import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
   isWeightingFactorLocked,
@@ -210,6 +212,7 @@ export default function SeplanPage() {
   const [selectedPeriodType, setSelectedPeriodType] = useState<QddPeriodType>('ACUMULADO_ANUAL');
   const [selectedReferenceMonth, setSelectedReferenceMonth] = useState(new Date().getMonth() + 1);
   const [selectedActionId, setSelectedActionId] = useState('');
+  const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState(initialAssignment);
   const [filter, setFilter] = useState('');
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
@@ -483,6 +486,28 @@ export default function SeplanPage() {
   const columns = useMemo<ColumnDef<BudgetAction>[]>(
     () => [
       {
+        id: 'expand',
+        header: () => null,
+        cell: ({ row }) => {
+          const isExpanded = expandedActionId === row.original.id;
+          return (
+            <button
+              type="button"
+              aria-label={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+              aria-expanded={isExpanded}
+              title={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpandedActionId((current) => (current === row.original.id ? null : row.original.id));
+              }}
+            >
+              {isExpanded ? <ChevronDownIcon className="size-4" /> : <ChevronRightIcon className="size-4" />}
+            </button>
+          );
+        },
+      },
+      {
         accessorKey: 'organizationCode',
         header: 'Órgão',
         cell: ({ row }) => (
@@ -536,7 +561,7 @@ export default function SeplanPage() {
         ),
       },
     ],
-    [],
+    [expandedActionId],
   );
 
   const tableColumnFilters = useMemo<ColumnFiltersState>(() => {
@@ -1527,6 +1552,7 @@ export default function SeplanPage() {
                 onThemePopoverOpenChange={setThemePopoverOpen}
                 qddPopoverOpen={qddPopoverOpen}
                 onQddPopoverOpenChange={setQddPopoverOpen}
+                expandedActionId={expandedActionId}
               />
 
               <Card >
@@ -2268,6 +2294,7 @@ function ActionsTableCard({
   onThemePopoverOpenChange,
   qddPopoverOpen,
   onQddPopoverOpenChange,
+  expandedActionId,
 }: {
   title: string;
   description: string;
@@ -2282,6 +2309,7 @@ function ActionsTableCard({
   onThemePopoverOpenChange: (open: boolean) => void;
   qddPopoverOpen: boolean;
   onQddPopoverOpenChange: (open: boolean) => void;
+  expandedActionId: string | null;
 }) {
   const totalPages = Math.max(table.getPageCount(), 1);
   const currentPage = Math.min(table.getState().pagination.pageIndex + 1, totalPages);
@@ -2367,15 +2395,27 @@ function ActionsTableCard({
               ))}
             </TableHeader>
             <TableBody>
-              {table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="py-1.5 leading-tight whitespace-normal align-top">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
+              {table.getRowModel().rows.map((row) => {
+                const isExpanded = expandedActionId === row.original.id;
+                return (
+                  <Fragment key={row.id}>
+                    <TableRow>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} className="py-1.5 leading-tight whitespace-normal align-top">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                    {isExpanded ? (
+                      <TableRow>
+                        <TableCell colSpan={row.getVisibleCells().length} className="bg-muted/20 p-3">
+                          <SourceBreakdownTable action={row.original} />
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </ScrollArea>

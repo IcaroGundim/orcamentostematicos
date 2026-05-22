@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   ExternalLinkIcon,
   FileCheck2Icon,
+  ChevronRightIcon,
   FolderCogIcon,
   InfoIcon,
   LogOutIcon,
@@ -40,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, SummaryCountBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
+import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { InternalReviewToolbar } from '@/components/domain/internal-review-toolbar';
 import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
 import { ValidationForm } from '@/components/domain/validation-form';
@@ -97,6 +99,7 @@ export default function SecretariaPage() {
   const [actions, setActions] = useState<BudgetAction[]>([]);
   const [currentId, setCurrentId] = useState('');
   const [selectedActionId, setSelectedActionId] = useState('');
+  const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState(initialAssignment);
   const [unitFilter, setUnitFilter] = useState(allValue);
   const [actionFilter, setActionFilter] = useState('');
@@ -894,12 +897,19 @@ export default function SecretariaPage() {
                       <ul role="list" className="flex flex-col gap-2 p-3">
                         {filteredActions.map((action) => (
                           <li key={action.id}>
-                            <button
-                              type="button"
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() => setSelectedActionId(action.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setSelectedActionId(action.id);
+                                }
+                              }}
                               aria-pressed={selectedActionId === action.id}
                               className={cn(
-                                'group/item flex w-full flex-col gap-2 rounded-lg border-2 border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:border-primary focus-visible:bg-muted/50 focus-visible:outline-none',
+                                'group/item flex w-full cursor-pointer flex-col gap-2 rounded-lg border-2 border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:border-primary focus-visible:bg-muted/50 focus-visible:outline-none',
                                 selectedActionId === action.id && 'border-primary bg-primary/5 hover:bg-primary/5',
                               )}
                             >
@@ -912,12 +922,31 @@ export default function SecretariaPage() {
                                     {action.unitName}
                                   </span>
                                 </div>
-                                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                                   {action.assignments.length ? (
                                     action.assignments.map((item) => <ThemeBadge key={item.id} theme={item.theme} />)
                                   ) : (
                                     <Badge variant="secondary">Sem tema</Badge>
                                   )}
+                                  {(() => {
+                                    const isExpanded = expandedActionId === action.id;
+                                    return (
+                                      <button
+                                        type="button"
+                                        aria-label={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+                                        aria-expanded={isExpanded}
+                                        title={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+                                        className="ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedActionId((current) => (current === action.id ? null : action.id));
+                                        }}
+                                        onKeyDown={(e) => e.stopPropagation()}
+                                      >
+                                        {isExpanded ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
+                                      </button>
+                                    );
+                                  })()}
                                 </div>
                               </div>
 
@@ -947,7 +976,13 @@ export default function SecretariaPage() {
                                   <dd className="text-base font-bold tabular-nums text-foreground">{formatMoney(action.totals.liquidated)}</dd>
                                 </div>
                               </dl>
-                            </button>
+
+                              {expandedActionId === action.id ? (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <SourceBreakdownTable action={action} />
+                                </div>
+                              ) : null}
+                            </div>
                           </li>
                         ))}
                       </ul>
