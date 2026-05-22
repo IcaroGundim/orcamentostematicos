@@ -3,6 +3,7 @@ import { getAuthUser, ok, unauthorized, forbidden, notFound, conflict } from '@/
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
 import { mapAssignment, isEmptyDraftValidation, userControlsUnit } from '@/lib/store';
+import { logUserActivity } from '@/lib/user-activity';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -34,6 +35,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }).catch(() => null);
 
   if (!row) return notFound('Atribuição temática não encontrada.');
+  await logUserActivity({
+    userId: user.id,
+    action: 'ASSIGNMENT_UPDATE',
+    entityType: 'ThematicAssignment',
+    entityId: row.id,
+    metadata: { theme: row.theme, classification: row.classification },
+  });
   return ok(mapAssignment(row));
 }
 
@@ -77,5 +85,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     prisma.actionValidation.deleteMany({ where: { assignmentId: id } }),
     prisma.thematicAssignment.delete({ where: { id } }),
   ]);
+  await logUserActivity({
+    userId: user.id,
+    action: 'ASSIGNMENT_DELETE',
+    entityType: 'ThematicAssignment',
+    entityId: id,
+    organizationCode: row.action.organizationCode,
+    unitCode: row.action.unitCode,
+    metadata: { theme: row.theme, classification: row.classification },
+  });
   return ok({ success: true });
 }

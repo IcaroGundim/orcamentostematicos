@@ -3,6 +3,7 @@ import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
 import { mapAssignment, getOrCreateImplicitCycle, scopeWhere, userControlsUnit } from '@/lib/store';
+import { logUserActivity } from '@/lib/user-activity';
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -90,6 +91,16 @@ export async function POST(req: NextRequest) {
     }
 
     return assignment;
+  });
+
+  await logUserActivity({
+    userId: user.id,
+    action: 'ASSIGNMENT_CREATE',
+    entityType: 'ThematicAssignment',
+    entityId: row.id,
+    organizationCode: action.organizationCode,
+    unitCode: action.unitCode,
+    metadata: { theme: row.theme, classification: row.classification },
   });
 
   return ok(mapAssignment(row));

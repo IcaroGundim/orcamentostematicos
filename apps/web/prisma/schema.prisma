@@ -84,17 +84,37 @@ model UnitExecutor {
 }
 
 model User {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   name             String
-  email            String   @unique
+  email            String    @unique
   password         String
   role             UserRole
   organizationCode String?
   unitCode         String?
+  active           Boolean   @default(true)
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  sessions     Session[]
+  assignments  ThematicAssignment[]
+  activityLogs UserActivityLog[]
+}
+
+model UserActivityLog {
+  id               String   @id @default(cuid())
+  userId           String
+  action           String
+  entityType       String?
+  entityId         String?
+  organizationCode String?
+  unitCode         String?
+  metadata         Json?
   createdAt        DateTime @default(now())
 
-  sessions    Session[]
-  assignments ThematicAssignment[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Session {

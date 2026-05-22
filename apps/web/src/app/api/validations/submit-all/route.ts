@@ -4,6 +4,7 @@ import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
 import { getValidationFormIssues, type ValidationFormInput } from '@/lib/validation-schema';
 import { scopeWhere } from '@/lib/store';
+import { logUserActivity } from '@/lib/user-activity';
 
 /**
  * Envio consolidado: a secretaria envia de uma vez todas as suas validações
@@ -62,6 +63,12 @@ export async function POST(req: NextRequest) {
     await prisma.actionValidation.updateMany({
       where: { id: { in: completeIds } },
       data: { status: nextStatus as any, submittedAt: new Date() },
+    });
+    await logUserActivity({
+      userId: user.id,
+      action: 'VALIDATION_BULK_SUBMIT',
+      organizationCode: user.organizationCode,
+      metadata: { count: completeIds.length, toSeplan },
     });
   }
 

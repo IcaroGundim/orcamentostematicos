@@ -42,6 +42,7 @@ import { cn } from '@/lib/utils';
 import { StatusBadge, SummaryCountBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
+import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { InternalReviewToolbar } from '@/components/domain/internal-review-toolbar';
 import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
 import { ValidationForm } from '@/components/domain/validation-form';
@@ -954,12 +955,11 @@ export default function SecretariaPage() {
                                 <p className="break-words text-base font-semibold leading-6 text-primary group-hover/item:underline">
                                   {action.application}
                                 </p>
-                                <p className="mt-0.5 text-[11px] font-medium leading-4 tabular-nums text-muted-foreground">
-                                  {action.projectActivity}
-                                </p>
-                                <p className="truncate text-[11px] text-muted-foreground" title={action.functionalProgram}>
-                                  {action.functionalProgram}
-                                </p>
+                                <FunctionalProgramLine
+                                  functionalProgram={action.functionalProgram}
+                                  projectActivity={action.projectActivity}
+                                  className="mt-0.5 truncate text-[11px] font-medium leading-4"
+                                />
                               </div>
 
                               <dl className="grid grid-cols-3 divide-x divide-border/60 rounded-md border border-border/60 bg-background">

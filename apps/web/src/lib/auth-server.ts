@@ -8,6 +8,8 @@ export type AuthUser = {
   role: string;
   organizationCode?: string | null;
   unitCode?: string | null;
+  active?: boolean;
+  lastSeenAt?: Date | null;
 };
 
 export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
@@ -19,7 +21,9 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
     where: { token },
     include: { user: true },
   });
-  return session ? session.user : null;
+  if (!session) return null;
+  if (session.user.active === false) return null;
+  return session.user;
 }
 
 export function unauthorized() {

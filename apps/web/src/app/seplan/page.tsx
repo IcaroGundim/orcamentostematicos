@@ -82,6 +82,7 @@ import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
+import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
   isWeightingFactorLocked,
@@ -118,6 +119,7 @@ import type {
 } from '@/types/domain';
 import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
 import { GovernmentStructurePanel } from '@/components/domain/government-structure-panel';
+import { UsersPanel } from '@/components/domain/users-panel';
 import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
 import {
   buildResultsRows,
@@ -1218,16 +1220,15 @@ export default function SeplanPage() {
                                 <TableRow key={action.id}>
                                   <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
                                     <div className="flex min-w-0 flex-col gap-0.5">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge variant="secondary" className="shrink-0 font-mono text-xs">
-                                          {action.projectActivity}
-                                        </Badge>
+                                      <p className="text-sm font-medium leading-snug">{action.application}</p>
+                                      <FunctionalProgramLine
+                                        functionalProgram={action.functionalProgram}
+                                        projectActivity={action.projectActivity}
+                                      >
                                         {action.assignments.map((item) => (
                                           <ThemeBadge key={item.id} theme={item.theme} />
                                         ))}
-                                      </div>
-                                      <p className="text-sm font-medium leading-snug">{action.application}</p>
-                                      <p className="text-xs text-muted-foreground">{action.functionalProgram}</p>
+                                      </FunctionalProgramLine>
                                     </div>
                                   </TableCell>
                                   {structureActionsShowUnit ? (
@@ -1270,8 +1271,13 @@ export default function SeplanPage() {
                   <TabsTrigger value="base">Base vigente</TabsTrigger>
                   <TabsTrigger value="executors">Atribuição de execução</TabsTrigger>
                   <TabsTrigger value="government">Estrutura de governo</TabsTrigger>
+                  <TabsTrigger value="users">Usuários</TabsTrigger>
                   <TabsTrigger value="reconciliation">Conferência com QDD</TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="users">
+                  <UsersPanel organizations={governmentStructure.organizations} />
+                </TabsContent>
 
                 <TabsContent value="government">
                   <GovernmentStructurePanel structure={governmentStructure} />

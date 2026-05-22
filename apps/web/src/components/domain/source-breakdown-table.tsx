@@ -51,16 +51,16 @@ export function SourceBreakdownTable({ action }: SourceBreakdownTableProps) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+      <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-neutral-400">
         Sem linhas de despesa carregadas para esta ação.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-md border bg-muted/30">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900/50">
+      <table className="w-full text-sm text-neutral-900 dark:text-neutral-100">
+        <thead className="bg-neutral-100 text-xs uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
           <tr>
             <th className="px-3 py-2 text-left font-semibold">Fonte</th>
             <th className="px-3 py-2 text-right font-semibold">Inicial</th>
@@ -72,11 +72,11 @@ export function SourceBreakdownTable({ action }: SourceBreakdownTableProps) {
           {rows.map((row) => {
             const label = getFonteLabel(row.source);
             return (
-              <tr key={row.source} className="border-t border-border/60">
+              <tr key={row.source} className="border-t border-neutral-200 dark:border-neutral-700">
                 <td className="px-3 py-1.5">
                   <span className="font-medium tabular-nums">{row.source}</span>
                   {label ? (
-                    <span className="ml-2 text-muted-foreground">{label}</span>
+                    <span className="ml-2 text-neutral-600 dark:text-neutral-400">{label}</span>
                   ) : null}
                 </td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(row.initialBudget)}</td>
@@ -87,7 +87,7 @@ export function SourceBreakdownTable({ action }: SourceBreakdownTableProps) {
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t bg-muted/40 font-semibold">
+          <tr className="border-t border-neutral-200 bg-neutral-100 font-semibold dark:border-neutral-700 dark:bg-neutral-800">
             <td className="px-3 py-2">Total</td>
             <td className="px-3 py-2 text-right tabular-nums">{formatMoney(totals.initialBudget)}</td>
             <td className="px-3 py-2 text-right tabular-nums">{formatMoney(totals.updatedBudget)}</td>

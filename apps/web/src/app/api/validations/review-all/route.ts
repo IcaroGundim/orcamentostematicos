@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { scopeWhere } from '@/lib/store';
+import { logUserActivity } from '@/lib/user-activity';
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -47,6 +48,13 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+
+  await logUserActivity({
+    userId: user.id,
+    action: 'VALIDATION_BULK_REVIEW',
+    organizationCode: user.organizationCode,
+    metadata: { count: ids.length, approve },
+  });
 
   return ok({ revisados: ids.length });
 }

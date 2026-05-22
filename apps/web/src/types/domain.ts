@@ -113,6 +113,36 @@ export interface User {
   role: UserRole;
   organizationCode?: string;
   unitCode?: string;
+  active?: boolean;
+  lastSeenAt?: string | null;
+}
+
+export interface UserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  organizationCode: string | null;
+  unitCode: string | null;
+  active: boolean;
+  lastSeenAt: string | null;
+  createdAt: string;
+  sessionActive: boolean;
+  pendingCuration: number;
+  pendingDrafts: number;
+  pendingReview: number;
+  pendingValidation: number;
+}
+
+export interface UserActivityEntry {
+  id: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  organizationCode: string | null;
+  unitCode: string | null;
+  metadata: unknown;
+  createdAt: string;
 }
 
 export interface Organization {
