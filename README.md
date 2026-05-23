@@ -20,12 +20,6 @@ Web: `http://localhost:3000`
 
 API interna: `http://localhost:3000/api`
 
-## Usuários de demonstração
-
-- `admin@seplan.ac.gov.br` / `admin123` - SEPLAN Admin
-- `revisor@seplan.ac.gov.br` / `revisor123` - SEPLAN Revisor
-- `semulher@ac.gov.br` / `secretaria123` - Representante SEMULHER
-- `sesacre@ac.gov.br` / `secretaria123` - Representante SESACRE
 
 ## Fluxo principal
 
