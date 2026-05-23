@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { prisma } from './prisma';
 import { getVigenteImportId } from './store';
 import type {

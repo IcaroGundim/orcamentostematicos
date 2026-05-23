@@ -1,6 +1,8 @@
 /**
  * Shared data-access helpers used by Next.js API Route Handlers.
  */
+import 'server-only';
+
 import { randomUUID } from 'node:crypto';
 import { listGovernmentStructure } from './government-structure';
 import { prisma } from './prisma';

@@ -82,6 +82,7 @@ import { cn } from '@/lib/utils';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
+import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
@@ -119,6 +120,8 @@ import type {
 } from '@/types/domain';
 import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
 import { GovernmentStructurePanel } from '@/components/domain/government-structure-panel';
+import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
+import { ThematicCurationPanel, type AssignmentForm } from '@/components/domain/thematic-curation-panel';
 import { UsersPanel } from '@/components/domain/users-panel';
 import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
 import {
@@ -156,12 +159,6 @@ function formatPeriod(referenceMonth: number, year: number, periodType: QddPerio
 
 type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | 'results' | 'reports';
 
-type ActionsTabFilters = {
-  organizationCode: string;
-  unitCode: string;
-  theme: string;
-};
-
 type ActionColumnFilters = {
   organizationCode: string;
   application: string;
@@ -177,12 +174,6 @@ const initialAssignment = {
   classification: '',
   weightingFactor: '',
   justification: '',
-};
-
-const initialActionsFilters: ActionsTabFilters = {
-  organizationCode: allValue,
-  unitCode: allValue,
-  theme: allValue,
 };
 
 function gaugeColor(pct: number): string {
@@ -218,8 +209,6 @@ export default function SeplanPage() {
   const [assignment, setAssignment] = useState(initialAssignment);
   const [filter, setFilter] = useState('');
   const [activeSection, setActiveSection] = useState<SectionId>('overview');
-  const [actionsFilters, setActionsFilters] = useState<ActionsTabFilters>(initialActionsFilters);
-  const [actionsSearch, setActionsSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<ActionColumnFilters>({
     organizationCode: allValue,
     application: '',
@@ -341,7 +330,6 @@ export default function SeplanPage() {
       setPreview(null);
       setStructureSubTab('reconciliation');
       toast.success('QDD importado e registrado como vigente.');
-      setActionsFilters(initialActionsFilters);
       await load();
       await loadStructureDiff('vigente');
     } catch (err) {
@@ -638,84 +626,7 @@ export default function SeplanPage() {
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [governmentStructure]);
 
-  const units = useMemo(() => {
-    return uniqueBy(
-      actions.filter((action) => actionsFilters.organizationCode === allValue || action.organizationCode === actionsFilters.organizationCode),
-      (action) => `${action.organizationCode}-${action.unitCode}`,
-    )
-      .map((action) => ({ code: action.unitCode, name: action.unitName, organizationCode: action.organizationCode }))
-      .sort((a, b) => `${a.organizationCode}-${a.code}`.localeCompare(`${b.organizationCode}-${b.code}`));
-  }, [actions, actionsFilters.organizationCode]);
-
   const years = useMemo(() => [...new Set(actions.map((action) => String(action.year)))].sort(), [actions]);
-
-  const filteredStructureActions = useMemo(() => {
-    return actions.filter((action) => {
-      if (actionsFilters.organizationCode !== allValue && action.organizationCode !== actionsFilters.organizationCode) return false;
-      if (actionsFilters.unitCode !== allValue && action.unitCode !== actionsFilters.unitCode) return false;
-      if (actionsFilters.theme !== allValue && !action.assignments.some((a) => a.theme === actionsFilters.theme)) return false;
-      return true;
-    });
-  }, [actions, actionsFilters]);
-
-  const displayedStructureActions = useMemo(() => {
-    const q = actionsSearch.trim().toLowerCase();
-    if (!q) return filteredStructureActions;
-    return filteredStructureActions.filter(
-      (a) =>
-        a.application.toLowerCase().includes(q) ||
-        a.functionalProgram.toLowerCase().includes(q) ||
-        a.projectActivity.toLowerCase().includes(q)
-    );
-  }, [filteredStructureActions, actionsSearch]);
-
-  const structureActionsTotals = useMemo(() => {
-    return displayedStructureActions.reduce(
-      (acc, action) => ({
-        initialBudget: acc.initialBudget + action.totals.initialBudget,
-        updatedBudget: acc.updatedBudget + action.totals.updatedBudget,
-        liquidated: acc.liquidated + action.totals.liquidated,
-      }),
-      { initialBudget: 0, updatedBudget: 0, liquidated: 0 },
-    );
-  }, [displayedStructureActions]);
-
-  const structureActionsShowUnit = actionsFilters.unitCode === allValue;
-
-  const selectedStructureOrganization = useMemo(() => {
-    if (actionsFilters.organizationCode === allValue) return null;
-    return organizations.find((o) => o.code === actionsFilters.organizationCode) ?? null;
-  }, [actionsFilters.organizationCode, organizations]);
-
-  const structureSelectedUnitLabel = useMemo(() => {
-    if (actionsFilters.unitCode === allValue) return null;
-    const u =
-      actionsFilters.organizationCode === allValue
-        ? units.find((x) => x.code === actionsFilters.unitCode)
-        : units.find(
-            (x) =>
-              x.code === actionsFilters.unitCode &&
-              x.organizationCode === actionsFilters.organizationCode
-          );
-    return u ? `${u.code} — ${u.name}` : actionsFilters.unitCode;
-  }, [units, actionsFilters.unitCode, actionsFilters.organizationCode]);
-
-  const structureActionsScopeDescription = useMemo(() => {
-    const count = displayedStructureActions.length.toLocaleString('pt-BR');
-    if (actionsFilters.organizationCode === allValue) {
-      const unitPart = structureSelectedUnitLabel ? ` · ${structureSelectedUnitLabel}` : '';
-      return `${count} ação(ões) · todas as secretarias${unitPart}`;
-    }
-    const unitPart = structureActionsShowUnit
-      ? 'Todas as unidades da secretaria'
-      : structureSelectedUnitLabel ?? '—';
-    return `${count} ação(ões) na lista atual · ${unitPart}`;
-  }, [
-    displayedStructureActions.length,
-    actionsFilters.organizationCode,
-    structureSelectedUnitLabel,
-    structureActionsShowUnit,
-  ]);
 
   const themeGaugeData = useMemo(() => {
     const acc = new Map<ThemeBudget, { liquidated: number; planned: number }>();
@@ -885,6 +796,15 @@ export default function SeplanPage() {
   useEffect(() => {
     setRemovePopoverOpen(false);
   }, [selectedActionId]);
+
+  const handleCurationSelectAction = useCallback((id: string) => {
+    setSelectedActionId(id);
+    setAssignment((current) => ({ ...current, actionId: id }));
+  }, []);
+
+  const handleCurationAssignmentChange = useCallback((next: AssignmentForm) => {
+    setAssignment((current) => ({ ...current, ...next }));
+  }, []);
 
   const filteredActionCount = table.getFilteredRowModel().rows.length;
   const organizationCount = governmentStructure.organizations.length;
@@ -1076,191 +996,7 @@ export default function SeplanPage() {
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:px-6 2xl:px-8">
           {activeSection === 'overview' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <CardHeader className="shrink-0">
-                  <CardTitle>
-                    {actionsFilters.organizationCode === allValue
-                      ? 'Ações programadas'
-                      : selectedStructureOrganization
-                        ? `${selectedStructureOrganization.code} — ${selectedStructureOrganization.name}`
-                        : 'Ações programadas'}
-                  </CardTitle>
-                  <CardDescription>
-                    <span className="block">{structureActionsScopeDescription}</span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-                  <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
-                    <OrgaoCombobox
-                      value={actionsFilters.organizationCode}
-                      organizations={organizations}
-                      onChange={(value) => {
-                        setActionsFilters({ ...actionsFilters, organizationCode: value, unitCode: allValue });
-                        setActionsSearch('');
-                      }}
-                      className="relative w-full min-w-0"
-                    />
-                    <Select
-                      value={actionsFilters.unitCode}
-                      onValueChange={(value) => setActionsFilters({ ...actionsFilters, unitCode: value })}
-                    >
-                      <SelectTrigger className="w-full min-w-0">
-                        <SelectValue placeholder="Todas as unidades" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value={allValue}>Todas as unidades</SelectItem>
-                          {units.map((unit) => (
-                            <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
-                              {unit.code} - {unit.name}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <div className="flex min-w-0 gap-2 sm:gap-3">
-                      <Select
-                        value={actionsFilters.theme}
-                        onValueChange={(value) => setActionsFilters({ ...actionsFilters, theme: value })}
-                      >
-                        <SelectTrigger className="w-full min-w-[8.5rem] shrink-0 sm:w-36">
-                          <SelectValue placeholder="Tema" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value={allValue}>Todos os temas</SelectItem>
-                            {Object.entries(themeLabels).map(([key, label]) => (
-                              <SelectItem key={key} value={key}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                      <div className="relative min-w-0 flex-1">
-                        <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          placeholder="Buscar ação, programa funcional..."
-                          value={actionsSearch}
-                          onChange={(e) => setActionsSearch(e.target.value)}
-                          className="w-full min-w-0 pl-9"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
-                    {[
-                      {
-                        label: 'Ações',
-                        value: displayedStructureActions.length.toLocaleString('pt-BR'),
-                      },
-                      {
-                        label: 'Planejado inicial',
-                        value: formatMoney(structureActionsTotals.initialBudget),
-                      },
-                      {
-                        label: 'Orçamento atualizado',
-                        value: formatMoney(structureActionsTotals.updatedBudget),
-                      },
-                      {
-                        label: 'Liquidado',
-                        value: formatMoney(structureActionsTotals.liquidated),
-                      },
-                      {
-                        label: 'Disponível',
-                        value: formatMoney(
-                          structureActionsTotals.updatedBudget - structureActionsTotals.liquidated
-                        ),
-                      },
-                    ].map((stat) => (
-                      <div key={stat.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-                        <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {displayedStructureActions.length === 0 ? (
-                    <Empty>
-                      <EmptyHeader><EmptyMedia><DatabaseIcon /></EmptyMedia></EmptyHeader>
-                      <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
-                      <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
-                    </Empty>
-                  ) : (
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                      <Separator className="shrink-0" />
-                      <ScrollArea className="min-h-0 min-w-0 flex-1 w-full">
-                        <div className="min-w-0">
-                          <Table className="table-fixed w-full min-w-[42rem]">
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="h-9 w-[38%] min-w-[12rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                  Ação
-                                </TableHead>
-                                {structureActionsShowUnit ? (
-                                  <TableHead className="h-9 w-[18%] max-w-[10rem] text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                    Unidade
-                                  </TableHead>
-                                ) : null}
-                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                  Inicial
-                                </TableHead>
-                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                  Atualizado
-                                </TableHead>
-                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                  Liquidado
-                                </TableHead>
-                                <TableHead className="h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                  Disponível
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {displayedStructureActions.map((action) => (
-                                <TableRow key={action.id}>
-                                  <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
-                                    <div className="flex min-w-0 flex-col gap-0.5">
-                                      <p className="text-sm font-medium leading-snug">{action.application}</p>
-                                      <FunctionalProgramLine
-                                        functionalProgram={action.functionalProgram}
-                                        projectActivity={action.projectActivity}
-                                      >
-                                        {action.assignments.map((item) => (
-                                          <ThemeBadge key={item.id} theme={item.theme} />
-                                        ))}
-                                      </FunctionalProgramLine>
-                                    </div>
-                                  </TableCell>
-                                  {structureActionsShowUnit ? (
-                                    <TableCell className="w-[18%] max-w-[10rem] py-2 align-top text-sm">
-                                      <span className="text-xs text-muted-foreground">{action.unitCode}</span>
-                                      <p className="truncate text-xs" title={action.unitName}>
-                                        {action.unitName}
-                                      </p>
-                                    </TableCell>
-                                  ) : null}
-                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                    {formatMoney(action.totals.initialBudget)}
-                                  </TableCell>
-                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                    {formatMoney(action.totals.updatedBudget)}
-                                  </TableCell>
-                                  <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                    {formatMoney(action.totals.liquidated)}
-                                  </TableCell>
-                                    <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-                                      {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
-                                    </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </ScrollArea>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <OverviewScheduledActionsPanel actions={actions} organizations={organizations} />
             </div>
           ) : null}
 
@@ -1543,176 +1279,27 @@ export default function SeplanPage() {
           ) : null}
 
           {activeSection === 'curation' ? (
-            <section className="grid min-h-0 flex-1 gap-5 overflow-y-auto xl:grid-cols-[minmax(0,1fr)_430px] 2xl:grid-cols-[minmax(0,1fr)_460px]">
-              <ActionsTableCard
-                title="Selecionar ação para curadoria"
-                description={`${filteredActionCount} registros filtrados`}
-                table={table}
-                organizations={organizations}
-                themeSummary={summary?.totalsByTheme ?? []}
-                qddStats={{ organizationCount, unitCount, expenseLineCount, actionCount: actions.length }}
-                onOpenStructure={openStructureSection}
-                columnFilters={columnFilters}
-                onColumnFiltersChange={handleColumnFiltersChange}
-                themePopoverOpen={themePopoverOpen}
-                onThemePopoverOpenChange={setThemePopoverOpen}
-                qddPopoverOpen={qddPopoverOpen}
-                onQddPopoverOpenChange={setQddPopoverOpen}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              <ThematicCurationPanel
+                actions={actions}
+                metadata={metadata}
+                organizations={governmentStructure.organizations}
+                selectedActionId={selectedActionId}
+                onSelectActionId={handleCurationSelectAction}
                 expandedActionId={expandedActionId}
+                onExpandActionId={setExpandedActionId}
+                assignment={assignment}
+                onAssignmentChange={handleCurationAssignmentChange}
+                selectedActionHasTheme={selectedActionHasTheme}
+                isRemovingAssignment={isRemovingAssignment}
+                removePopoverOpen={removePopoverOpen}
+                onRemovePopoverOpenChange={setRemovePopoverOpen}
+                assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
+                onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
+                onCreateAssignment={createAssignment}
+                onConfirmRemoveAssignment={confirmRemoveAssignment}
               />
-
-              <Card >
-                <CardHeader>
-                  <CardTitle>Curadoria temática</CardTitle>
-                  <CardDescription>
-                    {selectedAction ? `${selectedAction.projectActivity} - ${selectedAction.application}` : 'Selecione uma ação consolidada.'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FieldGroup>
-                    <Field>
-                      <FieldLabel>Tema</FieldLabel>
-                      <Select value={assignment.theme} onValueChange={(value) => setAssignment({ ...assignment, theme: value as ThemeBudget, axis: '', classification: '', weightingFactor: '' })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {metadata?.themes.map((theme) => (
-                              <SelectItem key={theme} value={theme}>{themeLabels[theme]}</SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field>
-                      <FieldLabel>Eixo</FieldLabel>
-                      <Select value={assignment.axis || 'UNSELECTED'} onValueChange={(value) => setAssignment({ ...assignment, axis: value === 'UNSELECTED' ? '' : value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="UNSELECTED">Selecione</SelectItem>
-                            {axes.map((axis) => <SelectItem key={axis.value} value={axis.value}>{axis.label}</SelectItem>)}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field>
-                      <FieldLabel>Classificação</FieldLabel>
-                      <Select
-                        value={assignment.classification || 'UNSELECTED'}
-                        onValueChange={(value) => {
-                          const classification = value === 'UNSELECTED' ? '' : value;
-                          setAssignment({
-                            ...assignment,
-                            classification,
-                            weightingFactor: weightingFactorFormValue(assignment.theme, classification, ''),
-                          });
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="UNSELECTED">Selecione</SelectItem>
-                            {classifications.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    {shouldHideWeightingFactor(assignment.theme, assignment.classification) ? (
-                      lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
-                        <Field>
-                          <FieldDescription>
-                            {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
-                          </FieldDescription>
-                        </Field>
-                      ) : null
-                    ) : (
-                      <Field
-                        data-disabled={
-                          isWeightingFactorLocked(assignment.theme, assignment.classification) || undefined
-                        }
-                      >
-                        <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
-                        <Input
-                          id="weightingFactor"
-                          type="number"
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          value={weightingFactorFormValue(
-                            assignment.theme,
-                            assignment.classification,
-                            assignment.weightingFactor,
-                          )}
-                          disabled={isWeightingFactorLocked(assignment.theme, assignment.classification)}
-                          onChange={(event) => setAssignment({ ...assignment, weightingFactor: event.target.value })}
-                          placeholder="Opcional"
-                        />
-                        {lockedWeightingFactorLabel(assignment.theme, assignment.classification) ? (
-                          <FieldDescription>
-                            {lockedWeightingFactorLabel(assignment.theme, assignment.classification)}
-                          </FieldDescription>
-                        ) : null}
-                      </Field>
-                    )}
-                    <Field>
-                      <FieldLabel htmlFor="justification">Justificativa <span className="text-muted-foreground font-normal">(opcional)</span></FieldLabel>
-                      <Textarea id="justification" value={assignment.justification} onChange={(event) => setAssignment({ ...assignment, justification: event.target.value })} />
-                    </Field>
-                    {selectedActionHasTheme ? (
-                      <Alert className="border-primary/25 bg-primary/5">
-                        <FolderCogIcon />
-                        <AlertDescription className="text-xs">
-                          Esta ação já possui classificação para <strong>{themeLabels[assignment.theme]}</strong>. Use &quot;Remover classificação&quot; para excluí-la quando não houver validações vinculadas — assim você poderá classificar novamente neste tema.
-                        </AlertDescription>
-                      </Alert>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        disabled={
-                          !selectedActionId ||
-                          !assignment.axis ||
-                          !assignment.classification ||
-                          selectedActionHasTheme ||
-                          isRemovingAssignment
-                        }
-                        onClick={() => void createAssignment()}
-                      >
-                        <FolderCogIcon data-icon="inline-start" />
-                        Classificar ação
-                      </Button>
-                      {(selectedAction?.assignments.length ?? 0) > 0 && selectedActionId ? (
-                        <RemoveClassificationPopover
-                          open={removePopoverOpen}
-                          onOpenChange={setRemovePopoverOpen}
-                          metadata={metadata}
-                          selectedAction={selectedAction ?? null}
-                          selectedAssignmentIds={assignmentIdsPendingRemoval}
-                          onSelectedAssignmentIdsChange={setAssignmentIdsPendingRemoval}
-                          isRemovingAssignment={isRemovingAssignment}
-                          onConfirmRemove={confirmRemoveAssignment}
-                        >
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            disabled={isRemovingAssignment}
-                          >
-                            <Trash2Icon data-icon="inline-start" />
-                            Remover classificação
-                          </Button>
-                        </RemoveClassificationPopover>
-                      ) : null}
-                    </div>
-                  </FieldGroup>
-                </CardContent>
-              </Card>
-            </section>
+            </div>
           ) : null}
 
           {activeSection === 'cycles' ? (
@@ -2472,94 +2059,23 @@ function OrgaoCombobox({
   onChange: (value: string) => void;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selectedOrg = organizations.find((o) => o.code === value);
-  const displayValue = value === allValue ? 'Todos os órgãos' : selectedOrg ? `${selectedOrg.code} - ${selectedOrg.name}` : '';
-  const matchTriggerWidth = /\bw-full\b/.test(className ?? '');
-
-  const allItems = [
-    { code: allValue, label: 'Todos os órgãos' },
-    ...organizations.map((o) => ({ code: o.code, label: `${o.code} - ${o.name}` })),
-  ];
-
-  const filtered = inputValue
-    ? allItems.filter((item) => normalize(item.label).includes(normalize(inputValue)))
-    : allItems;
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-        setInputValue('');
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   return (
-    <div ref={containerRef} className={className}>
-      <div
-        className="flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-sm transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
-        onClick={() => setOpen(true)}
-      >
-        <input
-          className="flex-1 w-full min-w-0 truncate bg-transparent outline-none placeholder:text-muted-foreground"
-          placeholder="Todos os órgãos"
-          value={open ? inputValue : displayValue}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => {
-            setInputValue('');
-            setOpen(true);
-          }}
-        />
-        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-      </div>
-      {open && (
-        <div
-          className={cn(
-            'absolute z-50 mt-1 max-h-80 overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
-            matchTriggerWidth ? 'left-0 right-0 w-full min-w-0' : 'right-0 w-80 sm:right-auto sm:left-0',
-          )}
-        >
-          {filtered.length > 0 ? filtered.map((item) => (
-            <button
-              key={item.code}
-              type="button"
-              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-muted hover:text-foreground"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(item.code);
-                setInputValue('');
-                setOpen(false);
-              }}
-            >
-              {item.code === value ? <CheckIcon className="size-4 shrink-0" /> : <span className="inline-block size-4 shrink-0" />}
-              {item.label}
-            </button>
-          )) : (
-            <div className="py-2 text-center text-sm text-muted-foreground">Nenhum resultado</div>
-          )}
-        </div>
-      )}
-    </div>
+    <SearchableCombobox
+      className={className}
+      value={value}
+      onChange={onChange}
+      placeholder="Todos os órgãos"
+      items={[
+        { value: allValue, label: 'Todos os órgãos' },
+        ...organizations.map((o) => ({
+          value: o.code,
+          label: `${o.code} - ${o.name}`,
+        })),
+      ]}
+    />
   );
 }
 
-
-function normalize(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
   const seen = new Set<string>();

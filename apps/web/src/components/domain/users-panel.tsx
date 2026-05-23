@@ -20,6 +20,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import {
   Select,
   SelectContent,
@@ -457,53 +458,49 @@ function UserFormContent({
         />
       </Field>
       <Field label="Papel">
-        <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as UserRole })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="SEPLAN_ADMIN">{roleLabels.SEPLAN_ADMIN}</SelectItem>
-            <SelectItem value="SECRETARIA_REPRESENTANTE">{roleLabels.SECRETARIA_REPRESENTANTE}</SelectItem>
-            <SelectItem value="SECRETARIA_REVISOR">{roleLabels.SECRETARIA_REVISOR}</SelectItem>
-          </SelectContent>
-        </Select>
+        <SearchableCombobox
+          value={form.role}
+          onChange={(role) => setForm({ ...form, role: role as UserRole })}
+          placeholder="Selecione..."
+          items={(
+            Object.entries(roleLabels) as Array<[UserRole, string]>
+          ).map(([role, label]) => ({ value: role, label }))}
+        />
       </Field>
       <Field label="Secretaria/órgão">
-        <Select
-          value={form.organizationCode || '__none__'}
-          onValueChange={(v) =>
+        <SearchableCombobox
+          value={form.organizationCode}
+          onChange={(organizationCode) =>
             setForm({
               ...form,
-              organizationCode: v === '__none__' ? '' : v,
+              organizationCode,
               unitCode: '',
             })
           }
-        >
-          <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">Sem vínculo</SelectItem>
-            {organizations.map((o) => (
-              <SelectItem key={o.code} value={o.code}>
-                {o.code} — {o.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          placeholder="Selecione..."
+          items={[
+            { value: '', label: 'Sem vínculo' },
+            ...organizations.map((o) => ({
+              value: o.code,
+              label: `${o.code} — ${o.name}`,
+            })),
+          ]}
+        />
       </Field>
       <Field label="Unidade orçamentária">
-        <Select
-          value={form.unitCode || '__none__'}
-          onValueChange={(v) => setForm({ ...form, unitCode: v === '__none__' ? '' : v })}
+        <SearchableCombobox
+          value={form.unitCode}
+          onChange={(unitCode) => setForm({ ...form, unitCode })}
+          placeholder="Selecione..."
           disabled={!form.organizationCode}
-        >
-          <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">Sem unidade</SelectItem>
-            {orgUnits.map((u) => (
-              <SelectItem key={u.code} value={u.code}>
-                {u.code} — {u.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          items={[
+            { value: '', label: 'Sem unidade' },
+            ...orgUnits.map((u) => ({
+              value: u.code,
+              label: `${u.code} — ${u.name}`,
+            })),
+          ]}
+        />
       </Field>
       <label className="flex items-center gap-2 text-sm">
         <input
