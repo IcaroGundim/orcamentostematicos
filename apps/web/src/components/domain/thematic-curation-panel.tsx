@@ -255,15 +255,22 @@ const CurationActionRow = memo(function CurationActionRow({
 }: CurationActionRowProps) {
   const hasAssignments = action.assignments.length > 0;
 
+  function handleRowActivate() {
+    onSelect(action.id);
+    if (!isExpanded) {
+      onToggleExpand(action.id);
+    }
+  }
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onSelect(action.id)}
+      onClick={handleRowActivate}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onSelect(action.id);
+          handleRowActivate();
         }
       }}
       aria-pressed={isSelected}

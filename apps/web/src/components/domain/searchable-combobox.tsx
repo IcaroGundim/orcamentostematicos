@@ -187,7 +187,9 @@ export function SearchableCombobox({
                 position: 'fixed',
                 top: position.top,
                 left: position.left,
-                width: position.width,
+                minWidth: position.width,
+                width: 'max-content',
+                maxWidth: `min(${window.innerWidth - 16}px, 42rem)`,
               }}
               className={cn(
                 'animate-in fade-in-0 zoom-in-95 duration-150',
@@ -202,7 +204,7 @@ export function SearchableCombobox({
                       type="button"
                       data-highlighted={undefined}
                       data-state={item.value === value ? 'checked' : undefined}
-                      className={dropdownItemClassName}
+                      className={cn(dropdownItemClassName, 'items-start')}
                       onMouseDown={(e) => {
                         e.preventDefault();
                         onChange(item.value);
@@ -210,7 +212,9 @@ export function SearchableCombobox({
                         setOpen(false);
                       }}
                     >
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1 whitespace-normal break-words text-left leading-snug">
+                        {item.label}
+                      </span>
                       <span className={dropdownItemIndicatorClassName}>
                         {item.value === value ? (
                           <CheckIcon className="size-4 shrink-0" />
