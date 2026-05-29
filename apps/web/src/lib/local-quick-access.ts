@@ -115,6 +115,13 @@ export function hasLocalLoginHistory(): boolean {
   return getQuickAccessEntries().length > 0;
 }
 
+export function hasQuickAccessEntry(identifier: string): boolean {
+  const identifierKey = normalizeIdentifier(identifier);
+  return getQuickAccessEntries().some(
+    (entry) => normalizeIdentifier(entry.identifier) === identifierKey,
+  );
+}
+
 export function getQuickAccessEntries(): QuickAccessEntry[] {
   const storage = getStorage();
   if (!storage) {

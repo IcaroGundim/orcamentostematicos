@@ -91,10 +91,6 @@ export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessPro
           })}
         </div>
 
-        <p className="text-center text-[9px] text-muted-foreground/80">
-          Atalhos somem após 7 dias sem entrar com a conta.
-        </p>
-
         <button
           type="button"
           className="self-center text-[10px] text-muted-foreground underline-offset-2 hover:underline"

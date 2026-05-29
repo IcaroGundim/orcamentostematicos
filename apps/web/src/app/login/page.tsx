@@ -7,13 +7,23 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { LoginQuickAccess } from '@/components/domain/login-quick-access';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { LoginQuickAccess } from '@/components/domain/login-quick-access';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { api, setStoredSession, type Session } from '@/lib/api';
-import { recordSuccessfulLogin } from '@/lib/local-quick-access';
+import { hasQuickAccessEntry, recordSuccessfulLogin } from '@/lib/local-quick-access';
+import type { User } from '@/types/domain';
 
 const schema = z.object({
   identifier: z.string().min(1, 'Informe seu e-mail ou nome de usuário.'),
@@ -22,16 +32,51 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+type PendingQuickAccessSave = {
+  identifier: string;
+  password: string;
+  user: Pick<User, 'name' | 'role' | 'organizationCode'>;
+  redirectTo: string;
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState('');
+  const [pendingQuickAccessSave, setPendingQuickAccessSave] = useState<PendingQuickAccessSave | null>(null);
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { identifier: '', password: '' },
   });
   const isSubmitting = form.formState.isSubmitting;
 
-  async function performLogin(identifier: string, password: string) {
+  function confirmQuickAccessSave() {
+    if (!pendingQuickAccessSave) {
+      return;
+    }
+    recordSuccessfulLogin({
+      identifier: pendingQuickAccessSave.identifier,
+      password: pendingQuickAccessSave.password,
+      user: pendingQuickAccessSave.user,
+    });
+    const redirectTo = pendingQuickAccessSave.redirectTo;
+    setPendingQuickAccessSave(null);
+    router.push(redirectTo);
+  }
+
+  function declineQuickAccessSave() {
+    if (!pendingQuickAccessSave) {
+      return;
+    }
+    const redirectTo = pendingQuickAccessSave.redirectTo;
+    setPendingQuickAccessSave(null);
+    router.push(redirectTo);
+  }
+
+  async function performLogin(
+    identifier: string,
+    password: string,
+    options?: { fromQuickAccess?: boolean },
+  ) {
     setError('');
     try {
       const session = await api<Session>('/auth/login', {
@@ -39,8 +84,20 @@ export default function LoginPage() {
         body: JSON.stringify({ identifier, password }),
       });
       setStoredSession(session);
-      recordSuccessfulLogin({ identifier, password, user: session.user });
-      router.push(session.user.role === 'SEPLAN_ADMIN' ? '/seplan' : '/secretaria');
+      const redirectTo = session.user.role === 'SEPLAN_ADMIN' ? '/seplan' : '/secretaria';
+
+      if (options?.fromQuickAccess || hasQuickAccessEntry(identifier)) {
+        recordSuccessfulLogin({ identifier, password, user: session.user });
+        router.push(redirectTo);
+        return;
+      }
+
+      setPendingQuickAccessSave({
+        identifier,
+        password,
+        user: session.user,
+        redirectTo,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login.');
     }
@@ -138,12 +195,42 @@ export default function LoginPage() {
 
             <LoginQuickAccess
               disabled={isSubmitting}
-              onQuickLogin={(identifier, password) => void performLogin(identifier, password)}
+              onQuickLogin={(identifier, password) =>
+                void performLogin(identifier, password, { fromQuickAccess: true })
+              }
             />
           </div>
         </div>
 
       </section>
+
+      <AlertDialog
+        open={pendingQuickAccessSave !== null}
+        onOpenChange={(open) => {
+          if (!open && pendingQuickAccessSave) {
+            declineQuickAccessSave();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Salvar atalho neste dispositivo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A senha ficará guardada apenas neste navegador para entrar com um clique. Qualquer pessoa com
+              acesso ao computador poderá usar o atalho. Você pode remover depois em &quot;Esquecer atalhos
+              neste dispositivo&quot;.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" onClick={declineQuickAccessSave}>
+              Não salvar
+            </AlertDialogCancel>
+            <Button type="button" onClick={confirmQuickAccessSave}>
+              Sim, salvar atalho
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
