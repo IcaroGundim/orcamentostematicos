@@ -18,11 +18,17 @@ function databaseUnavailable() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
-  if (!body?.email || !body?.password) return badRequest('E-mail e senha são obrigatórios.');
+  const rawIdentifier = body?.identifier ?? body?.email;
+  if (!rawIdentifier || !body?.password) {
+    return badRequest('Informe e-mail ou nome de usuário e a senha.');
+  }
+  const identifier = String(rawIdentifier).toLowerCase().trim();
 
   let user;
   try {
-    user = await prisma.user.findUnique({ where: { email: String(body.email).toLowerCase() } });
+    user = await prisma.user.findFirst({
+      where: { OR: [{ email: identifier }, { username: identifier }] },
+    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

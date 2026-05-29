@@ -87,8 +87,6 @@ import type { BudgetAction, Metadata, Summary, ThematicAssignment, ThemeBudget, 
 type FormInput = ValidationFormInput;
 type FormValues = ValidationFormValues;
 
-const allValue = 'ALL';
-
 const initialAssignment = {
   theme: 'OSG' as ThemeBudget,
   axis: '',
@@ -107,9 +105,6 @@ export default function SecretariaPage() {
   const [selectedActionId, setSelectedActionId] = useState('');
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [assignment, setAssignment] = useState(initialAssignment);
-  const [unitFilter, setUnitFilter] = useState(allValue);
-  const [actionFilter, setActionFilter] = useState('');
-  const [themeFilter, setThemeFilter] = useState(allValue);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [removePopoverOpen, setRemovePopoverOpen] = useState(false);
   const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
@@ -579,32 +574,6 @@ export default function SecretariaPage() {
     (current?.status === 'RASCUNHO' ||
       current?.status === 'DEVOLVIDO' ||
       current?.status === 'DEVOLVIDO_REVISOR');
-  const units = useMemo(() => {
-    const map = new Map<string, { code: string; name: string }>();
-    for (const action of actions) {
-      if (!map.has(action.unitCode)) {
-        map.set(action.unitCode, { code: action.unitCode, name: action.unitName });
-      }
-    }
-    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
-  }, [actions]);
-
-  const filteredActions = useMemo(() => {
-    const search = normalize(actionFilter);
-    return actions.filter((action) => {
-      if (unitFilter !== allValue && action.unitCode !== unitFilter) return false;
-      if (themeFilter !== allValue && !action.assignments.some((item) => item.theme === themeFilter)) return false;
-      if (!search) return true;
-      return [
-        action.application,
-        action.functionalProgram,
-        action.projectActivity,
-        action.organizationName,
-        action.unitName,
-      ].some((value) => normalize(value).includes(search));
-    });
-  }, [actions, actionFilter, themeFilter, unitFilter]);
-
   const selectedAction = actions.find((action) => action.id === selectedActionId);
   const currentTheme = assignment.theme;
   const axes = metadata?.axes[currentTheme] ?? [];
@@ -943,8 +912,4 @@ export default function SecretariaPage() {
       </Tabs>
     </main>
   );
-}
-
-function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }

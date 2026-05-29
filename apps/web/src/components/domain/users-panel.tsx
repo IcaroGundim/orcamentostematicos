@@ -9,7 +9,9 @@ import {
   PlusIcon,
   SearchIcon,
   Trash2Icon,
+  UserPlusIcon,
   UsersIcon,
+  XIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -78,6 +80,7 @@ type FormState = {
   id?: string;
   name: string;
   email: string;
+  username: string;
   password: string;
   role: UserRole;
   organizationCode: string;
@@ -88,6 +91,7 @@ type FormState = {
 const emptyForm: FormState = {
   name: '',
   email: '',
+  username: '',
   password: '',
   role: 'SECRETARIA_REPRESENTANTE',
   organizationCode: '',
@@ -113,6 +117,7 @@ function formFromUser(user: UserSummary): FormState {
     id: user.id,
     name: user.name,
     email: user.email,
+    username: user.username ?? '',
     password: '',
     role: user.role,
     organizationCode: user.organizationCode ?? '',
@@ -134,6 +139,7 @@ async function saveUserForm(form: FormState): Promise<void> {
   const payload: Record<string, unknown> = {
     name: form.name,
     email: form.email,
+    username: form.username.trim() || null,
     role: form.role,
     organizationCode: form.organizationCode || null,
     unitCode: form.unitCode || null,
@@ -158,9 +164,10 @@ export function UsersPanel({ organizations }: Props) {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<FormState>(emptyForm);
-  const [createSaving, setCreateSaving] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = useState<UserSummary | null>(null);
 
@@ -232,19 +239,38 @@ export function UsersPanel({ organizations }: Props) {
     });
   }
 
-  async function submitCreate() {
-    setCreateSaving(true);
+  function openCreate() {
+    setFormMode('create');
+    setForm(emptyForm);
+    setEditingUserId(null);
+  }
+
+  function openEdit(user: UserSummary) {
+    setFormMode('edit');
+    setForm(formFromUser(user));
+    setEditingUserId(user.id);
+  }
+
+  function closeForm() {
+    setFormMode(null);
+    setForm(emptyForm);
+    setEditingUserId(null);
+  }
+
+  async function submitForm() {
+    const wasCreate = formMode === 'create';
+    setSaving(true);
     try {
-      await saveUserForm(createForm);
-      setCreateOpen(false);
-      setCreateForm(emptyForm);
+      await saveUserForm(form);
       await reload();
+      // Em criação, mantém o card aberto e limpo para novo cadastro.
+      if (wasCreate) setForm(emptyForm);
     } catch (err) {
       if (!(err instanceof Error && err.message === 'validation')) {
         toast.error(err instanceof Error ? err.message : 'Erro ao salvar.');
       }
     } finally {
-      setCreateSaving(false);
+      setSaving(false);
     }
   }
 
@@ -253,6 +279,7 @@ export function UsersPanel({ organizations }: Props) {
     try {
       await api(`/users/${confirmDelete.id}`, { method: 'DELETE' });
       toast.success('Usuário excluído.');
+      if (editingUserId === confirmDelete.id) closeForm();
       setConfirmDelete(null);
       await reload();
     } catch (err) {
@@ -261,48 +288,22 @@ export function UsersPanel({ organizations }: Props) {
   }
 
   return (
-    <Card>
+    <>
+      <section className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+      <Card className="min-w-0">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <CardTitle>Usuários por secretaria</CardTitle>
             <CardDescription>
               Controle quem atua em cada secretaria/unidade, papel atribuído, presença e
               histórico de ações.
             </CardDescription>
           </div>
-          <Popover
-            modal={false}
-            open={createOpen}
-            onOpenChange={(open) => {
-              setCreateOpen(open);
-              if (!open) setCreateForm(emptyForm);
-            }}
-          >
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setCreateForm(emptyForm);
-                  setCreateOpen(true);
-                }}
-              >
-                <PlusIcon className="size-4" />
-                Novo usuário
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" side="bottom" className="w-[min(96vw,24rem)] p-0">
-              <UserFormContent
-                title="Novo usuário"
-                description="Defina papel e vínculo com a secretaria/unidade. Usuários inativos não conseguem fazer login."
-                form={createForm}
-                setForm={setCreateForm}
-                organizations={organizations}
-                saving={createSaving}
-                onSubmit={() => void submitCreate()}
-              />
-            </PopoverContent>
-          </Popover>
+          <Button size="sm" onClick={openCreate}>
+            <PlusIcon className="size-4" />
+            Novo usuário
+          </Button>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
@@ -316,7 +317,7 @@ export function UsersPanel({ organizations }: Props) {
             />
           </div>
           <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as 'ALL' | UserRole)}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Papel" />
             </SelectTrigger>
             <SelectContent>
@@ -327,7 +328,7 @@ export function UsersPanel({ organizations }: Props) {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-full sm:w-[160px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -378,9 +379,9 @@ export function UsersPanel({ organizations }: Props) {
                         <UserRow
                           key={u.id}
                           user={u}
-                          organizations={organizations}
+                          onEdit={() => openEdit(u)}
                           onDelete={() => setConfirmDelete(u)}
-                          onSaved={() => void reload()}
+                          isEditing={editingUserId === u.id}
                         />
                       ))}
                     </div>
@@ -391,6 +392,18 @@ export function UsersPanel({ organizations }: Props) {
           </div>
         )}
       </CardContent>
+      </Card>
+
+      <UserFormCard
+        mode={formMode}
+        form={form}
+        setForm={setForm}
+        organizations={organizations}
+        saving={saving}
+        onSubmit={() => void submitForm()}
+        onClose={closeForm}
+      />
+      </section>
 
       <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <AlertDialogContent>
@@ -408,37 +421,64 @@ export function UsersPanel({ organizations }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </>
   );
 }
 
-interface UserFormContentProps {
-  title: string;
-  description: string;
+interface UserFormCardProps {
+  mode: 'create' | 'edit' | null;
   form: FormState;
   setForm: (form: FormState) => void;
   organizations: GovernmentOrganizationCatalog[];
   saving: boolean;
   onSubmit: () => void;
+  onClose: () => void;
 }
 
-function UserFormContent({
-  title,
-  description,
+function UserFormCard({
+  mode,
   form,
   setForm,
   organizations,
   saving,
   onSubmit,
-}: UserFormContentProps) {
+  onClose,
+}: UserFormCardProps) {
   const orgUnits = organizations.find((o) => o.code === form.organizationCode)?.units ?? [];
 
+  if (mode === null) {
+    return (
+      <Card className="h-fit min-w-0 self-start">
+        <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+          <UserPlusIcon className="size-8 text-muted-foreground/60" />
+          <p className="text-sm text-muted-foreground">
+            Selecione um usuário para editar ou clique em <span className="font-medium text-foreground">Novo usuário</span> para cadastrar.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <div className="flex max-h-[min(85vh,40rem)] flex-col gap-3 overflow-y-auto p-4">
-      <div className="space-y-1">
-        <p className="font-semibold leading-none">{title}</p>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+    <Card className="h-fit min-w-0 gap-0 self-start">
+      <CardHeader className="relative border-b border-border">
+        <CardTitle>{mode === 'edit' ? 'Editar usuário' : 'Novo usuário'}</CardTitle>
+        <CardDescription>
+          Defina papel e vínculo com a secretaria/unidade. Usuários inativos não conseguem fazer login.
+        </CardDescription>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="absolute right-3 top-3 size-7 text-muted-foreground"
+          title="Fechar"
+          aria-label="Fechar"
+          onClick={onClose}
+        >
+          <XIcon className="size-4" />
+        </Button>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 pt-4">
       <Field label="Nome">
         <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </Field>
@@ -447,6 +487,15 @@ function UserFormContent({
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
+        />
+      </Field>
+      <Field label="Nome de usuário (opcional)">
+        <Input
+          value={form.username}
+          autoCapitalize="none"
+          autoComplete="off"
+          placeholder="Usado para login, além do e-mail"
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
         />
       </Field>
       <Field label={form.id ? 'Nova senha (opcional)' : 'Senha inicial'}>
@@ -510,25 +559,27 @@ function UserFormContent({
         />
         Ativo
       </label>
-      <Button onClick={onSubmit} disabled={saving} className="w-full">
-        {saving ? 'Salvando...' : 'Salvar'}
-      </Button>
-    </div>
+      <div className="mt-1 flex gap-2">
+        <Button variant="outline" onClick={onClose} disabled={saving} className="flex-1">
+          Cancelar
+        </Button>
+        <Button onClick={onSubmit} disabled={saving} className="flex-1">
+          {saving ? 'Salvando...' : 'Salvar'}
+        </Button>
+      </div>
+      </CardContent>
+    </Card>
   );
 }
 
 interface UserRowProps {
   user: UserSummary;
-  organizations: GovernmentOrganizationCatalog[];
+  onEdit: () => void;
   onDelete: () => void;
-  onSaved: () => void;
+  isEditing: boolean;
 }
 
-function UserRow({ user, organizations, onDelete, onSaved }: UserRowProps) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState<FormState>(() => formFromUser(user));
-  const [editSaving, setEditSaving] = useState(false);
-
+function UserRow({ user, onEdit, onDelete, isEditing }: UserRowProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<UserActivityEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -544,23 +595,13 @@ function UserRow({ user, organizations, onDelete, onSaved }: UserRowProps) {
       .finally(() => setHistoryLoading(false));
   }, [historyOpen, user.id]);
 
-  async function submitEdit() {
-    setEditSaving(true);
-    try {
-      await saveUserForm(editForm);
-      setEditOpen(false);
-      onSaved();
-    } catch (err) {
-      if (!(err instanceof Error && err.message === 'validation')) {
-        toast.error(err instanceof Error ? err.message : 'Erro ao salvar.');
-      }
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-3">
+    <div
+      className={cn(
+        'flex flex-wrap items-start justify-between gap-3 px-3 py-3 transition-colors',
+        isEditing && 'bg-muted/50',
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{user.name}</span>
@@ -592,7 +633,7 @@ function UserRow({ user, organizations, onDelete, onSaved }: UserRowProps) {
           ) : null}
         </div>
       </div>
-      <div className="flex flex-shrink-0 gap-1">
+      <div className="ml-auto flex flex-shrink-0 gap-1">
         <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
           <PopoverTrigger asChild>
             <Button size="sm" variant="ghost" title="Histórico">
@@ -636,39 +677,15 @@ function UserRow({ user, organizations, onDelete, onSaved }: UserRowProps) {
           </PopoverContent>
         </Popover>
 
-        <Popover
-          modal={false}
-          open={editOpen}
-          onOpenChange={(open) => {
-            setEditOpen(open);
-            if (open) setEditForm(formFromUser(user));
-          }}
+        <Button
+          size="sm"
+          variant={isEditing ? 'secondary' : 'ghost'}
+          title="Editar"
+          aria-pressed={isEditing}
+          onClick={onEdit}
         >
-          <PopoverTrigger asChild>
-            <Button
-              size="sm"
-              variant="ghost"
-              title="Editar"
-              onClick={() => {
-                setEditForm(formFromUser(user));
-                setEditOpen(true);
-              }}
-            >
-              <PencilIcon className="size-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" side="bottom" className="w-[min(96vw,24rem)] p-0">
-            <UserFormContent
-              title="Editar usuário"
-              description="Defina papel e vínculo com a secretaria/unidade. Usuários inativos não conseguem fazer login."
-              form={editForm}
-              setForm={setEditForm}
-              organizations={organizations}
-              saving={editSaving}
-              onSubmit={() => void submitEdit()}
-            />
-          </PopoverContent>
-        </Popover>
+          <PencilIcon className="size-4" />
+        </Button>
 
         <Button size="sm" variant="ghost" onClick={onDelete} title="Excluir">
           <Trash2Icon className="size-4 text-destructive" />

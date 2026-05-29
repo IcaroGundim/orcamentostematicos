@@ -12,11 +12,12 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   await prisma.user.upsert({
     where: { email: 'admin@seplan.ac.gov.br' },
-    update: {},
+    update: { username: 'admin' },
     create: {
       id: 'user-seplan-admin',
       name: 'Administrador SEPLAN',
       email: 'admin@seplan.ac.gov.br',
+      username: 'admin',
       password: 'admin123',
       role: 'SEPLAN_ADMIN',
     },
@@ -24,11 +25,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'semulher@ac.gov.br' },
-    update: {},
+    update: { username: 'semulher' },
     create: {
       id: 'user-semulher',
       name: 'Representante SEMULHER',
       email: 'semulher@ac.gov.br',
+      username: 'semulher',
       password: 'secretaria123',
       role: 'SECRETARIA_REPRESENTANTE',
       organizationCode: '762',
@@ -37,11 +39,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'sesacre@ac.gov.br' },
-    update: {},
+    update: { username: 'sesacre' },
     create: {
       id: 'user-sesacre',
       name: 'Representante SESACRE',
       email: 'sesacre@ac.gov.br',
+      username: 'sesacre',
       password: 'secretaria123',
       role: 'SECRETARIA_REPRESENTANTE',
       organizationCode: '721',
@@ -50,11 +53,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'revisor.semulher@ac.gov.br' },
-    update: {},
+    update: { username: 'revisor.semulher' },
     create: {
       id: 'user-revisor-semulher',
       name: 'Revisor SEMULHER',
       email: 'revisor.semulher@ac.gov.br',
+      username: 'revisor.semulher',
       password: 'secretaria123',
       role: 'SECRETARIA_REVISOR',
       organizationCode: '762',
@@ -63,11 +67,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'revisor.sesacre@ac.gov.br' },
-    update: {},
+    update: { username: 'revisor.sesacre' },
     create: {
       id: 'user-revisor-sesacre',
       name: 'Revisor SESACRE',
       email: 'revisor.sesacre@ac.gov.br',
+      username: 'revisor.sesacre',
       password: 'secretaria123',
       role: 'SECRETARIA_REVISOR',
       organizationCode: '721',

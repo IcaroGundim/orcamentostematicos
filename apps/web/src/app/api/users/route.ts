@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
       id: true,
       name: true,
       email: true,
+      username: true,
       role: true,
       organizationCode: true,
       unitCode: true,
@@ -97,6 +98,7 @@ export async function GET(req: NextRequest) {
       id: u.id,
       name: u.name,
       email: u.email,
+      username: u.username,
       role: u.role,
       organizationCode: u.organizationCode,
       unitCode: u.unitCode,
@@ -129,10 +131,17 @@ export async function POST(req: NextRequest) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return conflict('Já existe um usuário com este e-mail.');
 
+  const username = body.username ? String(body.username).toLowerCase().trim() : null;
+  if (username) {
+    const usernameTaken = await prisma.user.findUnique({ where: { username } });
+    if (usernameTaken) return conflict('Já existe um usuário com este nome de usuário.');
+  }
+
   const created = await prisma.user.create({
     data: {
       name: String(body.name).trim(),
       email,
+      username,
       password: String(body.password),
       role: body.role,
       organizationCode: body.organizationCode || null,
@@ -148,7 +157,7 @@ export async function POST(req: NextRequest) {
     entityId: created.id,
     organizationCode: created.organizationCode,
     unitCode: created.unitCode,
-    metadata: { name: created.name, email: created.email, role: created.role },
+    metadata: { name: created.name, email: created.email, username: created.username, role: created.role },
   });
 
   const { password: _pw, ...safe } = created;

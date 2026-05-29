@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { api, setStoredSession, type Session } from '@/lib/api';
 
 const schema = z.object({
-  email: z.string().email(),
+  identifier: z.string().min(1, 'Informe seu e-mail ou nome de usuário.'),
   password: z.string().min(3),
 });
 
@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { identifier: '', password: '' },
   });
   const isSubmitting = form.formState.isSubmitting;
 
@@ -98,8 +98,8 @@ export default function LoginPage() {
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="email">E-mail</FieldLabel>
-                  <Input id="email" type="email" autoComplete="email" disabled={isSubmitting} {...form.register('email')} />
+                  <FieldLabel htmlFor="identifier">E-mail ou nome de usuário</FieldLabel>
+                  <Input id="identifier" type="text" autoComplete="username" disabled={isSubmitting} {...form.register('identifier')} />
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="password">Senha</FieldLabel>

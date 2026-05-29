@@ -110,6 +110,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username?: string | null;
   role: UserRole;
   organizationCode?: string;
   unitCode?: string;
@@ -121,6 +122,7 @@ export interface UserSummary {
   id: string;
   name: string;
   email: string;
+  username: string | null;
   role: UserRole;
   organizationCode: string | null;
   unitCode: string | null;

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { badRequest, forbidden, getAuthUser, notFound, ok, unauthorized } from '@/lib/auth-server';
+import { badRequest, conflict, forbidden, getAuthUser, notFound, ok, unauthorized } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { logUserActivity } from '@/lib/user-activity';
 import type { UserRole } from '@/types/domain';
@@ -21,6 +21,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data: Record<string, unknown> = {};
   if (body.name !== undefined) data.name = String(body.name).trim();
   if (body.email !== undefined) data.email = String(body.email).toLowerCase().trim();
+  if (body.username !== undefined) {
+    const username = body.username ? String(body.username).toLowerCase().trim() : null;
+    if (username) {
+      const taken = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+      if (taken && taken.id !== id) {
+        return conflict('Já existe um usuário com este nome de usuário.');
+      }
+    }
+    data.username = username;
+  }
   if (body.password) data.password = String(body.password);
   if (body.role !== undefined) data.role = body.role;
   if (body.organizationCode !== undefined) data.organizationCode = body.organizationCode || null;

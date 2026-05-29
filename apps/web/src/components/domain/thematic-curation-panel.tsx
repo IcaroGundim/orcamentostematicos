@@ -34,6 +34,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ThemeBadge } from '@/components/domain/badges';
+import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
+import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import {
   SearchableCombobox,
@@ -51,6 +53,7 @@ import {
   shouldHideWeightingFactor,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
+import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { cn } from '@/lib/utils';
 import type {
   BudgetAction,
@@ -439,9 +442,6 @@ function CurationBulkSelectionToolbar({
   );
 }
 
-const filterFieldLabelClass =
-  'text-[10px] font-semibold uppercase tracking-wide text-muted-foreground';
-
 type CurationUnitOption = {
   code: string;
   name: string;
@@ -449,6 +449,7 @@ type CurationUnitOption = {
 };
 
 type CurationActionsFiltersProps = {
+  actions: BudgetAction[];
   showOrgFilter: boolean;
   organizationFilter: string;
   onOrganizationFilterChange: (value: string) => void;
@@ -456,6 +457,10 @@ type CurationActionsFiltersProps = {
   unitFilter: string;
   onUnitFilterChange: (value: string) => void;
   units: CurationUnitOption[];
+  functionFilter: string;
+  onFunctionFilterChange: (value: string) => void;
+  subfunctionFilter: string;
+  onSubfunctionFilterChange: (value: string) => void;
   actionFilter: string;
   onActionFilterChange: (value: string) => void;
   themeFilter: string;
@@ -468,6 +473,7 @@ const themeComboboxItems: SearchableComboboxItem[] = [
 ];
 
 function CurationActionsFilters({
+  actions,
   showOrgFilter,
   organizationFilter,
   onOrganizationFilterChange,
@@ -475,6 +481,10 @@ function CurationActionsFilters({
   unitFilter,
   onUnitFilterChange,
   units,
+  functionFilter,
+  onFunctionFilterChange,
+  subfunctionFilter,
+  onSubfunctionFilterChange,
   actionFilter,
   onActionFilterChange,
   themeFilter,
@@ -503,60 +513,77 @@ function CurationActionsFilters({
 
   return (
     <div className="w-full border-t border-border/60 bg-background px-3 py-3">
-      <div
-        className={cn(
-          'grid w-full gap-3',
-          showOrgFilter
-            ? 'sm:grid-cols-2 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_minmax(0,0.8fr)]'
-            : 'sm:grid-cols-2 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)_minmax(0,0.8fr)]',
-        )}
-      >
-        {showOrgFilter ? (
+      <div className="flex w-full flex-col gap-3">
+        <div
+          className={cn(
+            'grid w-full gap-3',
+            showOrgFilter
+              ? 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
+              : 'sm:grid-cols-2 lg:grid-cols-3',
+          )}
+        >
+          {showOrgFilter ? (
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
+              <SearchableCombobox
+                className="relative w-full"
+                value={organizationFilter}
+                onChange={onOrganizationFilterChange}
+                placeholder="Todos os órgãos"
+                items={orgComboboxItems}
+              />
+            </Field>
+          ) : null}
           <Field className="min-w-0 gap-1.5">
-            <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
+            <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
             <SearchableCombobox
               className="relative w-full"
-              value={organizationFilter}
-              onChange={onOrganizationFilterChange}
-              placeholder="Todos os órgãos"
-              items={orgComboboxItems}
+              value={unitFilter}
+              onChange={onUnitFilterChange}
+              placeholder="Todas as unidades"
+              items={unitComboboxItems}
             />
           </Field>
-        ) : null}
-        <Field className="min-w-0 gap-1.5">
-          <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
-          <SearchableCombobox
-            className="relative w-full"
-            value={unitFilter}
-            onChange={onUnitFilterChange}
-            placeholder="Todas as unidades"
-            items={unitComboboxItems}
+          <FunctionalClassificationFilters
+            actions={actions}
+            functionFilter={functionFilter}
+            subfunctionFilter={subfunctionFilter}
+            onFunctionChange={onFunctionFilterChange}
+            onSubfunctionChange={onSubfunctionFilterChange}
+            allValue={ALL}
           />
-        </Field>
-        <Field className="min-w-0 gap-1.5 sm:col-span-2 lg:col-span-1">
-          <FieldLabel className={filterFieldLabelClass}>Busca</FieldLabel>
-          <div className="relative w-full">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              className="w-full pl-9"
-              placeholder="Ação ou programa"
-              autoComplete="off"
-              value={actionFilter}
-              onChange={(event) => onActionFilterChange(event.target.value)}
+        </div>
+        <div
+          className={cn(
+            'grid w-full gap-3',
+            'sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]',
+          )}
+        >
+          <Field className="min-w-0 gap-1.5">
+            <FieldLabel className={filterFieldLabelClass}>Busca</FieldLabel>
+            <div className="relative w-full">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                className="w-full pl-9"
+                placeholder="Ação ou programa"
+                autoComplete="off"
+                value={actionFilter}
+                onChange={(event) => onActionFilterChange(event.target.value)}
+              />
+            </div>
+          </Field>
+          <Field className="min-w-0 gap-1.5">
+            <FieldLabel className={filterFieldLabelClass}>Tema</FieldLabel>
+            <SearchableCombobox
+              className="relative w-full"
+              value={themeFilter}
+              onChange={onThemeFilterChange}
+              placeholder="Todos os temas"
+              items={themeComboboxItems}
             />
-          </div>
-        </Field>
-        <Field className="min-w-0 gap-1.5">
-          <FieldLabel className={filterFieldLabelClass}>Tema</FieldLabel>
-          <SearchableCombobox
-            className="relative w-full"
-            value={themeFilter}
-            onChange={onThemeFilterChange}
-            placeholder="Todos os temas"
-            items={themeComboboxItems}
-          />
-        </Field>
+          </Field>
+        </div>
       </div>
     </div>
   );
@@ -592,6 +619,8 @@ const CurationActionsCard = memo(function CurationActionsCard({
 }: CurationActionsCardProps) {
   const [organizationFilter, setOrganizationFilter] = useState(ALL);
   const [unitFilter, setUnitFilter] = useState(ALL);
+  const [functionFilter, setFunctionFilter] = useState(ALL);
+  const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [actionFilter, setActionFilter] = useState('');
   const [themeFilter, setThemeFilter] = useState(ALL);
   const [bulkSelectedActionIds, setBulkSelectedActionIds] = useState<Set<string>>(() => new Set());
@@ -658,6 +687,9 @@ const CurationActionsCard = memo(function CurationActionsCard({
       if (themeFilter !== ALL && !action.assignments.some((item) => item.theme === themeFilter)) {
         return false;
       }
+      if (!actionMatchesFunctionalFilters(action, functionFilter, subfunctionFilter, ALL)) {
+        return false;
+      }
       if (!search) return true;
       return [
         action.application,
@@ -667,7 +699,7 @@ const CurationActionsCard = memo(function CurationActionsCard({
         action.unitName,
       ].some((value) => normalize(value).includes(search));
     });
-  }, [actions, actionFilter, themeFilter, unitFilter, organizationFilter]);
+  }, [actions, actionFilter, themeFilter, unitFilter, organizationFilter, functionFilter, subfunctionFilter]);
 
   const virtualizer = useVirtualizer({
     count: filteredActions.length,
@@ -791,6 +823,7 @@ const CurationActionsCard = memo(function CurationActionsCard({
           ) : null}
         </div>
         <CurationActionsFilters
+          actions={actions}
           showOrgFilter={showOrgFilter}
           organizationFilter={organizationFilter}
           onOrganizationFilterChange={(value) => {
@@ -801,6 +834,10 @@ const CurationActionsCard = memo(function CurationActionsCard({
           unitFilter={unitFilter}
           onUnitFilterChange={setUnitFilter}
           units={units}
+          functionFilter={functionFilter}
+          onFunctionFilterChange={setFunctionFilter}
+          subfunctionFilter={subfunctionFilter}
+          onSubfunctionFilterChange={setSubfunctionFilter}
           actionFilter={actionFilter}
           onActionFilterChange={setActionFilter}
           themeFilter={themeFilter}

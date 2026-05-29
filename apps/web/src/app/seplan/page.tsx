@@ -84,6 +84,7 @@ import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
+import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
@@ -103,6 +104,7 @@ import {
   patchBulkActionAssignments,
   type BulkRemoveThemeFilter,
 } from '@/lib/curation-actions';
+import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import {
   buildAxisExecutionReport,
   buildClassificationExecutionReport,
@@ -125,6 +127,7 @@ import type {
 import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
 import { GovernmentStructurePanel } from '@/components/domain/government-structure-panel';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
+import { functionalColumnFilterMatches, type FunctionalColumnFilterValue } from '@/lib/functional-classification';
 import { ThematicCurationPanel, type AssignmentForm } from '@/components/domain/thematic-curation-panel';
 import { UsersPanel } from '@/components/domain/users-panel';
 import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
@@ -167,6 +170,8 @@ type ActionColumnFilters = {
   organizationCode: string;
   application: string;
   theme: string;
+  functionCode: string;
+  subfunctionCode: string;
 };
 
 const allValue = 'ALL';
@@ -217,6 +222,8 @@ export default function SeplanPage() {
     organizationCode: allValue,
     application: '',
     theme: allValue,
+    functionCode: allValue,
+    subfunctionCode: allValue,
   });
   const [themePopoverOpen, setThemePopoverOpen] = useState(false);
   const [qddPopoverOpen, setQddPopoverOpen] = useState(false);
@@ -628,6 +635,18 @@ export default function SeplanPage() {
           </div>
         ),
       },
+      {
+        id: 'functionalProgram',
+        accessorKey: 'functionalProgram',
+        header: 'Função programática',
+        enableHiding: true,
+        filterFn: (row, _columnId, filterValue) =>
+          functionalColumnFilterMatches(
+            row.original,
+            filterValue as FunctionalColumnFilterValue | undefined,
+            allValue,
+          ),
+      },
     ],
     [expandedActionId],
   );
@@ -647,22 +666,44 @@ export default function SeplanPage() {
       filters.push({ id: 'assignments', value: columnFilters.theme });
     }
 
+    if (columnFilters.functionCode !== allValue || columnFilters.subfunctionCode !== allValue) {
+      filters.push({
+        id: 'functionalProgram',
+        value: {
+          functionCode: columnFilters.functionCode,
+          subfunctionCode: columnFilters.subfunctionCode,
+        },
+      });
+    }
+
     return filters;
-  }, [columnFilters.application, columnFilters.organizationCode, columnFilters.theme]);
+  }, [
+    columnFilters.application,
+    columnFilters.functionCode,
+    columnFilters.organizationCode,
+    columnFilters.subfunctionCode,
+    columnFilters.theme,
+  ]);
 
-  const handleColumnFiltersChange = useCallback((nextFilters: ActionColumnFilters) => {
-    setColumnFilters((currentFilters) => {
-      if (
-        currentFilters.organizationCode === nextFilters.organizationCode &&
-        currentFilters.application === nextFilters.application &&
-        currentFilters.theme === nextFilters.theme
-      ) {
-        return currentFilters;
-      }
+  const handleColumnFiltersChange = useCallback(
+    (nextFilters: ActionColumnFilters | ((current: ActionColumnFilters) => ActionColumnFilters)) => {
+      setColumnFilters((currentFilters) => {
+        const next = typeof nextFilters === 'function' ? nextFilters(currentFilters) : nextFilters;
+        if (
+          currentFilters.organizationCode === next.organizationCode &&
+          currentFilters.application === next.application &&
+          currentFilters.theme === next.theme &&
+          currentFilters.functionCode === next.functionCode &&
+          currentFilters.subfunctionCode === next.subfunctionCode
+        ) {
+          return currentFilters;
+        }
 
-      return nextFilters;
-    });
-  }, []);
+        return next;
+      });
+    },
+    [],
+  );
 
   const openStructureSection = useCallback(() => {
     setQddPopoverOpen(false);
@@ -680,6 +721,7 @@ export default function SeplanPage() {
     state: {
       globalFilter: filter,
       columnFilters: tableColumnFilters,
+      columnVisibility: { functionalProgram: false },
     },
     onGlobalFilterChange: setFilter,
     getCoreRowModel: getCoreRowModel(),
@@ -1993,6 +2035,7 @@ function ActionsTableCard({
   title,
   description,
   table,
+  actions,
   organizations,
   themeSummary,
   qddStats,
@@ -2008,12 +2051,13 @@ function ActionsTableCard({
   title: string;
   description: string;
   table: ReturnType<typeof useReactTable<BudgetAction>>;
+  actions: BudgetAction[];
   organizations: { code: string; name: string }[];
   themeSummary: { theme: ThemeBudget; actions: number; liquidated: number }[];
   qddStats: { organizationCount: number; unitCount: number; expenseLineCount: number; actionCount: number };
   onOpenStructure: () => void;
   columnFilters: ActionColumnFilters;
-  onColumnFiltersChange: (filters: ActionColumnFilters) => void;
+  onColumnFiltersChange: (filters: ActionColumnFilters | ((current: ActionColumnFilters) => ActionColumnFilters)) => void;
   themePopoverOpen: boolean;
   onThemePopoverOpenChange: (open: boolean) => void;
   qddPopoverOpen: boolean;
@@ -2087,6 +2131,26 @@ function ActionsTableCard({
               </SelectGroup>
             </SelectContent>
           </Select>
+          <FunctionalClassificationFilters
+            actions={actions}
+            functionFilter={columnFilters.functionCode}
+            subfunctionFilter={columnFilters.subfunctionCode}
+            onFunctionChange={(value) =>
+              onColumnFiltersChange((current) => ({
+                ...current,
+                functionCode: value,
+                subfunctionCode: allValue,
+              }))
+            }
+            onSubfunctionChange={(value) =>
+              onColumnFiltersChange((current) => ({
+                ...current,
+                subfunctionCode: value,
+              }))
+            }
+            allValue={allValue}
+            className="w-44"
+          />
         </CardAction>
       </CardHeader>
       <CardContent>

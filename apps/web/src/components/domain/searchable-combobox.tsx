@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -31,24 +32,12 @@ export type SearchableComboboxProps = {
 function normalize(value: string) {
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
 }
 
-function hitsForeignOverlayTarget(x: number, y: number, container: HTMLElement | null) {
-  if (!container) return false;
-
-  return document.elementsFromPoint(x, y).some((element) => {
-    if (!(element instanceof Element)) return false;
-    if (container.contains(element)) return false;
-    return Boolean(
-      element.closest('[data-slot="select-trigger"]') ||
-        element.closest('[data-slot="select-content"]') ||
-        element.closest('[data-slot="searchable-combobox"]'),
-    );
-  });
-}
+type MenuPosition = { top: number; left: number; width: number };
 
 export function SearchableCombobox({
   value,
@@ -60,7 +49,9 @@ export function SearchableCombobox({
 }: SearchableComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [position, setPosition] = useState<MenuPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const selected = items.find((item) => item.value === value);
   const displayValue = selected?.label ?? '';
@@ -77,35 +68,54 @@ export function SearchableCombobox({
     setInputValue('');
   }
 
+  const updatePosition = useCallback(() => {
+    const trigger = containerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const gap = 4;
+    const margin = 8;
+    const width = matchTriggerWidth
+      ? rect.width
+      : Math.min(320, window.innerWidth - margin * 2);
+    const maxLeft = window.innerWidth - margin - width;
+    const left = Math.max(margin, Math.min(rect.left, maxLeft));
+    setPosition({ top: rect.bottom + gap, left, width });
+  }, [matchTriggerWidth]);
+
+  // Recalcula a posição ao abrir e mantém alinhado durante scroll/resize.
+  useEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open, updatePosition]);
+
   useEffect(() => {
     if (!open) return;
 
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      const inside = containerRef.current?.contains(target) ?? false;
-      const foreignTarget = hitsForeignOverlayTarget(
-        event.clientX,
-        event.clientY,
-        containerRef.current,
+    function isInside(target: Node) {
+      return (
+        (containerRef.current?.contains(target) ?? false) ||
+        (contentRef.current?.contains(target) ?? false)
       );
+    }
 
-      if (!inside || foreignTarget) {
+    function handlePointerDown(event: PointerEvent) {
+      if (!isInside(event.target as Node)) {
         closeCombobox();
       }
     }
 
     function handleFocusIn(event: FocusEvent) {
-      const target = event.target as Node;
-      if (containerRef.current?.contains(target)) return;
-
-      if (target instanceof Element) {
-        if (
-          target.closest('[data-slot="select-trigger"]') ||
-          target.closest('[data-slot="select-content"]') ||
-          target.closest('[data-slot="searchable-combobox"]')
-        ) {
-          closeCombobox();
-        }
+      if (!isInside(event.target as Node)) {
+        closeCombobox();
       }
     }
 
@@ -164,44 +174,58 @@ export function SearchableCombobox({
         />
         <ChevronDownIcon className={dropdownChevronClassName} />
       </div>
-      {open && !disabled ? (
-        <div
-          data-slot="searchable-combobox-content"
-          role="listbox"
-          className={cn(
-            'absolute z-50 mt-1 animate-in fade-in-0 zoom-in-95 duration-150',
-            dropdownContentClassName,
-            matchTriggerWidth ? 'left-0 right-0 w-full min-w-0' : 'right-0 w-80 sm:right-auto sm:left-0',
-          )}
-        >
-          {filtered.length > 0 ? (
-            filtered.map((item) => (
-              <button
-                key={item.value || '__empty__'}
-                type="button"
-                data-highlighted={undefined}
-                data-state={item.value === value ? 'checked' : undefined}
-                className={dropdownItemClassName}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(item.value);
-                  setInputValue('');
-                  setOpen(false);
-                }}
-              >
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                <span className={dropdownItemIndicatorClassName}>
-                  {item.value === value ? (
-                    <CheckIcon className="size-4 shrink-0" />
-                  ) : null}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className={dropdownEmptyClassName}>Nenhum resultado</div>
-          )}
-        </div>
-      ) : null}
+      {open && !disabled && position
+        ? createPortal(
+            <div
+              ref={contentRef}
+              data-slot="searchable-combobox-content"
+              role="listbox"
+              // Impede que componentes de dismiss (ex.: Radix Popover com modal={false})
+              // tratem a interação no menu portado como clique "fora" e fechem o pai.
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                position: 'fixed',
+                top: position.top,
+                left: position.left,
+                width: position.width,
+              }}
+              className={cn(
+                'animate-in fade-in-0 zoom-in-95 duration-150',
+                dropdownContentClassName,
+              )}
+            >
+              <div className="max-h-[min(20rem,60vh)] overflow-y-auto overscroll-contain">
+                {filtered.length > 0 ? (
+                  filtered.map((item) => (
+                    <button
+                      key={item.value || '__empty__'}
+                      type="button"
+                      data-highlighted={undefined}
+                      data-state={item.value === value ? 'checked' : undefined}
+                      className={dropdownItemClassName}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onChange(item.value);
+                        setInputValue('');
+                        setOpen(false);
+                      }}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className={dropdownItemIndicatorClassName}>
+                        {item.value === value ? (
+                          <CheckIcon className="size-4 shrink-0" />
+                        ) : null}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className={dropdownEmptyClassName}>Nenhum resultado</div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

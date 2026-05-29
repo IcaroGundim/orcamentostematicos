@@ -5,9 +5,12 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { DatabaseIcon, SearchIcon } from 'lucide-react';
 
 import { ThemeBadge } from '@/components/domain/badges';
+import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
+import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,6 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatMoney, themeLabels } from '@/lib/api';
+import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import type { BudgetAction } from '@/types/domain';
 
 const ALL = 'ALL';
@@ -106,6 +110,8 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
+  const [functionFilter, setFunctionFilter] = useState(ALL);
+  const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [theme, setTheme] = useState(ALL);
   const [search, setSearch] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -130,9 +136,12 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       if (organizationCode !== ALL && action.organizationCode !== organizationCode) return false;
       if (unitCode !== ALL && action.unitCode !== unitCode) return false;
       if (theme !== ALL && !action.assignments.some((item) => item.theme === theme)) return false;
+      if (!actionMatchesFunctionalFilters(action, functionFilter, subfunctionFilter, ALL)) {
+        return false;
+      }
       return true;
     });
-  }, [actions, organizationCode, unitCode, theme]);
+  }, [actions, organizationCode, unitCode, theme, functionFilter, subfunctionFilter]);
 
   const displayedActions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -235,32 +244,48 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
-          <SearchableCombobox
-            className="relative w-full min-w-0"
-            value={organizationCode}
-            onChange={handleOrganizationChange}
-            placeholder="Todos os órgãos"
-            items={orgComboboxItems}
-          />
-          <Select value={unitCode} onValueChange={setUnitCode}>
-            <SelectTrigger className="w-full min-w-0">
-              <SelectValue placeholder="Todas as unidades" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectItem value={ALL}>Todas as unidades</SelectItem>
-                {units.map((unit) => (
-                  <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
-                    {unit.code} - {unit.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <div className="flex min-w-0 gap-2 sm:gap-3">
+        <div className="flex shrink-0 flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
+              <SearchableCombobox
+                className="relative w-full min-w-0"
+                value={organizationCode}
+                onChange={handleOrganizationChange}
+                placeholder="Todos os órgãos"
+                items={orgComboboxItems}
+              />
+            </Field>
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
+              <Select value={unitCode} onValueChange={setUnitCode}>
+                <SelectTrigger className="w-full min-w-0">
+                  <SelectValue placeholder="Todas as unidades" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectItem value={ALL}>Todas as unidades</SelectItem>
+                    {units.map((unit) => (
+                      <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
+                        {unit.code} - {unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <FunctionalClassificationFilters
+              actions={actions}
+              functionFilter={functionFilter}
+              subfunctionFilter={subfunctionFilter}
+              onFunctionChange={setFunctionFilter}
+              onSubfunctionChange={setSubfunctionFilter}
+              allValue={ALL}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
             <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-full min-w-[8.5rem] shrink-0 sm:w-36">
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Tema" />
               </SelectTrigger>
               <SelectContent position="popper">
@@ -274,7 +299,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <div className="relative min-w-0 flex-1">
+            <div className="relative min-w-0">
               <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar ação, programa funcional..."
