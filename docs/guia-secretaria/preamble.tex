@@ -1,0 +1,103 @@
+% preamble.tex — pacotes e estilos do Guia da Secretaria
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+\usepackage{ragged2e}
+
+\geometry{a4paper, left=2.5cm, right=2.5cm, top=2.8cm, bottom=2.5cm}
+
+% Colunas reutilizáveis para tabelas
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\Centering\arraybackslash}p{#1}}
+
+\newcommand{\guiaTableStretch}{\renewcommand{\arraystretch}{1.35}}
+
+\definecolor{seplanblue}{RGB}{0, 82, 136}
+\definecolor{seplanlight}{RGB}{230, 242, 250}
+\definecolor{repgreen}{RGB}{22, 101, 52}
+\definecolor{revblue}{RGB}{30, 64, 175}
+\definecolor{warnamber}{RGB}{180, 83, 9}
+\definecolor{tipcyan}{RGB}{14, 116, 144}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=seplanblue,
+  urlcolor=seplanblue,
+  citecolor=seplanblue,
+  pdftitle={Guia da Secretaria — Orçamentos Temáticos},
+  pdfauthor={SEPLAN — Governo do Acre},
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{Guia da Secretaria — Orçamentos Temáticos}}
+\fancyhead[R]{\small\textcolor{gray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\titleformat{\section}{\Large\bfseries\color{seplanblue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+
+\setlist[itemize]{leftmargin=1.5em, topsep=4pt, itemsep=2pt}
+\setlist[enumerate]{leftmargin=1.5em, topsep=4pt, itemsep=2pt}
+
+\newtcolorbox{boxrepresentante}{
+  breakable,
+  colback=repgreen!8,
+  colframe=repgreen!70,
+  title={\textbf{Representante}},
+  fonttitle=\bfseries\color{repgreen},
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+\newtcolorbox{boxrevisor}{
+  breakable,
+  colback=revblue!8,
+  colframe=revblue!70,
+  title={\textbf{Revisor interno}},
+  fonttitle=\bfseries\color{revblue},
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+\newtcolorbox{boxatencao}{
+  breakable,
+  colback=warnamber!8,
+  colframe=warnamber!70,
+  title={\textbf{Atenção}},
+  fonttitle=\bfseries\color{warnamber},
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+\newtcolorbox{boxdica}{
+  breakable,
+  colback=tipcyan!8,
+  colframe=tipcyan!70,
+  title={\textbf{Dica}},
+  fonttitle=\bfseries\color{tipcyan},
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+\newcommand{\platform}[1]{\texttt{#1}}
+\newcommand{\field}[1]{\textbf{#1}}
+
+% Glossário — use tabela explícita no .tex (tabularx não funciona bem em \newenvironment)

@@ -5,6 +5,7 @@ import {
   BookOpenIcon,
   CheckIcon,
   ChevronDownIcon,
+  CircleHelpIcon,
   ExternalLinkIcon,
   FileCheck2Icon,
   ChevronRightIcon,
@@ -15,6 +16,7 @@ import {
   SearchIcon,
   Trash2Icon,
 } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -616,6 +618,12 @@ export default function SecretariaPage() {
             <span className="font-semibold uppercase tracking-widest" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
           </div>
           <div className="flex gap-2">
+            <Button variant="secondary" asChild>
+              <Link href="/secretaria/ajuda">
+                <CircleHelpIcon data-icon="inline-start" />
+                Ajuda
+              </Link>
+            </Button>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="secondary">
