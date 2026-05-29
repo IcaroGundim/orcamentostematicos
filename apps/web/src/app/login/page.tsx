@@ -9,9 +9,11 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { LoginQuickAccess } from '@/components/domain/login-quick-access';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { api, setStoredSession, type Session } from '@/lib/api';
+import { recordSuccessfulLogin } from '@/lib/local-quick-access';
 
 const schema = z.object({
   identifier: z.string().min(1, 'Informe seu e-mail ou nome de usuário.'),
@@ -29,18 +31,23 @@ export default function LoginPage() {
   });
   const isSubmitting = form.formState.isSubmitting;
 
-  async function onSubmit(values: FormData) {
+  async function performLogin(identifier: string, password: string) {
     setError('');
     try {
       const session = await api<Session>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify(values),
+        body: JSON.stringify({ identifier, password }),
       });
       setStoredSession(session);
+      recordSuccessfulLogin({ identifier, password, user: session.user });
       router.push(session.user.role === 'SEPLAN_ADMIN' ? '/seplan' : '/secretaria');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login.');
     }
+  }
+
+  async function onSubmit(values: FormData) {
+    await performLogin(values.identifier, values.password);
   }
 
   return (
@@ -128,6 +135,11 @@ export default function LoginPage() {
                 </Button>
               </FieldGroup>
             </form>
+
+            <LoginQuickAccess
+              disabled={isSubmitting}
+              onQuickLogin={(identifier, password) => void performLogin(identifier, password)}
+            />
           </div>
         </div>
 
