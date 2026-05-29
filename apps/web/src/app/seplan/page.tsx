@@ -9,6 +9,7 @@ import {
   ClipboardCheckIcon,
   DatabaseIcon,
   ExternalLinkIcon,
+  EyeIcon,
   FileBarChart2Icon,
   FileDownIcon,
   FileSpreadsheetIcon,
@@ -94,10 +95,13 @@ import {
 } from '@/lib/classification-rules';
 import {
   appendActionAssignment,
+  collectBulkRemoveTargets,
   decrementSummaryAssignments,
   fetchCurationSnapshot,
   incrementSummaryAssignments,
   patchActionAssignments,
+  patchBulkActionAssignments,
+  type BulkRemoveThemeFilter,
 } from '@/lib/curation-actions';
 import {
   buildAxisExecutionReport,
@@ -451,6 +455,80 @@ export default function SeplanPage() {
     } catch (err) {
       setActions(snapshot);
       toast.error(err instanceof Error ? err.message : 'Erro ao remover classificações.');
+    } finally {
+      setIsRemovingAssignment(false);
+    }
+  }
+
+  async function confirmBulkRemoveAssignments(payload: {
+    actionIds: string[];
+    themeFilter: BulkRemoveThemeFilter;
+  }) {
+    if (isRemovingAssignment) return;
+
+    const targets = collectBulkRemoveTargets(actions, payload.actionIds, payload.themeFilter);
+    if (targets.length === 0) {
+      toast.warning('Nenhuma classificação elegível para remover na seleção.');
+      return;
+    }
+
+    const snapshot = actions;
+    setIsRemovingAssignment(true);
+
+    try {
+      const results = await Promise.allSettled(
+        targets.map((target) =>
+          api(`/thematic-assignments/${target.assignmentId}`, { method: 'DELETE' }),
+        ),
+      );
+
+      const removedByAction = new Map<string, string[]>();
+      let firstError: string | null = null;
+
+      results.forEach((result, index) => {
+        const target = targets[index]!;
+        if (result.status === 'fulfilled') {
+          const list = removedByAction.get(target.actionId) ?? [];
+          list.push(target.assignmentId);
+          removedByAction.set(target.actionId, list);
+        } else if (!firstError) {
+          firstError =
+            result.reason instanceof Error ? result.reason.message : 'Erro ao remover a classificação.';
+        }
+      });
+
+      const totalRemoved = [...removedByAction.values()].reduce((sum, ids) => sum + ids.length, 0);
+
+      if (totalRemoved > 0) {
+        setActions((prev) => patchBulkActionAssignments(prev, removedByAction));
+        setSummary((prev) => decrementSummaryAssignments(prev, totalRemoved));
+      } else {
+        setActions(snapshot);
+      }
+
+      if (firstError) {
+        toast.error(firstError);
+        if (totalRemoved > 0) {
+          toast.warning(`${totalRemoved} classificação(ões) removida(s) antes do erro.`);
+        }
+      } else {
+        toast.success(
+          totalRemoved === 1
+            ? 'Classificação removida em lote.'
+            : `${totalRemoved} classificações removidas em lote.`,
+        );
+      }
+
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+      } catch {
+        /* mantém estado otimista */
+      }
+    } catch (err) {
+      setActions(snapshot);
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover classificações em lote.');
     } finally {
       setIsRemovingAssignment(false);
     }
@@ -951,6 +1029,42 @@ export default function SeplanPage() {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
+                    <EyeIcon data-icon="inline-start" />
+                    Visualizar telas
+                    <ChevronDownIcon className="ml-1 size-4 opacity-70" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" side="bottom" className="w-72 p-2">
+                  <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Pré-visualizar como
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.open('/secretaria?preview=representante', '_blank', 'noopener')}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <FolderCogIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span>
+                      <span className="block font-medium">Secretaria (Representante)</span>
+                      <span className="block text-xs text-muted-foreground">Curadoria temática e validação de entregas</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open('/secretaria?preview=revisor', '_blank', 'noopener')}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ClipboardCheckIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span>
+                      <span className="block font-medium">Revisor de Secretaria</span>
+                      <span className="block text-xs text-muted-foreground">Revisão interna de entregas</span>
+                    </span>
+                  </button>
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
                     <BookOpenIcon data-icon="inline-start" />
                     Legislação
                     <ChevronDownIcon className="ml-1 size-4 opacity-70" />
@@ -1298,6 +1412,8 @@ export default function SeplanPage() {
                 onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
                 onCreateAssignment={createAssignment}
                 onConfirmRemoveAssignment={confirmRemoveAssignment}
+                bulkRemoveEnabled
+                onConfirmBulkRemove={confirmBulkRemoveAssignments}
               />
             </div>
           ) : null}

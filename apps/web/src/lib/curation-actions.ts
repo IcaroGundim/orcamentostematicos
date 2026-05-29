@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { BudgetAction, Summary, ThematicAssignment } from '@/types/domain';
+import type { BudgetAction, Summary, ThematicAssignment, ThemeBudget } from '@/types/domain';
 
 export function patchActionAssignments(
   actions: BudgetAction[],
@@ -16,6 +16,49 @@ export function patchActionAssignments(
       assignmentIds: assignments.map((item) => item.id),
     };
   });
+}
+
+export function patchBulkActionAssignments(
+  actions: BudgetAction[],
+  removedByAction: Map<string, Iterable<string>>,
+): BudgetAction[] {
+  if (removedByAction.size === 0) return actions;
+  return actions.map((action) => {
+    const removedIds = removedByAction.get(action.id);
+    if (!removedIds) return action;
+    const removed = new Set(removedIds);
+    if (removed.size === 0) return action;
+    const assignments = action.assignments.filter((item) => !removed.has(item.id));
+    return {
+      ...action,
+      assignments,
+      assignmentIds: assignments.map((item) => item.id),
+    };
+  });
+}
+
+export type BulkRemoveThemeFilter = ThemeBudget | 'ALL';
+
+export type BulkRemoveAssignmentTarget = {
+  actionId: string;
+  assignmentId: string;
+};
+
+export function collectBulkRemoveTargets(
+  actions: BudgetAction[],
+  actionIds: Iterable<string>,
+  themeFilter: BulkRemoveThemeFilter = 'ALL',
+): BulkRemoveAssignmentTarget[] {
+  const selected = new Set(actionIds);
+  const targets: BulkRemoveAssignmentTarget[] = [];
+  for (const action of actions) {
+    if (!selected.has(action.id)) continue;
+    for (const assignment of action.assignments) {
+      if (themeFilter !== 'ALL' && assignment.theme !== themeFilter) continue;
+      targets.push({ actionId: action.id, assignmentId: assignment.id });
+    }
+  }
+  return targets;
 }
 
 export function appendActionAssignment(

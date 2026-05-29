@@ -1,8 +1,9 @@
 'use client';
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   FolderCogIcon,
@@ -34,8 +35,14 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ThemeBadge } from '@/components/domain/badges';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
-import { SearchableCombobox } from '@/components/domain/searchable-combobox';
+import {
+  SearchableCombobox,
+  type SearchableComboboxItem,
+} from '@/components/domain/searchable-combobox';
+import { Separator } from '@/components/ui/separator';
+import { BulkRemoveClassificationDialog } from '@/components/domain/bulk-remove-classification-dialog';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
+import type { BulkRemoveThemeFilter } from '@/lib/curation-actions';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { formatMoney, themeLabels } from '@/lib/api';
 import {
@@ -81,6 +88,13 @@ interface Props {
   onAssignmentIdsPendingRemovalChange: (ids: string[]) => void;
   onCreateAssignment: () => void | Promise<void>;
   onConfirmRemoveAssignment: () => void | Promise<void>;
+  /** Habilita seleção e remoção em lote na lista de ações (uso SEPLAN). */
+  bulkRemoveEnabled?: boolean;
+  onConfirmBulkRemove?: (payload: {
+    actionIds: string[];
+    themeFilter: BulkRemoveThemeFilter;
+  }) => void | Promise<void>;
+  onBulkSelectionCleared?: () => void;
 
   /** Quando false, desabilita o botão de classificar. Padrão: true. */
   canEdit?: boolean;
@@ -89,30 +103,155 @@ interface Props {
 }
 
 const ALL = 'ALL';
+/** Separa órgão e unidade no valor do filtro quando o recorte é "Todos os órgãos". */
+const UNIT_FILTER_SCOPE_SEP = '|';
+
+function makeScopedUnitFilterValue(organizationCode: string, unitCode: string) {
+  return `${organizationCode}${UNIT_FILTER_SCOPE_SEP}${unitCode}`;
+}
+
+function parseScopedUnitFilterValue(value: string) {
+  if (!value.includes(UNIT_FILTER_SCOPE_SEP)) return null;
+  const [organizationCode, unitCode] = value.split(UNIT_FILTER_SCOPE_SEP, 2);
+  if (!organizationCode || !unitCode) return null;
+  return { organizationCode, unitCode };
+}
+
+function resolveUnitCodeForFilter(unitFilter: string, organizationFilter: string) {
+  if (unitFilter === ALL) return null;
+  if (organizationFilter !== ALL) return unitFilter;
+  return parseScopedUnitFilterValue(unitFilter)?.unitCode ?? unitFilter;
+}
+
+function actionMatchesUnitFilter(
+  action: BudgetAction,
+  unitFilter: string,
+  organizationFilter: string,
+) {
+  const unitCode = resolveUnitCodeForFilter(unitFilter, organizationFilter);
+  if (!unitCode) return true;
+  if (organizationFilter !== ALL) {
+    return action.unitCode === unitCode;
+  }
+  return action.unitCode === unitCode;
+}
+
 const ACTION_ROW_GAP = 8;
 const ACTION_ROW_ESTIMATE = 188;
+const SOURCE_TABLE_HEADER_HEIGHT = 36;
+const SOURCE_TABLE_ROW_HEIGHT = 32;
+const SOURCE_TABLE_FOOTER_HEIGHT = 40;
+const SOURCE_TABLE_EMPTY_HEIGHT = 52;
+const SOURCE_TABLE_MAX_HEIGHT = 320;
+const SOURCE_TABLE_SECTION_GAP = 8;
+
+function countDistinctSources(action: BudgetAction) {
+  const sources = new Set<string>();
+  for (const line of action.expenseLines ?? []) {
+    sources.add(line.source?.trim() || 'Sem fonte');
+  }
+  return sources.size;
+}
+
+function estimateSourceTableHeight(action: BudgetAction) {
+  const count = countDistinctSources(action);
+  if (count === 0) return SOURCE_TABLE_EMPTY_HEIGHT;
+  const tableHeight =
+    SOURCE_TABLE_HEADER_HEIGHT + count * SOURCE_TABLE_ROW_HEIGHT + SOURCE_TABLE_FOOTER_HEIGHT;
+  return Math.min(tableHeight, SOURCE_TABLE_MAX_HEIGHT) + SOURCE_TABLE_SECTION_GAP;
+}
+
+function estimateActionRowSize(action: BudgetAction, isExpanded: boolean) {
+  if (!isExpanded) return ACTION_ROW_ESTIMATE;
+  return ACTION_ROW_ESTIMATE + estimateSourceTableHeight(action);
+}
 
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+type ActionBulkSelectChipProps = {
+  application: string;
+  hasAssignments: boolean;
+  isSelected: boolean;
+  onChange: (checked: boolean) => void;
+};
+
+function ActionBulkSelectChip({
+  application,
+  hasAssignments,
+  isSelected,
+  onChange,
+}: ActionBulkSelectChipProps) {
+  return (
+    <label
+      className={cn(
+        'inline-flex cursor-pointer items-center gap-1.5 rounded-md border-2 px-2 py-1 shadow-sm transition-colors',
+        hasAssignments
+          ? isSelected
+            ? 'border-primary bg-background text-primary ring-2 ring-primary/30'
+            : 'border-primary/35 bg-background text-primary hover:border-primary hover:bg-muted/40'
+          : 'cursor-not-allowed border-border bg-muted/40 text-muted-foreground opacity-50',
+      )}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        className="sr-only"
+        aria-label={`Selecionar ${application} para remoção em lote`}
+        checked={isSelected}
+        disabled={!hasAssignments}
+        onChange={(e) => {
+          e.stopPropagation();
+          onChange(e.target.checked);
+        }}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-sm border-2',
+          hasAssignments && isSelected
+            ? 'border-primary bg-primary text-primary-foreground'
+            : hasAssignments
+              ? 'border-primary/60 bg-background'
+              : 'border-muted-foreground/40 bg-muted',
+        )}
+      >
+        {isSelected && hasAssignments ? <CheckIcon className="size-3 stroke-[3]" /> : null}
+      </span>
+      <span className="text-[10px] font-bold uppercase tracking-wide">
+        {hasAssignments ? (isSelected ? 'Selecionada' : 'Selecionar') : 'Sem tema'}
+      </span>
+    </label>
+  );
 }
 
 type CurationActionRowProps = {
   action: BudgetAction;
   isSelected: boolean;
   isExpanded: boolean;
+  isBulkSelected: boolean;
   showOrgFilter: boolean;
+  showBulkSelect: boolean;
   onSelect: (id: string) => void;
   onToggleExpand: (id: string) => void;
+  onBulkSelectChange: (id: string, checked: boolean) => void;
 };
 
 const CurationActionRow = memo(function CurationActionRow({
   action,
   isSelected,
   isExpanded,
+  isBulkSelected,
   showOrgFilter,
+  showBulkSelect,
   onSelect,
   onToggleExpand,
+  onBulkSelectChange,
 }: CurationActionRowProps) {
+  const hasAssignments = action.assignments.length > 0;
+
   return (
     <div
       role="button"
@@ -128,6 +267,7 @@ const CurationActionRow = memo(function CurationActionRow({
       className={cn(
         'group/item flex w-full cursor-pointer flex-col gap-2 rounded-lg border-2 border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:border-primary focus-visible:bg-muted/50 focus-visible:outline-none',
         isSelected && 'border-primary bg-primary/5 hover:bg-primary/5',
+        isBulkSelected && !isSelected && 'border-primary/50 bg-primary/[0.03]',
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -166,15 +306,34 @@ const CurationActionRow = memo(function CurationActionRow({
         </div>
       </div>
 
-      <div className="min-w-0">
-        <p className="break-words text-base font-semibold leading-6 text-primary group-hover/item:underline">
-          {action.application}
-        </p>
-        <FunctionalProgramLine
-          functionalProgram={action.functionalProgram}
-          projectActivity={action.projectActivity}
-          className="mt-0.5 truncate text-[11px] font-medium leading-4"
-        />
+      <div
+        className={cn(
+          'min-w-0 gap-2',
+          showBulkSelect
+            ? 'grid grid-cols-1 items-start sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-3'
+            : 'flex flex-col',
+        )}
+      >
+        <div className="min-w-0 space-y-0.5">
+          <p className="break-words text-base font-semibold leading-snug text-primary group-hover/item:underline">
+            {action.application}
+          </p>
+          <FunctionalProgramLine
+            functionalProgram={action.functionalProgram}
+            projectActivity={action.projectActivity}
+            className="truncate text-[11px] font-medium leading-4 text-muted-foreground"
+          />
+        </div>
+        {showBulkSelect ? (
+          <div className="flex justify-end sm:self-center sm:justify-start">
+            <ActionBulkSelectChip
+              application={action.application}
+              hasAssignments={hasAssignments}
+              isSelected={isBulkSelected}
+              onChange={(checked) => onBulkSelectChange(action.id, checked)}
+            />
+          </div>
+        ) : null}
       </div>
 
       <dl className="grid grid-cols-3 divide-x divide-border/60 rounded-md border border-border/60 bg-background">
@@ -207,6 +366,202 @@ const CurationActionRow = memo(function CurationActionRow({
   );
 });
 
+type CurationBulkSelectionToolbarProps = {
+  isRemoving: boolean;
+  canSelectInFilter: boolean;
+  canSelectVisible: boolean;
+  hasSelection: boolean;
+  onSelectInFilter: () => void;
+  onSelectVisible: () => void;
+  onClear: () => void;
+  onRemove: () => void;
+};
+
+function CurationBulkSelectionToolbar({
+  isRemoving,
+  canSelectInFilter,
+  canSelectVisible,
+  hasSelection,
+  onSelectInFilter,
+  onSelectVisible,
+  onClear,
+  onRemove,
+}: CurationBulkSelectionToolbarProps) {
+  return (
+    <div
+      role="toolbar"
+      aria-label="Seleção em lote"
+      className="inline-flex max-w-full flex-wrap items-center justify-end gap-1.5 rounded-lg border border-border bg-background p-1.5 shadow-sm"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 bg-background"
+        disabled={isRemoving || !canSelectInFilter}
+        onClick={onSelectInFilter}
+      >
+        Marcar classificadas no recorte
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 bg-background"
+        disabled={isRemoving || !canSelectVisible}
+        onClick={onSelectVisible}
+      >
+        Marcar visíveis
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8"
+        disabled={isRemoving || !hasSelection}
+        onClick={onClear}
+      >
+        Limpar seleção
+      </Button>
+      <Separator orientation="vertical" className="hidden h-7 sm:block" />
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        className="h-8"
+        disabled={isRemoving || !hasSelection}
+        onClick={onRemove}
+      >
+        <Trash2Icon data-icon="inline-start" />
+        Remover em lote
+      </Button>
+    </div>
+  );
+}
+
+const filterFieldLabelClass =
+  'text-[10px] font-semibold uppercase tracking-wide text-muted-foreground';
+
+type CurationUnitOption = {
+  code: string;
+  name: string;
+  organizationCode?: string;
+};
+
+type CurationActionsFiltersProps = {
+  showOrgFilter: boolean;
+  organizationFilter: string;
+  onOrganizationFilterChange: (value: string) => void;
+  orgComboboxItems: SearchableComboboxItem[];
+  unitFilter: string;
+  onUnitFilterChange: (value: string) => void;
+  units: CurationUnitOption[];
+  actionFilter: string;
+  onActionFilterChange: (value: string) => void;
+  themeFilter: string;
+  onThemeFilterChange: (value: string) => void;
+};
+
+const themeComboboxItems: SearchableComboboxItem[] = [
+  { value: ALL, label: 'Todos os temas' },
+  ...Object.entries(themeLabels).map(([key, label]) => ({ value: key, label })),
+];
+
+function CurationActionsFilters({
+  showOrgFilter,
+  organizationFilter,
+  onOrganizationFilterChange,
+  orgComboboxItems,
+  unitFilter,
+  onUnitFilterChange,
+  units,
+  actionFilter,
+  onActionFilterChange,
+  themeFilter,
+  onThemeFilterChange,
+}: CurationActionsFiltersProps) {
+  const unitComboboxItems = useMemo<SearchableComboboxItem[]>(() => {
+    const options: SearchableComboboxItem[] = [{ value: ALL, label: 'Todas as unidades' }];
+    const listAllOrgUnits = showOrgFilter && organizationFilter === ALL;
+
+    for (const unit of units) {
+      if (listAllOrgUnits && unit.organizationCode) {
+        options.push({
+          value: makeScopedUnitFilterValue(unit.organizationCode, unit.code),
+          label: `${unit.organizationCode} · ${unit.code} - ${unit.name}`,
+        });
+      } else {
+        options.push({
+          value: unit.code,
+          label: `${unit.code} - ${unit.name}`,
+        });
+      }
+    }
+
+    return options;
+  }, [units, organizationFilter, showOrgFilter]);
+
+  return (
+    <div className="w-full border-t border-border/60 bg-background px-3 py-3">
+      <div
+        className={cn(
+          'grid w-full gap-3',
+          showOrgFilter
+            ? 'sm:grid-cols-2 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_minmax(0,0.8fr)]'
+            : 'sm:grid-cols-2 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)_minmax(0,0.8fr)]',
+        )}
+      >
+        {showOrgFilter ? (
+          <Field className="min-w-0 gap-1.5">
+            <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
+            <SearchableCombobox
+              className="relative w-full"
+              value={organizationFilter}
+              onChange={onOrganizationFilterChange}
+              placeholder="Todos os órgãos"
+              items={orgComboboxItems}
+            />
+          </Field>
+        ) : null}
+        <Field className="min-w-0 gap-1.5">
+          <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
+          <SearchableCombobox
+            className="relative w-full"
+            value={unitFilter}
+            onChange={onUnitFilterChange}
+            placeholder="Todas as unidades"
+            items={unitComboboxItems}
+          />
+        </Field>
+        <Field className="min-w-0 gap-1.5 sm:col-span-2 lg:col-span-1">
+          <FieldLabel className={filterFieldLabelClass}>Busca</FieldLabel>
+          <div className="relative w-full">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              className="w-full pl-9"
+              placeholder="Ação ou programa"
+              autoComplete="off"
+              value={actionFilter}
+              onChange={(event) => onActionFilterChange(event.target.value)}
+            />
+          </div>
+        </Field>
+        <Field className="min-w-0 gap-1.5">
+          <FieldLabel className={filterFieldLabelClass}>Tema</FieldLabel>
+          <SearchableCombobox
+            className="relative w-full"
+            value={themeFilter}
+            onChange={onThemeFilterChange}
+            placeholder="Todos os temas"
+            items={themeComboboxItems}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
 type CurationActionsCardProps = {
   actions: BudgetAction[];
   organizations?: GovernmentOrganizationCatalog[];
@@ -214,6 +569,13 @@ type CurationActionsCardProps = {
   expandedActionId: string | null;
   onSelectActionId: (id: string) => void;
   onExpandActionId: (id: string | null) => void;
+  isRemovingAssignment: boolean;
+  canRemove: boolean;
+  onConfirmBulkRemove: (payload: {
+    actionIds: string[];
+    themeFilter: BulkRemoveThemeFilter;
+  }) => void | Promise<void>;
+  onBulkSelectionCleared?: () => void;
 };
 
 const CurationActionsCard = memo(function CurationActionsCard({
@@ -223,12 +585,19 @@ const CurationActionsCard = memo(function CurationActionsCard({
   expandedActionId,
   onSelectActionId,
   onExpandActionId,
+  isRemovingAssignment,
+  canRemove,
+  onConfirmBulkRemove,
+  onBulkSelectionCleared,
 }: CurationActionsCardProps) {
   const [organizationFilter, setOrganizationFilter] = useState(ALL);
   const [unitFilter, setUnitFilter] = useState(ALL);
   const [actionFilter, setActionFilter] = useState('');
   const [themeFilter, setThemeFilter] = useState(ALL);
+  const [bulkSelectedActionIds, setBulkSelectedActionIds] = useState<Set<string>>(() => new Set());
+  const [bulkRemoveDialogOpen, setBulkRemoveDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevExpandedIdRef = useRef<string | null>(null);
 
   const showOrgFilter = !!organizations;
 
@@ -243,22 +612,49 @@ const CurationActionsCard = memo(function CurationActionsCard({
     [organizations],
   );
 
-  const units = useMemo(() => {
-    const map = new Map<string, { code: string; name: string }>();
+  const units = useMemo((): CurationUnitOption[] => {
+    if (organizationFilter !== ALL) {
+      const map = new Map<string, CurationUnitOption>();
+      for (const action of actions) {
+        if (action.organizationCode !== organizationFilter) continue;
+        if (!map.has(action.unitCode)) {
+          map.set(action.unitCode, { code: action.unitCode, name: action.unitName });
+        }
+      }
+      return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+    }
+
+    if (!showOrgFilter) {
+      const map = new Map<string, CurationUnitOption>();
+      for (const action of actions) {
+        if (!map.has(action.unitCode)) {
+          map.set(action.unitCode, { code: action.unitCode, name: action.unitName });
+        }
+      }
+      return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
+    }
+
+    const map = new Map<string, CurationUnitOption & { organizationCode: string }>();
     for (const action of actions) {
-      if (organizationFilter !== ALL && action.organizationCode !== organizationFilter) continue;
-      if (!map.has(action.unitCode)) {
-        map.set(action.unitCode, { code: action.unitCode, name: action.unitName });
+      const key = `${action.organizationCode}${UNIT_FILTER_SCOPE_SEP}${action.unitCode}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          organizationCode: action.organizationCode,
+          code: action.unitCode,
+          name: action.unitName,
+        });
       }
     }
-    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
-  }, [actions, organizationFilter]);
+    return [...map.values()].sort((a, b) =>
+      `${a.organizationCode}-${a.code}`.localeCompare(`${b.organizationCode}-${b.code}`),
+    );
+  }, [actions, organizationFilter, showOrgFilter]);
 
   const filteredActions = useMemo(() => {
     const search = normalize(actionFilter);
     return actions.filter((action) => {
       if (organizationFilter !== ALL && action.organizationCode !== organizationFilter) return false;
-      if (unitFilter !== ALL && action.unitCode !== unitFilter) return false;
+      if (!actionMatchesUnitFilter(action, unitFilter, organizationFilter)) return false;
       if (themeFilter !== ALL && !action.assignments.some((item) => item.theme === themeFilter)) {
         return false;
       }
@@ -276,17 +672,48 @@ const CurationActionsCard = memo(function CurationActionsCard({
   const virtualizer = useVirtualizer({
     count: filteredActions.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ACTION_ROW_ESTIMATE + ACTION_ROW_GAP,
+    getItemKey: (index) => filteredActions[index]?.id ?? index,
+    estimateSize: (index) => {
+      const action = filteredActions[index];
+      if (!action) return ACTION_ROW_ESTIMATE;
+      return estimateActionRowSize(action, expandedActionId === action.id);
+    },
+    gap: ACTION_ROW_GAP,
     overscan: 8,
     measureElement:
       typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
-        ? (element) => element.getBoundingClientRect().height + ACTION_ROW_GAP
+        ? (element) => element.getBoundingClientRect().height
         : undefined,
   });
 
-  useEffect(() => {
-    virtualizer.measure();
-  }, [expandedActionId, filteredActions.length]);
+  useLayoutEffect(() => {
+    const indicesToMeasure = new Set<number>();
+
+    if (expandedActionId) {
+      const expandedIndex = filteredActions.findIndex((action) => action.id === expandedActionId);
+      if (expandedIndex >= 0) indicesToMeasure.add(expandedIndex);
+    }
+
+    const previousExpandedId = prevExpandedIdRef.current;
+    if (previousExpandedId && previousExpandedId !== expandedActionId) {
+      const collapsedIndex = filteredActions.findIndex((action) => action.id === previousExpandedId);
+      if (collapsedIndex >= 0) indicesToMeasure.add(collapsedIndex);
+    }
+
+    prevExpandedIdRef.current = expandedActionId;
+
+    if (indicesToMeasure.size === 0) return;
+
+    const frame = requestAnimationFrame(() => {
+      for (const index of indicesToMeasure) {
+        const node = scrollRef.current?.querySelector<HTMLElement>(`[data-index="${index}"]`);
+        if (node) virtualizer.measureElement(node);
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+    // virtualizer.measureElement is stable; omit virtualizer to avoid remeasure every render
+  }, [expandedActionId, filteredActions]);
 
   const handleToggleExpand = useCallback(
     (actionId: string) => {
@@ -295,69 +722,106 @@ const CurationActionsCard = memo(function CurationActionsCard({
     [expandedActionId, onExpandActionId],
   );
 
+  const bulkSelectedActions = useMemo(
+    () => actions.filter((action) => bulkSelectedActionIds.has(action.id)),
+    [actions, bulkSelectedActionIds],
+  );
+
+  const bulkEligibleInFilter = useMemo(
+    () => filteredActions.filter((action) => action.assignments.length > 0),
+    [filteredActions],
+  );
+
+  const handleBulkSelectChange = useCallback((actionId: string, checked: boolean) => {
+    setBulkSelectedActionIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(actionId);
+      else next.delete(actionId);
+      return next;
+    });
+  }, []);
+
+  const selectClassifiedInFilter = useCallback(() => {
+    setBulkSelectedActionIds(new Set(bulkEligibleInFilter.map((action) => action.id)));
+  }, [bulkEligibleInFilter]);
+
+  const selectVisibleClassified = useCallback(() => {
+    const visibleIds = new Set(
+      virtualizer
+        .getVirtualItems()
+        .map((row) => filteredActions[row.index])
+        .filter((action): action is BudgetAction => !!action && action.assignments.length > 0)
+        .map((action) => action.id),
+    );
+    setBulkSelectedActionIds((prev) => {
+      const next = new Set(prev);
+      for (const id of visibleIds) next.add(id);
+      return next;
+    });
+  }, [filteredActions, virtualizer]);
+
+  const clearBulkSelection = useCallback(() => {
+    setBulkSelectedActionIds(new Set());
+    onBulkSelectionCleared?.();
+  }, [onBulkSelectionCleared]);
+
   return (
     <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>Ações</CardTitle>
-        <CardDescription>
-          {filteredActions.length} de {actions.length} ações no recorte atual
-        </CardDescription>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {showOrgFilter ? (
-            <SearchableCombobox
-              className="relative w-56"
-              value={organizationFilter}
-              onChange={(value) => {
-                setOrganizationFilter(value);
-                setUnitFilter(ALL);
-              }}
-              placeholder="Todos os órgãos"
-              items={orgComboboxItems}
-            />
-          ) : null}
-          <Select value={unitFilter} onValueChange={setUnitFilter}>
-            <SelectTrigger className="w-52">
-              <SelectValue placeholder="Unidade" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectItem value={ALL}>Todas as unidades</SelectItem>
-                {units.map((unit) => (
-                  <SelectItem key={unit.code} value={unit.code}>
-                    {unit.code} - {unit.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
-            <Input
-              type="text"
-              className="w-64 pl-9"
-              placeholder="Ação ou programa"
-              autoComplete="off"
-              value={actionFilter}
-              onChange={(event) => setActionFilter(event.target.value)}
-            />
+      <CardHeader className="flex flex-col gap-0 border-b border-border/70 px-0 pb-0">
+        <div className="grid w-full grid-cols-1 gap-3 px-3 pb-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4">
+          <div className="min-w-0">
+            <CardTitle>Ações</CardTitle>
+            <CardDescription className="mt-0.5">
+              {filteredActions.length} de {actions.length} ações no recorte atual
+            </CardDescription>
           </div>
-          <Select value={themeFilter} onValueChange={setThemeFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Tema" />
-            </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectGroup>
-                <SelectItem value={ALL}>Todos os temas</SelectItem>
-                {Object.entries(themeLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          {canRemove ? (
+            <div className="flex w-full justify-end md:w-auto md:justify-self-end">
+              <CurationBulkSelectionToolbar
+                isRemoving={isRemovingAssignment}
+                canSelectInFilter={bulkEligibleInFilter.length > 0}
+                canSelectVisible={filteredActions.some((action) => action.assignments.length > 0)}
+                hasSelection={bulkSelectedActionIds.size > 0}
+                onSelectInFilter={selectClassifiedInFilter}
+                onSelectVisible={selectVisibleClassified}
+                onClear={clearBulkSelection}
+                onRemove={() => setBulkRemoveDialogOpen(true)}
+              />
+            </div>
+          ) : null}
         </div>
+        <CurationActionsFilters
+          showOrgFilter={showOrgFilter}
+          organizationFilter={organizationFilter}
+          onOrganizationFilterChange={(value) => {
+            setOrganizationFilter(value);
+            setUnitFilter(ALL);
+          }}
+          orgComboboxItems={orgComboboxItems}
+          unitFilter={unitFilter}
+          onUnitFilterChange={setUnitFilter}
+          units={units}
+          actionFilter={actionFilter}
+          onActionFilterChange={setActionFilter}
+          themeFilter={themeFilter}
+          onThemeFilterChange={setThemeFilter}
+        />
       </CardHeader>
+      <BulkRemoveClassificationDialog
+        open={bulkRemoveDialogOpen}
+        onOpenChange={setBulkRemoveDialogOpen}
+        selectedActions={bulkSelectedActions}
+        isRemoving={isRemovingAssignment}
+        onConfirm={async (themeFilter) => {
+          if (!onConfirmBulkRemove) return;
+          await onConfirmBulkRemove({
+            actionIds: [...bulkSelectedActionIds],
+            themeFilter,
+          });
+          setBulkRemoveDialogOpen(false);
+          clearBulkSelection();
+        }}
+      />
       <CardContent className="p-0">
         {actions.length ? (
           <>
@@ -382,9 +846,12 @@ const CurationActionsCard = memo(function CurationActionsCard({
                         action={action}
                         isSelected={selectedActionId === action.id}
                         isExpanded={expandedActionId === action.id}
+                        isBulkSelected={bulkSelectedActionIds.has(action.id)}
                         showOrgFilter={showOrgFilter}
+                        showBulkSelect={canRemove}
                         onSelect={onSelectActionId}
                         onToggleExpand={handleToggleExpand}
+                        onBulkSelectChange={handleBulkSelectChange}
                       />
                     </li>
                   );
@@ -464,7 +931,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
   const classifications = metadata?.classifications[assignment.theme] ?? [];
 
   return (
-    <Card className="min-w-0 gap-0">
+    <Card className="h-fit min-w-0 gap-0 self-start">
       <CardHeader className="relative z-10 border-b border-border bg-card shadow-sm">
         <CardTitle className="font-sans text-base font-bold uppercase tracking-[0.16em] text-muted-foreground leading-tight">
           Classificação da Ação
@@ -482,8 +949,8 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
           )}
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-4">
-        <FieldGroup>
+      <CardContent className="pt-4 pb-4">
+        <FieldGroup className="gap-4">
           <Field>
             <FieldLabel>Tema</FieldLabel>
             <Select
@@ -698,16 +1165,20 @@ export function ThematicCurationPanel({
   onAssignmentIdsPendingRemovalChange,
   onCreateAssignment,
   onConfirmRemoveAssignment,
+  bulkRemoveEnabled = false,
+  onConfirmBulkRemove,
+  onBulkSelectionCleared,
   canEdit = true,
   canRemove = true,
 }: Props) {
+  const showBulkRemove = bulkRemoveEnabled && canRemove && !!onConfirmBulkRemove;
   const selectedAction = useMemo(
     () => actions.find((action) => action.id === selectedActionId),
     [actions, selectedActionId],
   );
 
   return (
-    <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
+    <section className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
       <CurationActionsCard
         actions={actions}
         organizations={organizations}
@@ -715,6 +1186,10 @@ export function ThematicCurationPanel({
         expandedActionId={expandedActionId}
         onSelectActionId={onSelectActionId}
         onExpandActionId={onExpandActionId}
+        isRemovingAssignment={isRemovingAssignment}
+        canRemove={showBulkRemove}
+        onConfirmBulkRemove={onConfirmBulkRemove!}
+        onBulkSelectionCleared={onBulkSelectionCleared}
       />
       <CurationAssignmentCard
         selectedAction={selectedAction}

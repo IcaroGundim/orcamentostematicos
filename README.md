@@ -20,6 +20,31 @@ Web: `http://localhost:3000`
 
 API interna: `http://localhost:3000/api`
 
+## Desenvolvimento local (banco de dados)
+
+O login e as APIs usam PostgreSQL (Neon) via Prisma. Sem `DATABASE_URL`, o login falha com erro de API.
+
+1. Gere o `.env.local` com a URL do Neon (recomendado):
+
+```powershell
+npx neonctl auth
+.\scripts\setup-local-env.ps1
+```
+
+Ou copie `apps/web/.env.example` para `apps/web/.env.local` e cole `DATABASE_URL` manualmente (Vercel → Settings → Environment Variables → Reveal, ou [Neon Console](https://console.neon.tech)). O `vercel env pull` costuma deixar `DATABASE_URL` vazio por causa da integração Neon.
+
+2. Aplique migrações e usuários de teste:
+
+```bash
+cd apps/web
+npx prisma migrate deploy
+npx tsx prisma/seed.ts
+```
+
+3. Reinicie `npm run dev` na raiz do monorepo (obrigatório após alterar `.env.local`).
+
+Credenciais padrão do seed: `admin@seplan.ac.gov.br` / `admin123` (SEPLAN).
+
 
 ## Fluxo principal
 

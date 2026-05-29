@@ -5,11 +5,13 @@ import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import {
+  dropdownChevronClassName,
   dropdownContentClassName,
   dropdownContentPopperClassName,
   dropdownItemClassName,
   dropdownItemIndicatorClassName,
   dropdownTriggerClassName,
+  dropdownViewportClassName,
 } from "@/components/ui/dropdown-styles"
 import { ChevronDownIcon, CheckIcon } from "lucide-react"
 
@@ -52,14 +54,14 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         dropdownTriggerClassName,
-        "w-fit aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "w-fit aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=sm]:h-8 data-[size=sm]:px-2.5 data-[size=sm]:text-xs data-[size=sm]:rounded-[min(var(--radius-md),10px)] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+        <ChevronDownIcon className={dropdownChevronClassName} />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
@@ -70,6 +72,8 @@ function SelectContent({
   children,
   position = "popper",
   align = "start",
+  sideOffset = 4,
+  collisionPadding = 8,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (
@@ -79,14 +83,15 @@ function SelectContent({
         className={cn(
           dropdownContentClassName,
           position === "popper" && dropdownContentPopperClassName,
-          position === "popper" && "data-[side=bottom]:mt-1",
           className
         )}
         position={position}
         align={align}
+        sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
         {...props}
       >
-        <SelectPrimitive.Viewport className="w-full">
+        <SelectPrimitive.Viewport className={dropdownViewportClassName}>
           {children}
         </SelectPrimitive.Viewport>
       </SelectPrimitive.Content>

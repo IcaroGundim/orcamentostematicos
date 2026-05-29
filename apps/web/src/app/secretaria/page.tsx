@@ -2,11 +2,13 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  ArrowLeftIcon,
   BookOpenIcon,
   CheckIcon,
   ChevronDownIcon,
   CircleHelpIcon,
   ExternalLinkIcon,
+  EyeIcon,
   FileCheck2Icon,
   ChevronRightIcon,
   FolderCogIcon,
@@ -117,6 +119,8 @@ export default function SecretariaPage() {
   const [submitIssuesOpen, setSubmitIssuesOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('curation');
   const [userRole, setUserRole] = useState<string>('');
+  const [previewRole, setPreviewRole] = useState<string | null>(null);
+  const isPreview = previewRole !== null;
   const [isActionReviewing, setIsActionReviewing] = useState(false);
   const [isReviewingAll, setIsReviewingAll] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -136,12 +140,24 @@ export default function SecretariaPage() {
       router.push('/login');
       return;
     }
-    if (session.user.role !== 'SECRETARIA_REPRESENTANTE' && session.user.role !== 'SECRETARIA_REVISOR') {
+
+    const previewParam = new URLSearchParams(window.location.search).get('preview');
+    const isAdmin = session.user.role === 'SEPLAN_ADMIN';
+
+    let effectiveRole = session.user.role;
+    if (isAdmin && previewParam) {
+      effectiveRole = previewParam === 'revisor' ? 'SECRETARIA_REVISOR' : 'SECRETARIA_REPRESENTANTE';
+      setPreviewRole(effectiveRole);
+    } else if (
+      session.user.role !== 'SECRETARIA_REPRESENTANTE' &&
+      session.user.role !== 'SECRETARIA_REVISOR'
+    ) {
       router.push('/seplan');
       return;
     }
-    setUserRole(session.user.role);
-    if (session.user.role === 'SECRETARIA_REVISOR') {
+
+    setUserRole(effectiveRole);
+    if (effectiveRole === 'SECRETARIA_REVISOR') {
       setActiveTab('validations');
     }
     load().catch((err: unknown) => {
@@ -174,6 +190,7 @@ export default function SecretariaPage() {
   }, [currentId]);
 
   async function handleInternalApprove(id: string) {
+    if (blockPreviewAction()) return;
     if (isActionReviewing) return;
     setIsActionReviewing(true);
     try {
@@ -190,6 +207,7 @@ export default function SecretariaPage() {
   }
 
   async function handleInternalReturn(id: string, comment: string) {
+    if (blockPreviewAction()) return;
     if (isActionReviewing) return;
     const trimmed = comment.trim();
     if (!trimmed) {
@@ -212,6 +230,7 @@ export default function SecretariaPage() {
   }
 
   async function reviewAll(approve: boolean, reviewerComment?: string) {
+    if (blockPreviewAction()) return;
     if (isReviewingAll) return;
 
     const pending = validations.filter((item) => item.status === 'ENVIADO_REVISOR');
@@ -272,7 +291,19 @@ export default function SecretariaPage() {
     setSelectedActionId((id) => id || actionData[0]?.id || '');
   }
 
+  function blockPreviewAction() {
+    if (isPreview) {
+      toast.info('Ação desabilitada no modo de pré-visualização.');
+      return true;
+    }
+    return false;
+  }
+
   function signOut() {
+    if (isPreview) {
+      router.push('/seplan');
+      return;
+    }
     if (isSigningOut) return;
     setIsSigningOut(true);
     clearStoredSession();
@@ -321,6 +352,7 @@ export default function SecretariaPage() {
   }
 
   async function save(values: FormValues) {
+    if (blockPreviewAction()) return;
     if (!current) return;
     if (isSavingDraft) return;
     const savedId = current.id;
@@ -362,6 +394,7 @@ export default function SecretariaPage() {
   }
 
   async function submitAll(toSeplan: boolean) {
+    if (blockPreviewAction()) return;
     if (isSubmittingAll) return;
 
     const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
@@ -439,6 +472,7 @@ export default function SecretariaPage() {
   }
 
   async function createAssignment() {
+    if (blockPreviewAction()) return;
     if (!selectedActionId) return;
     const snapshot = actions;
     try {
@@ -475,6 +509,7 @@ export default function SecretariaPage() {
   }
 
   async function confirmRemoveAssignment() {
+    if (blockPreviewAction()) return;
     const action = actions.find((a) => a.id === selectedActionId);
     if (!selectedActionId || isRemovingAssignment || !action) return;
     const validIds = new Set(action.assignments.map((a) => a.id));
@@ -539,6 +574,7 @@ export default function SecretariaPage() {
   }
 
   const editable =
+    !isPreview &&
     userRole === 'SECRETARIA_REPRESENTANTE' &&
     (current?.status === 'RASCUNHO' ||
       current?.status === 'DEVOLVIDO' ||
@@ -655,6 +691,31 @@ export default function SecretariaPage() {
           </div>
         </div>
       </header>
+
+      {isPreview ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-50 px-4 py-2.5 text-amber-900 lg:px-6 2xl:px-8 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex items-center gap-2 text-sm">
+            <EyeIcon className="size-4 shrink-0" />
+            <span>
+              <span className="font-semibold">Modo de pré-visualização.</span>{' '}
+              Você está vendo a tela como{' '}
+              <span className="font-semibold">
+                {previewRole === 'SECRETARIA_REVISOR' ? 'Revisor de Secretaria' : 'Representante de Secretaria'}
+              </span>
+              . As ações de edição estão desativadas.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-amber-500/40 bg-white text-amber-900 hover:bg-amber-100 dark:bg-transparent dark:text-amber-100"
+            onClick={() => router.push('/seplan')}
+          >
+            <ArrowLeftIcon data-icon="inline-start" />
+            Voltar ao painel
+          </Button>
+        </div>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

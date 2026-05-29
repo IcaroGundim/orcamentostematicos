@@ -5,6 +5,7 @@ import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
+  dropdownChevronClassName,
   dropdownContentClassName,
   dropdownEmptyClassName,
   dropdownItemClassName,
@@ -137,6 +138,7 @@ export function SearchableCombobox({
     >
       <div
         data-slot="searchable-combobox-trigger"
+        data-state={open ? 'open' : 'closed'}
         className={cn(
           dropdownTriggerClassName,
           dropdownTriggerFocusWithinClassName,
@@ -160,13 +162,14 @@ export function SearchableCombobox({
             setOpen(true);
           }}
         />
-        <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+        <ChevronDownIcon className={dropdownChevronClassName} />
       </div>
       {open && !disabled ? (
         <div
           data-slot="searchable-combobox-content"
+          role="listbox"
           className={cn(
-            'absolute mt-1',
+            'absolute z-50 mt-1 animate-in fade-in-0 zoom-in-95 duration-150',
             dropdownContentClassName,
             matchTriggerWidth ? 'left-0 right-0 w-full min-w-0' : 'right-0 w-80 sm:right-auto sm:left-0',
           )}
@@ -177,6 +180,7 @@ export function SearchableCombobox({
                 key={item.value || '__empty__'}
                 type="button"
                 data-highlighted={undefined}
+                data-state={item.value === value ? 'checked' : undefined}
                 className={dropdownItemClassName}
                 onMouseDown={(e) => {
                   e.preventDefault();

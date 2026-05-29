@@ -12,5 +12,9 @@
     "build": "npm run build -w apps/web",
     "start": "npm run start -w apps/web",
     "lint": "npm run lint -w apps/web"
+  },
+  "dependencies": {
+    "@tailwindcss/oxide-win32-x64-msvc": "^4.3.0",
+    "lightningcss-win32-x64-msvc": "^1.32.0"
   }
 }
