@@ -152,6 +152,14 @@ type ImportPreview = {
   sampleActions: BudgetAction[];
 };
 
+type ReattachResult = {
+  reattachedAssignments: number;
+  unmatchedAssignments?: Array<{
+    organizationCode: string; organizationName: string;
+    unitCode: string; unitName: string; projectActivity: string; application: string;
+  }>;
+};
+
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -207,6 +215,7 @@ export default function SeplanPage() {
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
+  const [isReattaching, setIsReattaching] = useState(false);
   const [isRemovingAssignment, setIsRemovingAssignment] = useState(false);
   const [removePopoverOpen, setRemovePopoverOpen] = useState(false);
   const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
@@ -334,19 +343,57 @@ export default function SeplanPage() {
     if (!preview || isConfirmingImport) return;
     setIsConfirmingImport(true);
     try {
-      await api('/imports/qdd/confirm', {
+      const result = await api<ReattachResult>('/imports/qdd/confirm', {
         method: 'POST',
         body: JSON.stringify({ previewId: preview.previewId }),
       });
       setPreview(null);
       setStructureSubTab('reconciliation');
       toast.success('QDD importado e registrado como vigente.');
+      reportReattach(result);
       await load();
       await loadStructureDiff('vigente');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao confirmar a importação do QDD.');
     } finally {
       setIsConfirmingImport(false);
+    }
+  }
+
+  function reportReattach(result: ReattachResult) {
+    if (result.reattachedAssignments > 0) {
+      toast.success(`${result.reattachedAssignments} classificaç${result.reattachedAssignments === 1 ? 'ão religada' : 'ões religadas'} ao QDD vigente.`);
+    }
+    const unmatched = result.unmatchedAssignments ?? [];
+    if (unmatched.length > 0) {
+      toast.warning(
+        `${unmatched.length} classificaç${unmatched.length === 1 ? 'ão não pôde' : 'ões não puderam'} ser religada${unmatched.length === 1 ? '' : 's'} (ação ausente no QDD novo).`,
+        {
+          description: unmatched
+            .slice(0, 8)
+            .map((a) => `${a.organizationCode}/${a.unitCode} · ${a.projectActivity}`)
+            .join('\n') + (unmatched.length > 8 ? `\n… e mais ${unmatched.length - 8}.` : ''),
+          duration: 12000,
+        },
+      );
+    }
+  }
+
+  async function reattachAssignments() {
+    if (isReattaching) return;
+    setIsReattaching(true);
+    try {
+      const result = await api<ReattachResult>('/imports/qdd/reattach', { method: 'POST' });
+      if (result.reattachedAssignments === 0 && (result.unmatchedAssignments ?? []).length === 0) {
+        toast.success('Nenhuma classificação órfã encontrada — tudo já está vinculado ao QDD vigente.');
+      } else {
+        reportReattach(result);
+      }
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao recuperar as classificações.');
+    } finally {
+      setIsReattaching(false);
     }
   }
 
@@ -1369,9 +1416,22 @@ export default function SeplanPage() {
                   </div>
 
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Histórico de importações</CardTitle>
-                      <CardDescription>{importHistory.length} QDD{importHistory.length !== 1 ? 's' : ''} registrado{importHistory.length !== 1 ? 's' : ''}.</CardDescription>
+                    <CardHeader className="flex flex-row items-start justify-between gap-3">
+                      <div className="flex flex-col gap-1.5">
+                        <CardTitle>Histórico de importações</CardTitle>
+                        <CardDescription>{importHistory.length} QDD{importHistory.length !== 1 ? 's' : ''} registrado{importHistory.length !== 1 ? 's' : ''}.</CardDescription>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        disabled={isReattaching}
+                        title="Religa classificações órfãs de QDDs anteriores às ações do QDD vigente"
+                        onClick={() => void reattachAssignments()}
+                      >
+                        {isReattaching ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <RefreshCwIcon data-icon="inline-start" />}
+                        {isReattaching ? 'Recuperando...' : 'Recuperar marcações'}
+                      </Button>
                     </CardHeader>
                     <CardContent>
                       {importHistory.length === 0 ? (

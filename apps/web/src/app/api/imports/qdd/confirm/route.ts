@@ -19,10 +19,17 @@ export async function POST(req: NextRequest) {
   if (!preview) return notFound('Prévia de importação não encontrada ou expirada.');
 
   const parsed = preview.data as any;
-  await addImportedBudget(parsed.importRecord, parsed.actions);
+  const reattach = await addImportedBudget(parsed.importRecord, parsed.actions);
   await syncStructureFromImport(parsed.actions ?? []);
   await reconcileExecutorsForVigenteImport();
   await prisma.importPreview.delete({ where: { id: body.previewId } });
 
-  return ok({ import: parsed.importRecord, organizationsCount: parsed.organizationsCount, unitsCount: parsed.unitsCount, actionsCount: parsed.actions.length });
+  return ok({
+    import: parsed.importRecord,
+    organizationsCount: parsed.organizationsCount,
+    unitsCount: parsed.unitsCount,
+    actionsCount: parsed.actions.length,
+    reattachedAssignments: reattach.reattached,
+    unmatchedAssignments: reattach.unmatched,
+  });
 }

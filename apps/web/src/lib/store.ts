@@ -5,6 +5,7 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { listGovernmentStructure } from './government-structure';
+import { actionLogicalKey } from './qdd-parser';
 import { prisma } from './prisma';
 
 export function createId(prefix: string) {
@@ -348,8 +349,58 @@ export async function reconcileExecutorsForVigenteImport(): Promise<void> {
 
 // ── addImportedBudget ────────────────────────────────────────────────────────
 
-export async function addImportedBudget(importRecord: any, actions: any[]) {
-  await prisma.$transaction(async (tx) => {
+/** Forma serializável de uma ação cuja marcação não pôde ser religada. */
+export type OrphanAction = {
+  organizationCode: string; organizationName: string;
+  unitCode: string; unitName: string; projectActivity: string; application: string;
+};
+
+/** Campos mínimos de uma ação para calcular a chave lógica e religar marcações. */
+type ActionKeyInfo = OrphanAction & { id: string; year: number };
+
+/**
+ * Re-aponta `ThematicAssignment` (e o `ActionValidation` correspondente) das
+ * `oldActions` para a ação equivalente do import vigente, casando pela chave
+ * lógica. Retorna quantas marcações foram religadas e quais ações antigas não
+ * encontraram correspondente (marcação preservada, mas órfã).
+ */
+async function remapAssignments(
+  tx: any,
+  oldActions: ActionKeyInfo[],
+  newIdByKey: Map<string, string>,
+): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
+  let reattached = 0;
+  const unmatched: OrphanAction[] = [];
+  for (const old of oldActions) {
+    const newId = newIdByKey.get(actionLogicalKey(old));
+    if (!newId) {
+      const { id: _id, year: _year, ...rest } = old;
+      unmatched.push(rest);
+      continue;
+    }
+    if (newId === old.id) continue;
+    const res = await tx.thematicAssignment.updateMany({ where: { actionId: old.id }, data: { actionId: newId } });
+    await tx.actionValidation.updateMany({ where: { actionId: old.id }, data: { actionId: newId } });
+    reattached += res.count;
+  }
+  return { reattached, unmatched };
+}
+
+export async function addImportedBudget(importRecord: any, actions: any[]): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
+  return prisma.$transaction(async (tx) => {
+    // Antes de aposentar o import vigente, captura as ações marcadas para religar
+    // as marcações às novas ações (que receberão IDs novos).
+    const prevVigente = await tx.budgetImport.findFirst({ where: { status: 'VIGENTE' }, select: { id: true } });
+    const oldMarkedActions: ActionKeyInfo[] = prevVigente
+      ? await tx.budgetAction.findMany({
+          where: { importId: prevVigente.id, assignments: { some: {} } },
+          select: {
+            id: true, year: true, organizationCode: true, organizationName: true,
+            unitCode: true, unitName: true, projectActivity: true, application: true,
+          },
+        })
+      : [];
+
     await tx.budgetImport.updateMany({ where: { status: 'VIGENTE' }, data: { status: 'HISTORICO' } });
     await tx.budgetImport.create({
       data: {
@@ -406,10 +457,45 @@ export async function addImportedBudget(importRecord: any, actions: any[]) {
     })));
 
     await createInBatches(tx.expenseLine, lines);
+
+    // Religa as marcações das ações aposentadas às novas ações equivalentes.
+    const newIdByKey = new Map<string, string>(
+      actions.map((action) => [actionLogicalKey(action), action.id] as const),
+    );
+    return remapAssignments(tx, oldMarkedActions, newIdByKey);
   }, {
     maxWait: 10000,
     timeout: 60000,
   });
+}
+
+/**
+ * Recuperação única do estado já quebrado: religa ao QDD vigente as marcações
+ * que ficaram órfãs em importações anteriores (presas a ações HISTORICO). Idempotente.
+ */
+export async function reattachOrphanAssignmentsToVigente(): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
+  const vigenteId = await getVigenteImportId();
+  if (!vigenteId) return { reattached: 0, unmatched: [] };
+
+  return prisma.$transaction(async (tx) => {
+    const vigenteActions = await tx.budgetAction.findMany({
+      where: { importId: vigenteId },
+      select: { id: true, year: true, organizationCode: true, unitCode: true, projectActivity: true, application: true },
+    });
+    const newIdByKey = new Map<string, string>(
+      vigenteActions.map((a: any) => [actionLogicalKey(a), a.id] as const),
+    );
+
+    const orphanActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
+      where: { importId: { not: vigenteId }, assignments: { some: {} } },
+      select: {
+        id: true, year: true, organizationCode: true, organizationName: true,
+        unitCode: true, unitName: true, projectActivity: true, application: true,
+      },
+    });
+
+    return remapAssignments(tx, orphanActions, newIdByKey);
+  }, { maxWait: 10000, timeout: 60000 });
 }
 
 async function createInBatches(model: { createMany: (args: { data: any[] }) => Promise<unknown> }, data: any[], batchSize = 2000) {
