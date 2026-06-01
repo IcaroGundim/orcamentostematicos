@@ -1,5 +1,6 @@
 'use client';
 
+import { LoaderCircleIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -14,12 +15,13 @@ import { cn } from '@/lib/utils';
 
 interface LoginQuickAccessProps {
   disabled?: boolean;
-  onQuickLogin: (identifier: string, password: string) => void;
+  onQuickLogin: (identifier: string, password: string) => void | Promise<void>;
 }
 
 export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessProps) {
   const [mounted, setMounted] = useState(false);
   const [entries, setEntries] = useState<QuickAccessEntry[]>([]);
+  const [loadingIdentifier, setLoadingIdentifier] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -31,6 +33,18 @@ export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessPro
   function handleClear() {
     clearQuickAccessOnDevice();
     setEntries([]);
+  }
+
+  async function handleQuickLogin(identifier: string, password: string) {
+    if (loadingIdentifier) return;
+    setLoadingIdentifier(identifier);
+    try {
+      await onQuickLogin(identifier, password);
+    } finally {
+      // Em caso de sucesso a navegação desmonta o componente; em caso de falha,
+      // liberamos o botão para nova tentativa.
+      setLoadingIdentifier(null);
+    }
   }
 
   if (!mounted || !hasLocalLoginHistory() || entries.length === 0) {
@@ -49,20 +63,29 @@ export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessPro
         <div className="grid grid-cols-2 gap-2">
           {entries.map((entry) => {
             const isSeplan = entry.role === 'SEPLAN_ADMIN';
+            const isLoading = loadingIdentifier === entry.identifier;
 
             return (
               <button
                 key={entry.identifier}
                 type="button"
-                disabled={disabled}
-                onClick={() => onQuickLogin(entry.identifier, entry.password)}
+                disabled={disabled || loadingIdentifier !== null}
+                aria-busy={isLoading}
+                onClick={() => void handleQuickLogin(entry.identifier, entry.password)}
                 className={cn(
-                  'flex text-left transition-all disabled:opacity-50',
+                  'relative flex text-left transition-all disabled:opacity-50',
                   isSeplan
                     ? 'col-span-2 items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 hover:border-primary/40 hover:bg-primary/10'
                     : 'flex-col rounded-lg border border-border bg-card p-2 hover:bg-muted',
                 )}
               >
+                {isLoading ? (
+                  <span className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-card/70 backdrop-blur-[1px]">
+                    <LoaderCircleIcon
+                      className={cn('animate-spin', isSeplan ? 'size-4 text-primary' : 'size-3.5 text-foreground')}
+                    />
+                  </span>
+                ) : null}
                 <div className="flex min-w-0 flex-col">
                   <span
                     className={cn(

@@ -196,7 +196,7 @@ export default function LoginPage() {
             <LoginQuickAccess
               disabled={isSubmitting}
               onQuickLogin={(identifier, password) =>
-                void performLogin(identifier, password, { fromQuickAccess: true })
+                performLogin(identifier, password, { fromQuickAccess: true })
               }
             />
           </div>
