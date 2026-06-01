@@ -62,6 +62,23 @@ export interface StructureDiff {
     catalogName: string;
     qddName: string;
   }>;
+  /**
+   * Projeção das marcações temáticas sobre o QDD em conferência: quantas ações
+   * classificadas hoje têm correspondência (serão mantidas) e quais ficarão sem
+   * par no QDD selecionado.
+   */
+  markers?: {
+    classifiedActions: number;
+    preserved: number;
+    unmatched: Array<{
+      organizationCode: string;
+      organizationName: string;
+      unitCode: string;
+      unitName: string;
+      projectActivity: string;
+      application: string;
+    }>;
+  };
 }
 
 export interface StructureDiffApplySelection {

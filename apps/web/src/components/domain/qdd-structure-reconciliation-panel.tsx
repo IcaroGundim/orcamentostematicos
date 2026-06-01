@@ -178,7 +178,7 @@ export function QddStructureReconciliationPanel({
             Fonte: {source === 'preview' ? 'prévia do arquivo' : 'QDD vigente'}.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <Empty>
             <EmptyHeader>
               <EmptyMedia>
@@ -190,6 +190,7 @@ export function QddStructureReconciliationPanel({
               Não há diferenças entre o cadastro de estrutura e o QDD selecionado.
             </EmptyDescription>
           </Empty>
+          <MarkersSummary markers={diff.markers} source={source} />
         </CardContent>
       </Card>
     );
@@ -220,6 +221,8 @@ export function QddStructureReconciliationPanel({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        <MarkersSummary markers={diff.markers} source={source} />
+
         <DiffSection
           title="Órgãos novos no QDD"
           empty="Nenhum órgão novo."
@@ -353,6 +356,59 @@ export function QddStructureReconciliationPanel({
         />
       </CardContent>
     </Card>
+  );
+}
+
+function MarkersSummary({
+  markers,
+  source,
+}: {
+  markers: StructureDiff['markers'];
+  source: 'preview' | 'vigente';
+}) {
+  if (!markers || markers.classifiedActions === 0) return null;
+  const isPreview = source === 'preview';
+  return (
+    <div className="rounded-md border p-3">
+      <h3 className="text-sm font-medium">Marcações (orçamento temático)</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {markers.classifiedActions} {markers.classifiedActions === 1 ? 'ação classificada' : 'ações classificadas'}
+        {' · '}
+        {markers.preserved} {markers.preserved === 1 ? 'será mantida' : 'serão mantidas'}
+        {markers.unmatched.length > 0 ? ` · ${markers.unmatched.length} sem correspondência` : ''}.
+        {isPreview ? ' Projeção do que ocorrerá ao confirmar este QDD.' : ''}
+      </p>
+      {markers.unmatched.length > 0 ? (
+        <div className="mt-2">
+          <p className="text-xs text-muted-foreground">
+            Estas ações classificadas não têm correspondência no QDD selecionado. A marcação é
+            preservada no banco, mas ficará oculta até a ação reaparecer.
+          </p>
+          <ScrollArea className="mt-2 max-h-48 rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Órgão / unidade</TableHead>
+                  <TableHead>Projeto-atividade</TableHead>
+                  <TableHead>Aplicação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {markers.unmatched.map((a, i) => (
+                  <TableRow key={`${a.organizationCode}-${a.unitCode}-${a.projectActivity}-${i}`}>
+                    <TableCell className="text-xs">
+                      {a.organizationCode} / {a.unitCode} · {a.unitName}
+                    </TableCell>
+                    <TableCell className="text-xs">{a.projectActivity}</TableCell>
+                    <TableCell className="text-xs">{a.application}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

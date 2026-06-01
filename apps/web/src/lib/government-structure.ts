@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from './prisma';
+import { actionLogicalKey } from './qdd-parser';
 import { getVigenteImportId } from './store';
 import type {
   GovernmentEntityType,
@@ -327,13 +328,108 @@ export async function getQddPairsForDiff(
   return extractPairsFromActions(actions);
 }
 
+type ActionKeyFields = {
+  year: number;
+  organizationCode: string;
+  organizationName: string;
+  unitCode: string;
+  unitName: string;
+  projectActivity: string;
+  application: string;
+};
+
+/**
+ * Retorna as ações (com campos da chave lógica) do QDD em conferência, para
+ * projetar quais marcações teriam correspondência.
+ */
+async function getQddActionsForDiff(
+  source: 'preview' | 'vigente',
+  previewId?: string,
+): Promise<ActionKeyFields[]> {
+  if (source === 'preview') {
+    if (!previewId) throw new Error('previewId é obrigatório para source=preview.');
+    const preview = await prisma.importPreview.findUnique({ where: { id: previewId } });
+    if (!preview) throw new Error('Prévia não encontrada.');
+    const parsed = preview.data as { actions?: ActionKeyFields[] };
+    return parsed.actions ?? [];
+  }
+
+  const vigenteId = await getVigenteImportId();
+  if (!vigenteId) return [];
+  return prisma.budgetAction.findMany({
+    where: { importId: vigenteId },
+    select: {
+      year: true, organizationCode: true, organizationName: true,
+      unitCode: true, unitName: true, projectActivity: true, application: true,
+    },
+  });
+}
+
+/**
+ * Projeta as marcações temáticas atuais sobre o QDD em conferência: agrupa por
+ * ação (chave lógica) e separa entre as que têm correspondência (serão mantidas)
+ * e as que ficariam sem par.
+ */
+export async function buildMarkersProjection(
+  source: 'preview' | 'vigente',
+  previewId?: string,
+): Promise<NonNullable<StructureDiff['markers']>> {
+  const [qddActions, assignments] = await Promise.all([
+    getQddActionsForDiff(source, previewId),
+    prisma.thematicAssignment.findMany({
+      select: {
+        action: {
+          select: {
+            year: true, organizationCode: true, organizationName: true,
+            unitCode: true, unitName: true, projectActivity: true, application: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const qddKeys = new Set(qddActions.map((a) => actionLogicalKey(a)));
+
+  // Ações distintas que possuem marcação hoje, deduplicadas pela chave lógica.
+  const classifiedByKey = new Map<string, ActionKeyFields>();
+  for (const { action } of assignments) {
+    if (!action) continue;
+    classifiedByKey.set(actionLogicalKey(action), action);
+  }
+
+  let preserved = 0;
+  const unmatched: NonNullable<StructureDiff['markers']>['unmatched'] = [];
+  for (const [key, action] of classifiedByKey) {
+    if (qddKeys.has(key)) {
+      preserved += 1;
+    } else {
+      unmatched.push({
+        organizationCode: action.organizationCode,
+        organizationName: action.organizationName,
+        unitCode: action.unitCode,
+        unitName: action.unitName,
+        projectActivity: action.projectActivity,
+        application: action.application,
+      });
+    }
+  }
+  unmatched.sort((a, b) =>
+    `${a.organizationCode}-${a.unitCode}-${a.projectActivity}`.localeCompare(
+      `${b.organizationCode}-${b.unitCode}-${b.projectActivity}`,
+    ),
+  );
+
+  return { classifiedActions: classifiedByKey.size, preserved, unmatched };
+}
+
 export async function buildStructureDiff(
   source: 'preview' | 'vigente',
   previewId?: string,
 ): Promise<StructureDiff> {
-  const [catalog, qddPairs] = await Promise.all([
+  const [catalog, qddPairs, markers] = await Promise.all([
     listGovernmentStructure(),
     getQddPairsForDiff(source, previewId),
+    buildMarkersProjection(source, previewId),
   ]);
-  return diffGovernmentStructure(qddPairs, catalog);
+  return { ...diffGovernmentStructure(qddPairs, catalog), markers };
 }

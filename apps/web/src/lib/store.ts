@@ -388,18 +388,18 @@ async function remapAssignments(
 
 export async function addImportedBudget(importRecord: any, actions: any[]): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
   return prisma.$transaction(async (tx) => {
-    // Antes de aposentar o import vigente, captura as ações marcadas para religar
-    // as marcações às novas ações (que receberão IDs novos).
-    const prevVigente = await tx.budgetImport.findFirst({ where: { status: 'VIGENTE' }, select: { id: true } });
-    const oldMarkedActions: ActionKeyInfo[] = prevVigente
-      ? await tx.budgetAction.findMany({
-          where: { importId: prevVigente.id, assignments: { some: {} } },
-          select: {
-            id: true, year: true, organizationCode: true, organizationName: true,
-            unitCode: true, unitName: true, projectActivity: true, application: true,
-          },
-        })
-      : [];
+    // Captura TODAS as ações que ainda têm marcações (de qualquer import) para
+    // religá-las às novas ações (que receberão IDs novos). As ações recém-criadas
+    // deste import ainda não têm marcações, então isso cobre tanto o vigente
+    // anterior quanto eventuais marcações já órfãs de imports históricos —
+    // tornando a preservação automática no confirm, sem ação manual.
+    const oldMarkedActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
+      where: { assignments: { some: {} } },
+      select: {
+        id: true, year: true, organizationCode: true, organizationName: true,
+        unitCode: true, unitName: true, projectActivity: true, application: true,
+      },
+    });
 
     await tx.budgetImport.updateMany({ where: { status: 'VIGENTE' }, data: { status: 'HISTORICO' } });
     await tx.budgetImport.create({
