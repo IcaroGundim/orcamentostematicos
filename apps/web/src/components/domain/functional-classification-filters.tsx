@@ -10,14 +10,7 @@ import type { BudgetAction } from '@/types/domain';
 import { cn } from '@/lib/utils';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { Field, FieldLabel } from '@/components/ui/field';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 
 export type FunctionalClassificationFiltersProps = {
   actions: Pick<BudgetAction, 'functionalProgram' | 'projectActivity'>[];
@@ -56,47 +49,27 @@ export function FunctionalClassificationFilters({
     <>
       <Field className="min-w-0 gap-1.5">
         {showLabels ? <FieldLabel className={filterFieldLabelClass}>Função</FieldLabel> : null}
-        <Select
+        <SearchableCombobox
+          className="relative w-full min-w-0"
           value={functionFilter}
-          onValueChange={(value) => {
+          onChange={(value) => {
             onFunctionChange(value);
             onSubfunctionChange(allValue);
           }}
-        >
-          <SelectTrigger className="w-full min-w-0">
-            <SelectValue placeholder="Todas as funções" />
-          </SelectTrigger>
-          <SelectContent position="popper">
-            <SelectGroup>
-              {functionOptions.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          placeholder="Todas as funções"
+          items={functionOptions}
+        />
       </Field>
       <Field className="min-w-0 gap-1.5">
         {showLabels ? <FieldLabel className={filterFieldLabelClass}>Subfunção</FieldLabel> : null}
-        <Select
+        <SearchableCombobox
+          className="relative w-full min-w-0"
           value={subfunctionFilter}
-          onValueChange={onSubfunctionChange}
+          onChange={onSubfunctionChange}
           disabled={subfunctionDisabled}
-        >
-          <SelectTrigger className="w-full min-w-0">
-            <SelectValue placeholder="Todas as subfunções" />
-          </SelectTrigger>
-          <SelectContent position="popper">
-            <SelectGroup>
-              {subfunctionOptions.map((item) => (
-                <SelectItem key={item.value} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+          placeholder="Todas as subfunções"
+          items={subfunctionOptions}
+        />
       </Field>
     </>
   );

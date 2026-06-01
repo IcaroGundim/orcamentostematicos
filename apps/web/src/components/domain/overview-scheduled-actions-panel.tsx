@@ -8,7 +8,7 @@ import { ThemeBadge } from '@/components/domain/badges';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
-import { SearchableCombobox } from '@/components/domain/searchable-combobox';
+import { SearchableCombobox, type SearchableComboboxItem } from '@/components/domain/searchable-combobox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -130,6 +130,16 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       }))
       .sort((a, b) => `${a.organizationCode}-${a.code}`.localeCompare(`${b.organizationCode}-${b.code}`));
   }, [actions, organizationCode]);
+
+  const unitComboboxItems = useMemo<SearchableComboboxItem[]>(() => {
+    const byValue = new Map<string, SearchableComboboxItem>([[ALL, { value: ALL, label: 'Todas as unidades' }]]);
+    for (const unit of units) {
+      if (!byValue.has(unit.code)) {
+        byValue.set(unit.code, { value: unit.code, label: `${unit.code} - ${unit.name}` });
+      }
+    }
+    return [...byValue.values()];
+  }, [units]);
 
   const filteredActions = useMemo(() => {
     return actions.filter((action) => {
@@ -258,21 +268,13 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             </Field>
             <Field className="min-w-0 gap-1.5">
               <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
-              <Select value={unitCode} onValueChange={setUnitCode}>
-                <SelectTrigger className="w-full min-w-0">
-                  <SelectValue placeholder="Todas as unidades" />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    <SelectItem value={ALL}>Todas as unidades</SelectItem>
-                    {units.map((unit) => (
-                      <SelectItem key={`${unit.organizationCode}-${unit.code}`} value={unit.code}>
-                        {unit.code} - {unit.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <SearchableCombobox
+                className="relative w-full min-w-0"
+                value={unitCode}
+                onChange={setUnitCode}
+                placeholder="Todas as unidades"
+                items={unitComboboxItems}
+              />
             </Field>
             <FunctionalClassificationFilters
               actions={actions}
