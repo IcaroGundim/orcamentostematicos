@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
+import { CalculatorIcon, DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
 
 import { ThemeBadge } from '@/components/domain/badges';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
@@ -11,6 +11,7 @@ import { FunctionalProgramLine } from '@/components/domain/functional-program-li
 import { SearchableCombobox, type SearchableComboboxItem } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
@@ -39,6 +40,11 @@ const ALL = 'ALL';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
 
+const switchTrackClass =
+  'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[17px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534]';
+const switchThumbClass =
+  'absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]:translate-x-[1.5em]';
+
 type OrganizationOption = { code: string; name: string };
 
 type Props = {
@@ -59,13 +65,39 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
 type OverviewActionRowProps = {
   action: BudgetAction;
   showUnit: boolean;
+  selectable: boolean;
+  selected: boolean;
+  onToggle: (id: string) => void;
 };
 
-const OverviewActionRow = memo(function OverviewActionRow({ action, showUnit }: OverviewActionRowProps) {
+const OverviewActionRow = memo(function OverviewActionRow({
+  action,
+  showUnit,
+  selectable,
+  selected,
+  onToggle,
+}: OverviewActionRowProps) {
   return (
-    <Table className="table-fixed w-full min-w-[42rem]">
+    <Table className={`table-fixed w-full ${selectable ? 'min-w-[44rem]' : 'min-w-[42rem]'}`}>
       <TableBody>
-        <TableRow>
+        <TableRow
+          data-state={selectable && selected ? 'selected' : undefined}
+          onClick={selectable ? () => onToggle(action.id) : undefined}
+          className={`data-[state=selected]:bg-muted/40 ${selectable ? 'cursor-pointer' : ''}`}
+        >
+          {selectable ? (
+            <TableCell
+              className="w-5 px-0 py-2 text-center align-middle"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Checkbox
+                className="mx-auto size-5"
+                checked={selected}
+                onCheckedChange={() => onToggle(action.id)}
+                aria-label={`Selecionar ${action.application}`}
+              />
+            </TableCell>
+          ) : null}
           <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
             <div className="flex min-w-0 flex-col gap-0.5">
               <p className="text-sm font-medium leading-snug">{action.application}</p>
@@ -116,7 +148,33 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const [theme, setTheme] = useState(ALL);
   const [onlyEmendas, setOnlyEmendas] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [calculatorMode, setCalculatorMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const actionsById = useMemo(() => {
+    const map = new Map<string, BudgetAction>();
+    for (const action of actions) map.set(action.id, action);
+    return map;
+  }, [actions]);
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const toggleCalculator = useCallback(() => {
+    setCalculatorMode((enabled) => {
+      if (enabled) setSelectedIds(new Set());
+      return !enabled;
+    });
+  }, []);
 
   const units = useMemo(() => {
     return uniqueBy(
@@ -180,7 +238,47 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     [displayedActions],
   );
 
+  const selectedCount = selectedIds.size;
+
+  const selectedTotals = useMemo(() => {
+    let initialBudget = 0;
+    let updatedBudget = 0;
+    let liquidated = 0;
+    for (const id of selectedIds) {
+      const action = actionsById.get(id);
+      if (!action) continue;
+      initialBudget += action.totals.initialBudget;
+      updatedBudget += action.totals.updatedBudget;
+      liquidated += action.totals.liquidated;
+    }
+    return { initialBudget, updatedBudget, liquidated };
+  }, [selectedIds, actionsById]);
+
+  const displayedSelectionState = useMemo<'none' | 'some' | 'all'>(() => {
+    if (displayedActions.length === 0 || selectedIds.size === 0) return 'none';
+    let selectedInView = 0;
+    for (const action of displayedActions) {
+      if (selectedIds.has(action.id)) selectedInView += 1;
+    }
+    if (selectedInView === 0) return 'none';
+    return selectedInView === displayedActions.length ? 'all' : 'some';
+  }, [displayedActions, selectedIds]);
+
+  const toggleSelectDisplayed = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = displayedActions.every((action) => next.has(action.id));
+      if (allSelected) {
+        for (const action of displayedActions) next.delete(action.id);
+      } else {
+        for (const action of displayedActions) next.add(action.id);
+      }
+      return next;
+    });
+  }, [displayedActions]);
+
   const showUnit = unitCode === ALL;
+  const tableMinWidth = calculatorMode ? 'min-w-[44rem]' : 'min-w-[42rem]';
 
   const selectedOrganization = useMemo(() => {
     if (organizationCode === ALL) return null;
@@ -284,14 +382,20 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                 aria-checked={onlyEmendas}
                 data-state={onlyEmendas ? 'checked' : 'unchecked'}
                 onClick={() => setOnlyEmendas((value) => !value)}
-                className="group/emendas relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[17px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#21cc4c]"
+                className={switchTrackClass}
               >
-                <span
-                  aria-hidden
-                  className="absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]/emendas:translate-x-[1.5em]"
-                />
+                <span aria-hidden className={switchThumbClass} />
               </button>
             </label>
+            <Button
+              variant={calculatorMode ? 'default' : 'outline'}
+              size="lg"
+              aria-pressed={calculatorMode}
+              onClick={toggleCalculator}
+            >
+              <CalculatorIcon />
+              Somar
+            </Button>
             <Button
               variant="outline"
               size="lg"
@@ -396,9 +500,25 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <Separator className="shrink-0" />
             <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-auto">
-              <Table className="table-fixed w-full min-w-[42rem]">
+              <Table className={`table-fixed w-full ${tableMinWidth}`}>
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
+                    {calculatorMode ? (
+                      <TableHead className="h-9 w-5 px-0 bg-background text-center align-middle">
+                        <Checkbox
+                          className="mx-auto size-5"
+                          checked={
+                            displayedSelectionState === 'all'
+                              ? true
+                              : displayedSelectionState === 'some'
+                                ? 'indeterminate'
+                                : false
+                          }
+                          onCheckedChange={toggleSelectDisplayed}
+                          aria-label="Selecionar todas as ações exibidas"
+                        />
+                      </TableHead>
+                    ) : null}
                     <TableHead className="h-9 w-[38%] min-w-[12rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
                       Ação
                     </TableHead>
@@ -423,7 +543,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                 </TableHeader>
               </Table>
               <div
-                className="relative w-full min-w-[42rem]"
+                className={`relative w-full ${tableMinWidth}`}
                 style={{ height: `${virtualizer.getTotalSize()}px` }}
               >
                 {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -437,7 +557,13 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                       className="absolute left-0 top-0 w-full"
                       style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
-                      <OverviewActionRow action={action} showUnit={showUnit} />
+                      <OverviewActionRow
+                        action={action}
+                        showUnit={showUnit}
+                        selectable={calculatorMode}
+                        selected={selectedIds.has(action.id)}
+                        onToggle={toggleSelection}
+                      />
                     </div>
                   );
                 })}
@@ -445,6 +571,32 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             </div>
           </div>
         )}
+
+        {calculatorMode && selectedCount > 0 ? (
+          <div className="flex shrink-0 flex-col gap-3 rounded-lg border border-primary/30 bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-sm font-semibold text-primary tabular-nums">
+                {selectedCount.toLocaleString('pt-BR')} selecionada(s)
+              </span>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
+                <XIcon />
+                Limpar seleção
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-x-7 gap-y-1">
+              {[
+                { label: 'Inicial', value: selectedTotals.initialBudget },
+                { label: 'Atualizado', value: selectedTotals.updatedBudget },
+                { label: 'Liquidado', value: selectedTotals.liquidated },
+              ].map((stat) => (
+                <div key={stat.label} className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                  <p className="truncate text-lg font-semibold tabular-nums">{formatMoney(stat.value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
