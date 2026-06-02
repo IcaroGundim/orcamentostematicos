@@ -232,6 +232,25 @@ export function formatSubfunctionLabel(code: string, functionCode?: string): str
   return name ? `${code} — ${name}` : `${code} — código não catalogado`;
 }
 
+/**
+ * Códigos de projeto/atividade iniciados em 8 que correspondem ao controle da
+ * dívida do Estado do Acre (80000000 e a faixa contígua 80010000–80270000) e
+ * que, portanto, NÃO são emendas parlamentares.
+ */
+export const AMENDMENT_DEBT_CONTROL_CODES: ReadonlySet<string> = new Set([
+  '80000000',
+  ...Array.from({ length: 27 }, (_, index) => `80${String(index + 1).padStart(2, '0')}0000`),
+]);
+
+/**
+ * Uma ação é uma emenda quando o projeto/atividade começa com "8", exceto os
+ * códigos de controle da dívida ({@link AMENDMENT_DEBT_CONTROL_CODES}).
+ */
+export function actionIsAmendment(action: Pick<BudgetAction, 'projectActivity'>): boolean {
+  const activity = action.projectActivity.trim();
+  return activity.startsWith('8') && !AMENDMENT_DEBT_CONTROL_CODES.has(activity);
+}
+
 export function actionMatchesFunctionalFilters(
   action: Pick<BudgetAction, 'functionalProgram' | 'projectActivity'>,
   functionFilter: string,

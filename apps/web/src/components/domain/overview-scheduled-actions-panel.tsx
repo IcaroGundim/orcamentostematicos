@@ -2,14 +2,15 @@
 
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { DatabaseIcon, SearchIcon } from 'lucide-react';
+import { DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
 
 import { ThemeBadge } from '@/components/domain/badges';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { SearchableCombobox, type SearchableComboboxItem } from '@/components/domain/searchable-combobox';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatMoney, themeLabels } from '@/lib/api';
-import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
+import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import type { BudgetAction } from '@/types/domain';
 
 const ALL = 'ALL';
@@ -113,6 +114,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const [functionFilter, setFunctionFilter] = useState(ALL);
   const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [theme, setTheme] = useState(ALL);
+  const [onlyEmendas, setOnlyEmendas] = useState(false);
   const [search, setSearch] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -146,12 +148,13 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       if (organizationCode !== ALL && action.organizationCode !== organizationCode) return false;
       if (unitCode !== ALL && action.unitCode !== unitCode) return false;
       if (theme !== ALL && !action.assignments.some((item) => item.theme === theme)) return false;
+      if (onlyEmendas && !actionIsAmendment(action)) return false;
       if (!actionMatchesFunctionalFilters(action, functionFilter, subfunctionFilter, ALL)) {
         return false;
       }
       return true;
     });
-  }, [actions, organizationCode, unitCode, theme, functionFilter, subfunctionFilter]);
+  }, [actions, organizationCode, unitCode, theme, onlyEmendas, functionFilter, subfunctionFilter]);
 
   const displayedActions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -228,6 +231,25 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     setSearch('');
   }, []);
 
+  const hasActiveFilters =
+    organizationCode !== ALL ||
+    unitCode !== ALL ||
+    functionFilter !== ALL ||
+    subfunctionFilter !== ALL ||
+    theme !== ALL ||
+    onlyEmendas ||
+    search.trim() !== '';
+
+  const clearFilters = useCallback(() => {
+    setOrganizationCode(ALL);
+    setUnitCode(ALL);
+    setFunctionFilter(ALL);
+    setSubfunctionFilter(ALL);
+    setTheme(ALL);
+    setOnlyEmendas(false);
+    setSearch('');
+  }, []);
+
   const orgComboboxItems = useMemo(
     () => [
       { value: ALL, label: 'Todos os órgãos' },
@@ -252,6 +274,35 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         <CardDescription>
           <span className="block">{scopeDescription}</span>
         </CardDescription>
+        <CardAction>
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium select-none">
+              Emendas
+              <button
+                type="button"
+                role="switch"
+                aria-checked={onlyEmendas}
+                data-state={onlyEmendas ? 'checked' : 'unchecked'}
+                onClick={() => setOnlyEmendas((value) => !value)}
+                className="group/emendas relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[17px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#21cc4c]"
+              >
+                <span
+                  aria-hidden
+                  className="absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]/emendas:translate-x-[1.5em]"
+                />
+              </button>
+            </label>
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+            >
+              <XIcon />
+              Limpar filtros
+            </Button>
+          </div>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
         <div className="flex shrink-0 flex-col gap-3">
