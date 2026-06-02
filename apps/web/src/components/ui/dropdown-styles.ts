@@ -1,6 +1,6 @@
 /** Estilos compartilhados entre Select (Radix) e SearchableCombobox. */
 export const dropdownTriggerClassName =
-  'group/trigger flex h-9 w-full min-h-8 items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-[color,box-shadow,background-color,border-color] outline-none select-none hover:border-border hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-ring data-[state=open]:bg-muted/40 data-[state=open]:ring-[3px] data-[state=open]:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50 dark:data-[state=open]:bg-input/50';
+  'group/trigger flex h-8 w-full min-h-8 items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 py-1.5 text-sm shadow-sm md:h-9 md:py-2 transition-[color,box-shadow,background-color,border-color] outline-none select-none hover:border-border hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:border-ring data-[state=open]:bg-muted/40 data-[state=open]:ring-[3px] data-[state=open]:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50 dark:data-[state=open]:bg-input/50';
 
 export const dropdownTriggerFocusWithinClassName =
   'focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50';

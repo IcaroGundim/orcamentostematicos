@@ -125,7 +125,7 @@ import type {
   ValidationItem,
 } from '@/types/domain';
 import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
-import { GovernmentStructurePanel } from '@/components/domain/government-structure-panel';
+import { RelocatedUnitsPanel } from '@/components/domain/relocated-units-panel';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { functionalColumnFilterMatches, type FunctionalColumnFilterValue } from '@/lib/functional-classification';
 import { ThematicCurationPanel, type AssignmentForm } from '@/components/domain/thematic-curation-panel';
@@ -793,6 +793,16 @@ export default function SeplanPage() {
       .sort((a, b) => a.code.localeCompare(b.code));
   }, [governmentStructure]);
 
+  const relocatedUnitKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const org of governmentStructure.organizations) {
+      for (const unit of org.units) {
+        if (unit.relocated) keys.add(`${org.code}|${unit.code}`);
+      }
+    }
+    return keys;
+  }, [governmentStructure]);
+
   const years = useMemo(() => [...new Set(actions.map((action) => String(action.year)))].sort(), [actions]);
 
   const themeGaugeData = useMemo(() => {
@@ -1108,19 +1118,19 @@ export default function SeplanPage() {
       <SidebarInset className="flex h-svh min-h-0 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 shrink-0 border-b border-primary-foreground/20 bg-primary text-primary-foreground shadow-sm">
           <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger size="icon-lg" className="size-10 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
-              <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />
-              <span className="text-xl font-semibold uppercase tracking-widest text-primary-foreground/50 select-none">|</span>
-              <span className="font-semibold uppercase tracking-widest" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
+            <div className="flex min-w-0 items-center gap-3">
+              <SidebarTrigger size="icon-lg" className="size-10 shrink-0 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
+              <img src="/logo.svg" alt="Logo" className="h-8 w-auto shrink-0" />
+              <span className="hidden text-xl font-semibold uppercase tracking-widest text-primary-foreground/50 select-none lg:inline">|</span>
+              <span className="hidden truncate font-semibold uppercase tracking-widest lg:inline" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
                     <EyeIcon data-icon="inline-start" />
-                    Visualizar telas
-                    <ChevronDownIcon className="ml-1 size-4 opacity-70" />
+                    <span className="hidden lg:inline">Visualizar telas</span>
+                    <ChevronDownIcon className="ml-1 hidden size-4 opacity-70 lg:inline" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" side="bottom" className="w-72 p-2">
@@ -1155,8 +1165,8 @@ export default function SeplanPage() {
                 <PopoverTrigger asChild>
                   <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
                     <BookOpenIcon data-icon="inline-start" />
-                    Legislação
-                    <ChevronDownIcon className="ml-1 size-4 opacity-70" />
+                    <span className="hidden lg:inline">Legislação</span>
+                    <ChevronDownIcon className="ml-1 hidden size-4 opacity-70 lg:inline" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" side="bottom" className="w-72 p-2">
@@ -1177,14 +1187,14 @@ export default function SeplanPage() {
               </Popover>
               <Button
                 variant="secondary"
-                className="border-border/60 bg-white text-foreground hover:bg-white/90"
+                className="hidden border-border/60 bg-white text-foreground hover:bg-white/90 lg:inline-flex"
                 onClick={() => void load()}
               >
                 <RefreshCwIcon data-icon="inline-start" />
                 Atualizar
               </Button>
               <Button
-                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                className="hidden text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground lg:inline-flex"
                 variant="ghost"
                 disabled={isSigningOut}
                 onClick={signOut}
@@ -1199,7 +1209,11 @@ export default function SeplanPage() {
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:px-6 2xl:px-8">
           {activeSection === 'overview' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <OverviewScheduledActionsPanel actions={actions} organizations={organizations} />
+              <OverviewScheduledActionsPanel
+                actions={actions}
+                organizations={organizations}
+                relocatedUnitKeys={relocatedUnitKeys}
+              />
             </div>
           ) : null}
 
@@ -1209,8 +1223,8 @@ export default function SeplanPage() {
                 <TabsList>
                   <TabsTrigger value="base">Base vigente</TabsTrigger>
                   <TabsTrigger value="executors">Atribuição de execução</TabsTrigger>
-                  <TabsTrigger value="government">Estrutura de governo</TabsTrigger>
                   <TabsTrigger value="users">Usuários</TabsTrigger>
+                  <TabsTrigger value="duplicates">Unidades duplicadas</TabsTrigger>
                   <TabsTrigger value="reconciliation">Conferência com QDD</TabsTrigger>
                 </TabsList>
 
@@ -1218,8 +1232,16 @@ export default function SeplanPage() {
                   <UsersPanel organizations={governmentStructure.organizations} />
                 </TabsContent>
 
-                <TabsContent value="government">
-                  <GovernmentStructurePanel structure={governmentStructure} />
+                <TabsContent value="duplicates">
+                  <RelocatedUnitsPanel
+                    structure={governmentStructure}
+                    onChanged={async () => {
+                      const govStructure = await api<GovernmentStructure>('/government-structure').catch(
+                        () => ({ organizations: [] }),
+                      );
+                      setGovernmentStructure(govStructure);
+                    }}
+                  />
                 </TabsContent>
 
                 <TabsContent value="reconciliation">

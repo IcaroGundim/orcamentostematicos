@@ -41,6 +41,7 @@ export async function listGovernmentStructure(): Promise<GovernmentStructure> {
         code: unit.code,
         name: unit.name,
         active: unit.active,
+        relocated: unit.relocated,
       })),
     })),
   };

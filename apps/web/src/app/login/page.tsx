@@ -138,13 +138,13 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-muted/20 px-8 py-12">
+        <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/20 px-6 py-10 sm:gap-8 sm:px-8 sm:py-12">
           <Image
             src="/logo-governo-acre-horizontal.png"
             alt="Governo do Estado do Acre"
             width={480}
             height={140}
-            className="h-36 w-auto object-contain"
+            className="h-28 w-auto object-contain sm:h-36"
             priority
           />
 

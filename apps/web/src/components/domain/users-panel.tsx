@@ -289,7 +289,7 @@ export function UsersPanel({ organizations }: Props) {
 
   return (
     <>
-      <section className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+      <section className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
       <Card className="min-w-0">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">

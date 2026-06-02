@@ -41,7 +41,7 @@ const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
 
 const switchTrackClass =
-  'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[17px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534]';
+  'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534] md:text-[17px]';
 const switchThumbClass =
   'absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]:translate-x-[1.5em]';
 
@@ -50,6 +50,8 @@ type OrganizationOption = { code: string; name: string };
 type Props = {
   actions: BudgetAction[];
   organizations: OrganizationOption[];
+  /** Chaves "organizationCode|unitCode" de unidades marcadas como realocadas. */
+  relocatedUnitKeys?: Set<string>;
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -67,6 +69,7 @@ type OverviewActionRowProps = {
   showUnit: boolean;
   selectable: boolean;
   selected: boolean;
+  relocated: boolean;
   onToggle: (id: string) => void;
 };
 
@@ -75,6 +78,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
   showUnit,
   selectable,
   selected,
+  relocated,
   onToggle,
 }: OverviewActionRowProps) {
   return (
@@ -100,7 +104,17 @@ const OverviewActionRow = memo(function OverviewActionRow({
           ) : null}
           <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-sm font-medium leading-snug">{action.application}</p>
+              <p className="text-sm font-medium leading-snug">
+                {action.application}
+                {relocated ? (
+                  <span
+                    className="text-blue-600 dark:text-blue-400"
+                    title="Unidade realocada para uma nova secretaria"
+                  >
+                    {' - REALOCADA'}
+                  </span>
+                ) : null}
+              </p>
               <FunctionalProgramLine
                 functionalProgram={action.functionalProgram}
                 projectActivity={action.projectActivity}
@@ -140,6 +154,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
 export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActionsPanel({
   actions,
   organizations,
+  relocatedUnitKeys,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -373,7 +388,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
           <span className="block">{scopeDescription}</span>
         </CardDescription>
         <CardAction>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 md:gap-3">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium select-none">
               Emendas
               <button
@@ -390,6 +405,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             <Button
               variant={calculatorMode ? 'default' : 'outline'}
               size="lg"
+              className="h-8 md:h-9"
               aria-pressed={calculatorMode}
               onClick={toggleCalculator}
             >
@@ -399,6 +415,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             <Button
               variant="outline"
               size="lg"
+              className="h-8 md:h-9"
               onClick={clearFilters}
               disabled={!hasActiveFilters}
             >
@@ -408,9 +425,9 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
           </div>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-        <div className="flex shrink-0 flex-col gap-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
+        <div className="flex shrink-0 flex-col gap-2 md:gap-3">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 md:gap-3">
             <Field className="min-w-0 gap-1.5">
               <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
               <SearchableCombobox
@@ -440,7 +457,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               allValue={ALL}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <div className="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2 md:gap-3">
             <Select value={theme} onValueChange={setTheme}>
               <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Tema" />
@@ -468,7 +485,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
           </div>
         </div>
 
-        <div className="grid min-w-0 shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid min-w-0 shrink-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5 md:gap-3">
           {[
             { label: 'Ações', value: displayedActions.length.toLocaleString('pt-BR') },
             { label: 'Planejado inicial', value: formatMoney(totals.initialBudget) },
@@ -479,9 +496,9 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               value: formatMoney(totals.updatedBudget - totals.liquidated),
             },
           ].map((stat) => (
-            <div key={stat.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-              <p className="mt-0.5 truncate text-lg font-semibold tabular-nums">{stat.value}</p>
+            <div key={stat.label} className="min-w-0 border-0 bg-transparent p-0 md:rounded-lg md:border md:bg-muted/30 md:p-3">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-xs">{stat.label}</p>
+              <p className="truncate text-sm font-semibold tabular-nums md:mt-0.5 md:text-lg">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -562,6 +579,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         showUnit={showUnit}
                         selectable={calculatorMode}
                         selected={selectedIds.has(action.id)}
+                        relocated={relocatedUnitKeys?.has(`${action.organizationCode}|${action.unitCode}`) ?? false}
                         onToggle={toggleSelection}
                       />
                     </div>

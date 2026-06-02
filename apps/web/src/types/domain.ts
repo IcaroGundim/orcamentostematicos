@@ -22,6 +22,7 @@ export interface GovernmentUnitCatalog {
   code: string;
   name: string;
   active: boolean;
+  relocated: boolean;
 }
 
 export interface GovernmentOrganizationCatalog {
