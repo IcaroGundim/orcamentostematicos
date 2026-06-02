@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { formatMoney, themeLabels } from '@/lib/api';
+import { classificationLabels, formatMoney, themeLabels } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Summary, ThemeBudget } from '@/types/domain';
 
@@ -20,23 +20,32 @@ const chartConfig = {
   },
 } as const;
 
-type ThemeLiquidatedSummaryChartProps = {
-  data: Summary['totalsByTheme'];
+type ClassificationLiquidatedSummaryChartProps = {
+  data: Summary['totalsByClassification'];
   className?: string;
 };
 
-type ChartRow = Summary['totalsByTheme'][number] & { themeLabel: string };
+type ChartRow = Summary['totalsByClassification'][number] & { key: string; label: string };
 
-export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidatedSummaryChartProps) {
+export function ClassificationLiquidatedSummaryChart({
+  data,
+  className,
+}: ClassificationLiquidatedSummaryChartProps) {
   const chartData = useMemo<ChartRow[]>(
     () =>
       [...data]
         .sort((a, b) => b.liquidated - a.liquidated)
         .map((row) => ({
           ...row,
-          themeLabel: themeLabels[row.theme],
+          key: `${row.theme}|${row.classification}`,
+          label: `${themeLabels[row.theme]} · ${classificationLabels[row.classification] ?? row.classification}`,
         })),
     [data],
+  );
+
+  const labelByKey = useMemo(
+    () => new Map(chartData.map((row) => [row.key, row.label])),
+    [chartData],
   );
 
   const isEmpty = chartData.length === 0 || chartData.every((row) => row.liquidated === 0);
@@ -77,12 +86,12 @@ export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidated
           />
           <YAxis
             type="category"
-            dataKey="theme"
-            width={72}
+            dataKey="key"
+            width={132}
             tickLine={false}
             axisLine={false}
-            tick={{ fontSize: 11 }}
-            tickFormatter={(value) => themeLabels[value as ThemeBudget] ?? String(value)}
+            tick={{ fontSize: 10 }}
+            tickFormatter={(value) => labelByKey.get(String(value)) ?? String(value)}
           />
           <ChartTooltip
             content={
@@ -90,14 +99,14 @@ export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidated
                 formatter={(value) => formatMoney(Number(value))}
                 labelFormatter={(_, payload) => {
                   const row = payload?.[0]?.payload as ChartRow | undefined;
-                  return row ? `${row.actions} ações classificadas` : '';
+                  return row ? `${row.label} · ${row.actions} ações` : '';
                 }}
               />
             }
           />
           <Bar dataKey="liquidated" radius={4}>
             {chartData.map((entry) => (
-              <Cell key={entry.theme} fill={themeColors[entry.theme]} />
+              <Cell key={entry.key} fill={themeColors[entry.theme]} />
             ))}
           </Bar>
         </BarChart>
@@ -105,13 +114,13 @@ export function ThemeLiquidatedSummaryChart({ data, className }: ThemeLiquidated
 
       <div className="flex shrink-0 flex-wrap gap-3 text-xs text-muted-foreground">
         {chartData.map((entry) => (
-          <div key={entry.theme} className="flex items-center gap-1.5">
+          <div key={entry.key} className="flex items-center gap-1.5">
             <span
               className="size-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: themeColors[entry.theme] }}
               aria-hidden
             />
-            <span className="font-medium text-foreground">{entry.themeLabel}</span>
+            <span className="font-medium text-foreground">{entry.label}</span>
             <span className="tabular-nums">{formatMoney(entry.liquidated)}</span>
           </div>
         ))}

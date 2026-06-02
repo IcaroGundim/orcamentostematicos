@@ -1,14 +1,18 @@
 import type { ThemeBudget } from '@/types/domain';
 
-/** OCAD Exclusivo e OSG Categoria 1 exigem 100% do valor do programa (ponderador = 1). */
+/** OCAD Exclusivo, OSG Categoria 1 e Climático Exclusiva exigem 100% do valor do programa (ponderador = 1). */
 export function isExclusiveAllocation(theme: ThemeBudget | string, classification: string): boolean {
   if (theme === 'OCAD') return classification === 'EXCLUSIVO';
   if (theme === 'OSG') return classification === 'CATEGORIA_1';
+  if (theme === 'CLIMATICO') return classification === 'EXCLUSIVA';
   return false;
 }
 
 export function usesDeliveryValues(theme: ThemeBudget | string, classification: string): boolean {
-  return theme === 'OSG' && classification === 'CATEGORIA_2';
+  return (
+    (theme === 'OSG' && classification === 'CATEGORIA_2') ||
+    (theme === 'CLIMATICO' && classification === 'INDIRETA')
+  );
 }
 
 export function isWeightingFactorLocked(theme: ThemeBudget | string, classification: string): boolean {
@@ -42,6 +46,9 @@ export function lockedWeightingFactorLabel(theme: ThemeBudget | string, classifi
     return 'Categoria 3: 50% referente à demografia do Acre (ponderador fixo em 0,5).';
   }
   if (usesDeliveryValues(theme, classification)) {
+    if (theme === 'CLIMATICO') {
+      return 'Não Exclusivo: o ponderador não se aplica. Na validação, informe o valor executado em cada entrega dentro do programa/ação; o total será calculado automaticamente.';
+    }
     return 'Categoria 2: o ponderador não se aplica. Na validação, informe o valor executado em cada entrega; o total será calculado automaticamente.';
   }
   return null;

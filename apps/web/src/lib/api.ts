@@ -72,6 +72,17 @@ export const themeLabels = {
   CLIMATICO: 'Climático',
 };
 
+/** Rótulos curtos das classificações (por valor; valores são únicos entre os temas). */
+export const classificationLabels: Record<string, string> = {
+  EXCLUSIVO: 'Exclusivo',
+  NAO_EXCLUSIVO: 'Não exclusivo',
+  CATEGORIA_1: 'Categoria 1',
+  CATEGORIA_2: 'Categoria 2',
+  CATEGORIA_3: 'Categoria 3',
+  EXCLUSIVA: 'Exclusiva',
+  INDIRETA: 'Não Exclusivo',
+};
+
 export const statusLabels = {
   RASCUNHO: 'Rascunho',
   ENVIADO_REVISOR: 'Aguardando Revisão Interna',

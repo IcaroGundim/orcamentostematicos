@@ -152,6 +152,24 @@ export async function getSummary(user: ScopedUser) {
       const liquidated = actions.filter((a) => themedActionIds.has(a.id)).reduce((s, a) => s + a.totals.liquidated, 0);
       return { theme, actions: themedActionIds.size, liquidated };
     }),
+    totalsByClassification: (() => {
+      const liquidatedByAction = new Map(actions.map((a) => [a.id, a.totals.liquidated]));
+      const groups = new Map<string, { theme: string; classification: string; actionIds: Set<string> }>();
+      for (const a of userAssignments) {
+        const classification = a.classification ?? '';
+        if (!classification) continue;
+        const key = `${a.theme}|${classification}`;
+        const group = groups.get(key) ?? { theme: a.theme, classification, actionIds: new Set<string>() };
+        group.actionIds.add(a.actionId);
+        groups.set(key, group);
+      }
+      return [...groups.values()].map((group) => ({
+        theme: group.theme,
+        classification: group.classification,
+        actions: group.actionIds.size,
+        liquidated: [...group.actionIds].reduce((s, id) => s + (liquidatedByAction.get(id) ?? 0), 0),
+      }));
+    })(),
     validationsByStatus: statuses.map((status) => ({
       status,
       count: validations.filter((v) => v.status === status).length,

@@ -39,7 +39,7 @@ const THEME_CLASSIFICATIONS = {
   ],
   CLIMATICO: [
     { value: 'EXCLUSIVA', label: 'Exclusiva' },
-    { value: 'INDIRETA', label: 'Indireta' },
+    { value: 'INDIRETA', label: 'Não Exclusivo' },
   ],
 };
 

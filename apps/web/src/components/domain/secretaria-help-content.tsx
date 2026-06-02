@@ -65,7 +65,7 @@ const THEME_CLASSIFICATIONS = {
     'Categoria 2 — dotação genérica estratégica',
     'Categoria 3 — dotação genérica não estratégica',
   ],
-  CLIMATICO: ['Exclusiva', 'Indireta'],
+  CLIMATICO: ['Exclusiva', 'Não Exclusivo'],
 } as const;
 
 const STATUS_ROWS: Array<{ status: ValidationStatus; description: string }> = [
@@ -337,7 +337,13 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
                 lockedWeightingFactorLabel('OSG', 'CATEGORIA_2') ?? 'Valores por entrega',
               ],
               ['OSG', 'Categoria 3', '0,5 (50%)', lockedWeightingFactorLabel('OSG', 'CATEGORIA_3') ?? 'Fixo'],
-              ['Climático', 'Exclusiva / Indireta', 'Informado', 'Valor entre 0 e 1'],
+              ['Climático', 'Exclusiva', '1 (100%)', lockedWeightingFactorLabel('CLIMATICO', 'EXCLUSIVA') ?? 'Fixo'],
+              [
+                'Climático',
+                'Não Exclusivo',
+                '—',
+                lockedWeightingFactorLabel('CLIMATICO', 'INDIRETA') ?? 'Valores por entrega',
+              ],
             ]}
           />
           <Callout variant="atencao" title="Atenção">

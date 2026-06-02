@@ -29,6 +29,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { toast } from 'sonner';
 import { Cell, Pie, PieChart } from 'recharts';
 import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
+import { ClassificationLiquidatedSummaryChart } from '@/components/charts/ClassificationLiquidatedSummaryChart';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -2003,14 +2004,24 @@ export default function SeplanPage() {
                     </CardContent>
                   </Card>
 
-                  <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-stretch">
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3 xl:items-stretch">
                     <Card className="flex h-full flex-col">
                       <CardHeader>
                         <CardTitle>Resumo por tema</CardTitle>
                         <CardDescription>Valores liquidados das ações classificadas por orçamento temático.</CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="flex min-h-0 flex-1 flex-col">
                         <ThemeLiquidatedSummaryChart data={summary?.totalsByTheme ?? []} />
+                      </CardContent>
+                    </Card>
+
+                    <Card className="flex h-full flex-col">
+                      <CardHeader>
+                        <CardTitle>Resumo por classificação</CardTitle>
+                        <CardDescription>Valores liquidados por classificação dentro de cada orçamento temático.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex min-h-0 flex-1 flex-col">
+                        <ClassificationLiquidatedSummaryChart data={summary?.totalsByClassification ?? []} />
                       </CardContent>
                     </Card>
 

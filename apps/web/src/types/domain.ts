@@ -294,5 +294,11 @@ export interface Summary {
   cycles: number;
   validations: number;
   totalsByTheme: { theme: ThemeBudget; actions: number; liquidated: number }[];
+  totalsByClassification: {
+    theme: ThemeBudget;
+    classification: string;
+    actions: number;
+    liquidated: number;
+  }[];
   validationsByStatus: { status: ValidationStatus; count: number }[];
 }
