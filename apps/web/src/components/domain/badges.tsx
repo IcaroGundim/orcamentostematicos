@@ -7,7 +7,7 @@ import type { ThemeBudget, ValidationStatus } from '@/types/domain';
 const themeBadgeClasses: Record<ThemeBudget, string> = {
   OSG: 'border-[#9333ea]/35 bg-[#c084fc]/22 text-[#5b21b6]',
   OCAD: 'border-[#0891b2]/35 bg-[#66d9ff]/22 text-[#0e7490]',
-  CLIMATICO: 'border-primary/20 bg-primary/10 text-primary',
+  CLIMATICO: 'border-[#065f46] bg-[#065f46] text-white',
 };
 
 export function ThemeBadge({ theme }: { theme: ThemeBudget }) {
