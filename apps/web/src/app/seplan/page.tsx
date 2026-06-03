@@ -450,6 +450,41 @@ export default function SeplanPage() {
     }
   }
 
+  async function updateAssignment() {
+    if (!selectedActionId) return;
+    const action = actions.find((a) => a.id === selectedActionId);
+    const existing = action?.assignments.find((a) => a.theme === assignment.theme);
+    if (!existing) return;
+    const snapshot = actions;
+    try {
+      const updated = await api<ThematicAssignment>(`/thematic-assignments/${existing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          axis: assignment.axis,
+          classification: assignment.classification,
+          weightingFactor: resolveWeightingFactor(
+            assignment.theme,
+            assignment.classification,
+            assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          ),
+          justification: assignment.justification,
+        }),
+      });
+      toast.success('Classificação atualizada.');
+      setActions((current) => appendActionAssignment(current, selectedActionId, updated));
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+      } catch {
+        /* mantém estado otimista */
+      }
+    } catch (err) {
+      setActions(snapshot);
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar a classificação.');
+    }
+  }
+
   async function confirmRemoveAssignment() {
     const action = actions.find((a) => a.id === selectedActionId);
     if (!selectedActionId || isRemovingAssignment || !action) return;
@@ -974,6 +1009,25 @@ export default function SeplanPage() {
   useEffect(() => {
     setRemovePopoverOpen(false);
   }, [selectedActionId]);
+
+  // Popula o formulário de curadoria com a classificação já gravada da ação
+  // selecionada, refletindo o que foi definido (uma vez por par ação/tema).
+  const lastSyncedAssignmentKeyRef = useRef<string>('');
+  useEffect(() => {
+    const key = `${selectedActionId}|${assignment.theme}`;
+    if (lastSyncedAssignmentKeyRef.current === key) return;
+    lastSyncedAssignmentKeyRef.current = key;
+    if (!selectedActionId) return;
+    const action = actions.find((a) => a.id === selectedActionId);
+    const existing = action?.assignments.find((a) => a.theme === assignment.theme);
+    setAssignment((prev) => ({
+      ...prev,
+      axis: existing?.axis ?? '',
+      classification: existing?.classification ?? '',
+      weightingFactor: existing?.weightingFactor != null ? String(existing.weightingFactor) : '',
+      justification: existing?.justification ?? '',
+    }));
+  }, [selectedActionId, assignment.theme, actions]);
 
   const handleCurationSelectAction = useCallback((id: string) => {
     setSelectedActionId(id);
@@ -1536,6 +1590,7 @@ export default function SeplanPage() {
                 assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
                 onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
                 onCreateAssignment={createAssignment}
+                onUpdateAssignment={updateAssignment}
                 onConfirmRemoveAssignment={confirmRemoveAssignment}
                 bulkRemoveEnabled
                 onConfirmBulkRemove={confirmBulkRemoveAssignments}

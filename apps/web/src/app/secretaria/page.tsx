@@ -503,6 +503,45 @@ export default function SecretariaPage() {
     }
   }
 
+  async function updateAssignment() {
+    if (blockPreviewAction()) return;
+    if (!selectedActionId) return;
+    const action = actions.find((a) => a.id === selectedActionId);
+    const existing = action?.assignments.find((a) => a.theme === assignment.theme);
+    if (!existing) return;
+    const snapshot = actions;
+    try {
+      const updated = await api<ThematicAssignment>(`/thematic-assignments/${existing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          axis: assignment.axis,
+          classification: assignment.classification,
+          weightingFactor: resolveWeightingFactor(
+            assignment.theme,
+            assignment.classification,
+            assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+          ),
+          justification: assignment.justification,
+        }),
+      });
+      setActions((prev) => appendActionAssignment(prev, selectedActionId, updated));
+      toast.success('Classificação atualizada.');
+      try {
+        const fresh = await fetchCurationSnapshot();
+        setActions(fresh.actions);
+        setSummary(fresh.summary);
+        // A classificação alterada reflete na aba Validações.
+        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        setValidations(freshValidations);
+      } catch {
+        /* mantém estado otimista */
+      }
+    } catch (err) {
+      setActions(snapshot);
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar a classificação.');
+    }
+  }
+
   async function confirmRemoveAssignment() {
     if (blockPreviewAction()) return;
     const action = actions.find((a) => a.id === selectedActionId);
@@ -901,6 +940,7 @@ export default function SecretariaPage() {
               assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
               onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
               onCreateAssignment={createAssignment}
+              onUpdateAssignment={updateAssignment}
               onConfirmRemoveAssignment={confirmRemoveAssignment}
             />
           ) : (

@@ -8,13 +8,23 @@ import { logUserActivity } from '@/lib/user-activity';
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
-  if (user.role !== 'SEPLAN_ADMIN') return forbidden();
+  if (user.role !== 'SEPLAN_ADMIN' && user.role !== 'SECRETARIA_REPRESENTANTE') return forbidden();
 
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
 
-  const existing = await prisma.thematicAssignment.findUnique({ where: { id } });
+  const existing = await prisma.thematicAssignment.findUnique({
+    where: { id },
+    include: {
+      action: { select: { organizationCode: true, unitCode: true } },
+    },
+  });
   if (!existing) return notFound('Atribuição temática não encontrada.');
+
+  if (user.role === 'SECRETARIA_REPRESENTANTE') {
+    const allowed = await userControlsUnit(user, existing.action.organizationCode, existing.action.unitCode);
+    if (!allowed) return forbidden();
+  }
 
   const theme = body.theme ?? existing.theme;
   const classification = body.classification ?? existing.classification;
@@ -23,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ? resolveWeightingFactor(theme, classification, body.weightingFactor ?? existing.weightingFactor)
       : undefined;
 
+  // Apenas a SEPLAN pode alterar o status da atribuição.
+  const canChangeStatus = user.role === 'SEPLAN_ADMIN';
+
   const row = await prisma.thematicAssignment.update({
     where: { id },
     data: {
@@ -30,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.classification !== undefined && { classification: body.classification }),
       ...(weightingFactor !== undefined && { weightingFactor }),
       ...(body.justification !== undefined && { justification: body.justification }),
-      ...(body.status && { status: body.status }),
+      ...(canChangeStatus && body.status && { status: body.status }),
     },
   }).catch(() => null);
 

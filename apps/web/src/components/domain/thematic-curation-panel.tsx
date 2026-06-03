@@ -50,6 +50,7 @@ import { formatMoney, themeLabels } from '@/lib/api';
 import {
   isWeightingFactorLocked,
   lockedWeightingFactorLabel,
+  resolveWeightingFactor,
   shouldHideWeightingFactor,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
@@ -90,6 +91,7 @@ interface Props {
   assignmentIdsPendingRemoval: string[];
   onAssignmentIdsPendingRemovalChange: (ids: string[]) => void;
   onCreateAssignment: () => void | Promise<void>;
+  onUpdateAssignment: () => void | Promise<void>;
   onConfirmRemoveAssignment: () => void | Promise<void>;
   /** Habilita seleção e remoção em lote na lista de ações (uso SEPLAN). */
   bulkRemoveEnabled?: boolean;
@@ -948,6 +950,7 @@ type CurationAssignmentCardProps = {
   assignmentIdsPendingRemoval: string[];
   onAssignmentIdsPendingRemovalChange: (ids: string[]) => void;
   onCreateAssignment: () => void | Promise<void>;
+  onUpdateAssignment: () => void | Promise<void>;
   onConfirmRemoveAssignment: () => void | Promise<void>;
   canEdit: boolean;
   canRemove: boolean;
@@ -966,6 +969,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
   assignmentIdsPendingRemoval,
   onAssignmentIdsPendingRemovalChange,
   onCreateAssignment,
+  onUpdateAssignment,
   onConfirmRemoveAssignment,
   canEdit,
   canRemove,
@@ -973,6 +977,27 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
 }: CurationAssignmentCardProps) {
   const axes = metadata?.axes[assignment.theme] ?? [];
   const classifications = metadata?.classifications[assignment.theme] ?? [];
+
+  const existingAssignment =
+    selectedAction?.assignments.find((item) => item.theme === assignment.theme) ?? null;
+  const isEditing = selectedActionHasTheme;
+
+  // Detecta se o formulário difere da classificação gravada, para habilitar
+  // "Salvar alterações" apenas quando houver mudança.
+  const isDirty = useMemo(() => {
+    if (!existingAssignment) return false;
+    const sentWeightingFactor = resolveWeightingFactor(
+      assignment.theme,
+      assignment.classification,
+      assignment.weightingFactor ? Number(assignment.weightingFactor) : undefined,
+    );
+    return (
+      assignment.axis !== (existingAssignment.axis ?? '') ||
+      assignment.classification !== (existingAssignment.classification ?? '') ||
+      (assignment.justification || '') !== (existingAssignment.justification ?? '') ||
+      sentWeightingFactor !== (existingAssignment.weightingFactor ?? null)
+    );
+  }, [existingAssignment, assignment]);
 
   return (
     <Card className="h-fit min-w-0 gap-0 self-start">
@@ -1023,11 +1048,10 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
               </SelectContent>
             </Select>
           </Field>
-          <Field data-disabled={selectedActionHasTheme || undefined}>
+          <Field>
             <FieldLabel>Eixo</FieldLabel>
             <Select
               value={assignment.axis || 'UNSELECTED'}
-              disabled={selectedActionHasTheme}
               onValueChange={(value) =>
                 onAssignmentChange({
                   ...assignment,
@@ -1050,11 +1074,10 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
               </SelectContent>
             </Select>
           </Field>
-          <Field data-disabled={selectedActionHasTheme || undefined}>
+          <Field>
             <FieldLabel>Classificação</FieldLabel>
             <Select
               value={assignment.classification || 'UNSELECTED'}
-              disabled={selectedActionHasTheme}
               onValueChange={(value) => {
                 const classification = value === 'UNSELECTED' ? '' : value;
                 onAssignmentChange({
@@ -1090,9 +1113,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
           ) : (
             <Field
               data-disabled={
-                selectedActionHasTheme ||
-                isWeightingFactorLocked(assignment.theme, assignment.classification) ||
-                undefined
+                isWeightingFactorLocked(assignment.theme, assignment.classification) || undefined
               }
             >
               <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
@@ -1107,10 +1128,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
                   assignment.classification,
                   assignment.weightingFactor,
                 )}
-                disabled={
-                  selectedActionHasTheme ||
-                  isWeightingFactorLocked(assignment.theme, assignment.classification)
-                }
+                disabled={isWeightingFactorLocked(assignment.theme, assignment.classification)}
                 onChange={(event) =>
                   onAssignmentChange({ ...assignment, weightingFactor: event.target.value })
                 }
@@ -1123,45 +1141,60 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
               ) : null}
             </Field>
           )}
-          <Field data-disabled={selectedActionHasTheme || undefined}>
+          <Field>
             <FieldLabel htmlFor="justification">
               Justificativa <span className="text-muted-foreground font-normal">(opcional)</span>
             </FieldLabel>
             <Textarea
               id="justification"
-              disabled={selectedActionHasTheme}
               value={assignment.justification}
               onChange={(event) =>
                 onAssignmentChange({ ...assignment, justification: event.target.value })
               }
             />
           </Field>
-          {selectedActionHasTheme ? (
+          {isEditing ? (
             <Alert className="border-primary/25 bg-primary/5">
               <FolderCogIcon />
               <AlertDescription className="text-xs">
-                Os campos acima mostram a classificação gravada para{' '}
-                <strong>{themeLabels[assignment.theme]}</strong> (somente leitura). Para alterar,
-                use &quot;Remover classificação&quot; e classifique novamente — só é possível
-                quando não houver validações com dados preenchidos.
+                Os campos mostram a classificação gravada para{' '}
+                <strong>{themeLabels[assignment.theme]}</strong>. Edite os campos e use{' '}
+                <strong>&quot;Salvar alterações&quot;</strong> — não é necessário remover a
+                classificação para corrigi-la.
               </AlertDescription>
             </Alert>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={
-                !canEdit ||
-                !selectedActionId ||
-                !assignment.axis ||
-                !assignment.classification ||
-                selectedActionHasTheme ||
-                isRemovingAssignment
-              }
-              onClick={() => void onCreateAssignment()}
-            >
-              <FolderCogIcon data-icon="inline-start" />
-              Classificar ação
-            </Button>
+            {isEditing ? (
+              <Button
+                disabled={
+                  !canEdit ||
+                  !selectedActionId ||
+                  !assignment.axis ||
+                  !assignment.classification ||
+                  !isDirty ||
+                  isRemovingAssignment
+                }
+                onClick={() => void onUpdateAssignment()}
+              >
+                <FolderCogIcon data-icon="inline-start" />
+                Salvar alterações
+              </Button>
+            ) : (
+              <Button
+                disabled={
+                  !canEdit ||
+                  !selectedActionId ||
+                  !assignment.axis ||
+                  !assignment.classification ||
+                  isRemovingAssignment
+                }
+                onClick={() => void onCreateAssignment()}
+              >
+                <FolderCogIcon data-icon="inline-start" />
+                Classificar ação
+              </Button>
+            )}
             {(selectedAction?.assignments.length ?? 0) > 0 && selectedActionId ? (
               <RemoveClassificationPopover
                 open={removePopoverOpen}
@@ -1208,6 +1241,7 @@ export function ThematicCurationPanel({
   assignmentIdsPendingRemoval,
   onAssignmentIdsPendingRemovalChange,
   onCreateAssignment,
+  onUpdateAssignment,
   onConfirmRemoveAssignment,
   bulkRemoveEnabled = false,
   onConfirmBulkRemove,
@@ -1247,6 +1281,7 @@ export function ThematicCurationPanel({
         assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
         onAssignmentIdsPendingRemovalChange={onAssignmentIdsPendingRemovalChange}
         onCreateAssignment={onCreateAssignment}
+        onUpdateAssignment={onUpdateAssignment}
         onConfirmRemoveAssignment={onConfirmRemoveAssignment}
         canEdit={canEdit}
         canRemove={canRemove}
