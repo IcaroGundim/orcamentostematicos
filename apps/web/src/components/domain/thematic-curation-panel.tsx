@@ -45,7 +45,7 @@ import { Separator } from '@/components/ui/separator';
 import { BulkRemoveClassificationDialog } from '@/components/domain/bulk-remove-classification-dialog';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import type { BulkRemoveThemeFilter } from '@/lib/curation-actions';
-import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
+import { ExpenseBreakdownTable } from '@/components/domain/expense-breakdown-table';
 import { formatMoney, themeLabels } from '@/lib/api';
 import {
   isWeightingFactorLocked,
@@ -54,6 +54,7 @@ import {
   shouldHideWeightingFactor,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
+import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { cn } from '@/lib/utils';
 import type {
@@ -150,16 +151,12 @@ const SOURCE_TABLE_EMPTY_HEIGHT = 52;
 const SOURCE_TABLE_MAX_HEIGHT = 320;
 const SOURCE_TABLE_SECTION_GAP = 8;
 
-function countDistinctSources(action: BudgetAction) {
-  const sources = new Set<string>();
-  for (const line of action.expenseLines ?? []) {
-    sources.add(line.source?.trim() || 'Sem fonte');
-  }
-  return sources.size;
+function countBreakdownRows(action: BudgetAction) {
+  return buildExpenseRows(action).length;
 }
 
 function estimateSourceTableHeight(action: BudgetAction) {
-  const count = countDistinctSources(action);
+  const count = countBreakdownRows(action);
   if (count === 0) return SOURCE_TABLE_EMPTY_HEIGHT;
   const tableHeight =
     SOURCE_TABLE_HEADER_HEIGHT + count * SOURCE_TABLE_ROW_HEIGHT + SOURCE_TABLE_FOOTER_HEIGHT;
@@ -303,9 +300,9 @@ const CurationActionRow = memo(function CurationActionRow({
           )}
           <button
             type="button"
-            aria-label={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+            aria-label={isExpanded ? 'Ocultar despesas' : 'Mostrar despesas'}
             aria-expanded={isExpanded}
-            title={isExpanded ? 'Ocultar fontes' : 'Mostrar fontes'}
+            title={isExpanded ? 'Ocultar despesas' : 'Mostrar despesas'}
             className="ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={(e) => {
               e.stopPropagation();
@@ -371,7 +368,7 @@ const CurationActionRow = memo(function CurationActionRow({
 
       {isExpanded ? (
         <div onClick={(e) => e.stopPropagation()}>
-          <SourceBreakdownTable action={action} />
+          <ExpenseBreakdownTable action={action} />
         </div>
       ) : null}
     </div>
@@ -721,10 +718,11 @@ const CurationActionsCard = memo(function CurationActionsCard({
     },
     gap: ACTION_ROW_GAP,
     overscan: 8,
-    measureElement:
-      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
-        ? (element) => element.getBoundingClientRect().height
-        : undefined,
+    // offsetHeight (e não getBoundingClientRect) porque a seção usa `zoom`: o
+    // getBoundingClientRect retornaria a altura já escalada pelo zoom, enquanto o
+    // posicionamento (translateY) trabalha no espaço de layout não escalado — isso
+    // causaria sobreposição entre as linhas (pior com o detalhamento expandido).
+    measureElement: (element) => (element as HTMLElement).offsetHeight,
   });
 
   useLayoutEffect(() => {
@@ -1256,7 +1254,10 @@ export function ThematicCurationPanel({
   );
 
   return (
-    <section className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]">
+    <section
+      className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(340px,460px)]"
+      style={{ zoom: 0.9 }}
+    >
       <CurationActionsCard
         actions={actions}
         organizations={organizations}
