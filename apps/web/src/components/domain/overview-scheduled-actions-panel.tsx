@@ -2,9 +2,10 @@
 
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { CalculatorIcon, DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
+import { CalculatorIcon, ChevronDownIcon, ChevronRightIcon, DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
 
 import { ThemeBadge } from '@/components/domain/badges';
+import { ExpenseBreakdownTable } from '@/components/domain/expense-breakdown-table';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
@@ -34,6 +35,8 @@ import {
 } from '@/components/ui/table';
 import { formatMoney, themeLabels } from '@/lib/api';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
+import { buildExpenseRows } from '@/lib/expense-breakdown';
+import { organizationAcronym } from '@/lib/organization-acronym';
 import type { BudgetAction } from '@/types/domain';
 
 const ALL = 'ALL';
@@ -68,65 +71,110 @@ type OverviewActionRowProps = {
   action: BudgetAction;
   showUnit: boolean;
   selectable: boolean;
-  selected: boolean;
+  selectionState: 'none' | 'partial' | 'full';
+  selectedLineKeys: ReadonlySet<string>;
   relocated: boolean;
+  expanded: boolean;
   onToggle: (id: string) => void;
+  onToggleExpand: (id: string) => void;
+  onToggleLine: (actionId: string, lineKey: string) => void;
 };
+
+const EMPTY_LINE_KEYS: ReadonlySet<string> = new Set();
 
 const OverviewActionRow = memo(function OverviewActionRow({
   action,
   showUnit,
   selectable,
-  selected,
+  selectionState,
+  selectedLineKeys,
   relocated,
+  expanded,
   onToggle,
+  onToggleExpand,
+  onToggleLine,
 }: OverviewActionRowProps) {
+  const selected = selectionState !== 'none';
+  const checkboxChecked =
+    selectionState === 'full' ? true : selectionState === 'partial' ? 'indeterminate' : false;
+  const minWidth = selectable ? 'min-w-[50rem]' : 'min-w-[48rem]';
   return (
-    <Table className={`table-fixed w-full ${selectable ? 'min-w-[44rem]' : 'min-w-[42rem]'}`}>
-      <TableBody>
-        <TableRow
-          data-state={selectable && selected ? 'selected' : undefined}
-          onClick={selectable ? () => onToggle(action.id) : undefined}
-          className={`data-[state=selected]:bg-muted/40 ${selectable ? 'cursor-pointer' : ''}`}
-        >
-          {selectable ? (
-            <TableCell
-              className="w-5 px-0 py-2 text-center align-middle"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Checkbox
-                className="mx-auto size-5"
-                checked={selected}
-                onCheckedChange={() => onToggle(action.id)}
-                aria-label={`Selecionar ${action.application}`}
-              />
-            </TableCell>
-          ) : null}
-          <TableCell className="w-[38%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <p className="text-sm font-medium leading-snug">
-                {action.application}
-                {relocated ? (
-                  <span
-                    className="text-blue-600 dark:text-blue-400"
-                    title="Unidade realocada para uma nova secretaria"
-                  >
-                    {' - REALOCADA'}
-                  </span>
-                ) : null}
-              </p>
-              <FunctionalProgramLine
-                functionalProgram={action.functionalProgram}
-                projectActivity={action.projectActivity}
+    <div className={`w-full ${minWidth}`}>
+      <Table className="table-fixed w-full">
+        <TableBody>
+          <TableRow
+            data-state={selectable && selected ? 'selected' : undefined}
+            onClick={selectable ? () => onToggle(action.id) : undefined}
+            className={`data-[state=selected]:bg-muted/40 ${selectable ? 'cursor-pointer' : ''}`}
+          >
+            {selectable ? (
+              <TableCell
+                className="w-5 px-0 py-2 text-center align-middle"
+                onClick={(event) => event.stopPropagation()}
               >
-                {action.assignments.map((item) => (
-                  <ThemeBadge key={item.id} theme={item.theme} />
-                ))}
-              </FunctionalProgramLine>
-            </div>
+                <Checkbox
+                  className="mx-auto size-5"
+                  checked={checkboxChecked}
+                  onCheckedChange={() => onToggle(action.id)}
+                  aria-label={`Selecionar ${action.application}`}
+                />
+              </TableCell>
+            ) : null}
+            <TableCell className="w-[36%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
+              <div className="flex min-w-0 items-start gap-1.5">
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-label={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
+                  title={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
+                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleExpand(action.id);
+                  }}
+                >
+                  {expanded ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
+                </button>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p
+                    className="cursor-pointer text-sm font-medium leading-snug hover:underline"
+                    title={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleExpand(action.id);
+                    }}
+                  >
+                    {action.application}
+                    {relocated ? (
+                      <span
+                        className="text-blue-600 dark:text-blue-400"
+                        title="Unidade realocada para uma nova secretaria"
+                      >
+                        {' - REALOCADA'}
+                      </span>
+                    ) : null}
+                  </p>
+                  <FunctionalProgramLine
+                    functionalProgram={action.functionalProgram}
+                    projectActivity={action.projectActivity}
+                  >
+                    {action.assignments.map((item) => (
+                      <ThemeBadge key={item.id} theme={item.theme} />
+                    ))}
+                  </FunctionalProgramLine>
+                </div>
+              </div>
+            </TableCell>
+          <TableCell className="w-[6rem] py-2 align-top text-sm">
+            <span
+              className="font-medium"
+              title={`${action.organizationCode} — ${action.organizationName}`}
+            >
+              {organizationAcronym(action.organizationCode, action.organizationName)}
+            </span>
           </TableCell>
           {showUnit ? (
-            <TableCell className="w-[18%] max-w-[10rem] py-2 align-top text-sm">
+            <TableCell className="w-[15%] max-w-[9rem] py-2 align-top text-sm">
               <span className="text-xs text-muted-foreground">{action.unitCode}</span>
               <p className="truncate text-xs" title={action.unitName}>
                 {action.unitName}
@@ -145,9 +193,22 @@ const OverviewActionRow = memo(function OverviewActionRow({
           <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
             {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
           </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
+          </TableRow>
+        </TableBody>
+      </Table>
+      {expanded ? (
+        <div className="px-2 pb-3 pt-1" onClick={(event) => event.stopPropagation()}>
+          <ExpenseBreakdownTable
+            action={action}
+            selectable={selectable}
+            allSelected={selectionState === 'full'}
+            selectedLineKeys={selectedLineKeys}
+            onToggleLine={(lineKey) => onToggleLine(action.id, lineKey)}
+            onToggleAll={() => onToggle(action.id)}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 });
 
@@ -164,6 +225,8 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const [onlyEmendas, setOnlyEmendas] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectedLines, setSelectedLines] = useState<Map<string, Set<string>>>(() => new Map());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [calculatorMode, setCalculatorMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -173,8 +236,62 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     return map;
   }, [actions]);
 
-  const toggleSelection = useCallback((id: string) => {
-    setSelectedIds((prev) => {
+  // Seleção da ação inteira (checkbox/clique da linha): se a ação tem qualquer
+  // seleção (cheia ou parcial), limpa; senão marca como cheia.
+  const toggleSelection = useCallback(
+    (id: string) => {
+      const hasAny = selectedIds.has(id) || selectedLines.has(id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (hasAny) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      setSelectedLines((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [selectedIds, selectedLines],
+  );
+
+  // Seleção de uma linha de despesa (conta + fonte) dentro de uma ação.
+  const toggleLine = useCallback(
+    (actionId: string, lineKey: string) => {
+      const allKeys = buildExpenseRows(actionsById.get(actionId) ?? null).map((row) => row.key);
+      const isFull = selectedIds.has(actionId);
+
+      const current = new Set(isFull ? allKeys : selectedLines.get(actionId) ?? []);
+      if (current.has(lineKey)) current.delete(lineKey);
+      else current.add(lineKey);
+
+      const promoteToFull = allKeys.length > 0 && current.size === allKeys.length;
+
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (promoteToFull) next.add(actionId);
+        else next.delete(actionId);
+        return next;
+      });
+      setSelectedLines((prev) => {
+        const next = new Map(prev);
+        if (promoteToFull || current.size === 0) next.delete(actionId);
+        else next.set(actionId, current);
+        return next;
+      });
+    },
+    [actionsById, selectedIds, selectedLines],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectedLines(new Map());
+  }, []);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -182,11 +299,12 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     });
   }, []);
 
-  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-
   const toggleCalculator = useCallback(() => {
     setCalculatorMode((enabled) => {
-      if (enabled) setSelectedIds(new Set());
+      if (enabled) {
+        setSelectedIds(new Set());
+        setSelectedLines(new Map());
+      }
       return !enabled;
     });
   }, []);
@@ -253,12 +371,13 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     [displayedActions],
   );
 
-  const selectedCount = selectedIds.size;
+  const selectedCount = selectedIds.size + selectedLines.size;
 
   const selectedTotals = useMemo(() => {
     let initialBudget = 0;
     let updatedBudget = 0;
     let liquidated = 0;
+    // Ações cheias: usa os totais da ação.
     for (const id of selectedIds) {
       const action = actionsById.get(id);
       if (!action) continue;
@@ -266,34 +385,57 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       updatedBudget += action.totals.updatedBudget;
       liquidated += action.totals.liquidated;
     }
+    // Ações parciais: soma apenas as linhas (conta + fonte) marcadas.
+    for (const [id, keys] of selectedLines) {
+      const action = actionsById.get(id);
+      if (!action) continue;
+      for (const row of buildExpenseRows(action)) {
+        if (!keys.has(row.key)) continue;
+        initialBudget += row.initialBudget;
+        updatedBudget += row.updatedBudget;
+        liquidated += row.liquidated;
+      }
+    }
     return { initialBudget, updatedBudget, liquidated };
-  }, [selectedIds, actionsById]);
+  }, [selectedIds, selectedLines, actionsById]);
 
   const displayedSelectionState = useMemo<'none' | 'some' | 'all'>(() => {
-    if (displayedActions.length === 0 || selectedIds.size === 0) return 'none';
-    let selectedInView = 0;
+    if (displayedActions.length === 0) return 'none';
+    let fullInView = 0;
+    let anyInView = 0;
     for (const action of displayedActions) {
-      if (selectedIds.has(action.id)) selectedInView += 1;
+      if (selectedIds.has(action.id)) {
+        fullInView += 1;
+        anyInView += 1;
+      } else if (selectedLines.has(action.id)) {
+        anyInView += 1;
+      }
     }
-    if (selectedInView === 0) return 'none';
-    return selectedInView === displayedActions.length ? 'all' : 'some';
-  }, [displayedActions, selectedIds]);
+    if (anyInView === 0) return 'none';
+    return fullInView === displayedActions.length ? 'all' : 'some';
+  }, [displayedActions, selectedIds, selectedLines]);
 
   const toggleSelectDisplayed = useCallback(() => {
+    const allFull = displayedActions.length > 0 && displayedActions.every((action) => selectedIds.has(action.id));
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      const allSelected = displayedActions.every((action) => next.has(action.id));
-      if (allSelected) {
-        for (const action of displayedActions) next.delete(action.id);
-      } else {
-        for (const action of displayedActions) next.add(action.id);
+      for (const action of displayedActions) {
+        if (allFull) next.delete(action.id);
+        else next.add(action.id);
       }
       return next;
     });
-  }, [displayedActions]);
+    // Limpa qualquer seleção parcial das ações exibidas (viram cheias ou nenhuma).
+    setSelectedLines((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Map(prev);
+      for (const action of displayedActions) next.delete(action.id);
+      return next;
+    });
+  }, [displayedActions, selectedIds]);
 
   const showUnit = unitCode === ALL;
-  const tableMinWidth = calculatorMode ? 'min-w-[44rem]' : 'min-w-[42rem]';
+  const tableMinWidth = calculatorMode ? 'min-w-[50rem]' : 'min-w-[48rem]';
 
   const selectedOrganization = useMemo(() => {
     if (organizationCode === ALL) return null;
@@ -332,10 +474,11 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_ESTIMATE + ROW_GAP,
     overscan: 12,
-    measureElement:
-      typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
-        ? (element) => element.getBoundingClientRect().height + ROW_GAP
-        : undefined,
+    // offsetHeight (e não getBoundingClientRect) porque o Card usa `zoom`: o
+    // getBoundingClientRect retornaria a altura já escalada pelo zoom, enquanto
+    // o posicionamento (translateY) trabalha no espaço de layout não escalado —
+    // isso causaria sobreposição entre linhas (pior ao expandir o detalhamento).
+    measureElement: (element) => (element as HTMLElement).offsetHeight + ROW_GAP,
   });
 
   const handleOrganizationChange = useCallback((value: string) => {
@@ -375,7 +518,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   );
 
   return (
-    <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" style={{ zoom: 0.85 }}>
       <CardHeader className="shrink-0">
         <CardTitle>
           {organizationCode === ALL
@@ -536,11 +679,14 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         />
                       </TableHead>
                     ) : null}
-                    <TableHead className="h-9 w-[38%] min-w-[12rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className="h-9 w-[36%] min-w-[12rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
                       Ação
                     </TableHead>
+                    <TableHead className="h-9 w-[6rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      Órgão
+                    </TableHead>
                     {showUnit ? (
-                      <TableHead className="h-9 w-[18%] max-w-[10rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <TableHead className="h-9 w-[15%] max-w-[9rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
                         Unidade
                       </TableHead>
                     ) : null}
@@ -578,9 +724,19 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         action={action}
                         showUnit={showUnit}
                         selectable={calculatorMode}
-                        selected={selectedIds.has(action.id)}
+                        selectionState={
+                          selectedIds.has(action.id)
+                            ? 'full'
+                            : selectedLines.has(action.id)
+                              ? 'partial'
+                              : 'none'
+                        }
+                        selectedLineKeys={selectedLines.get(action.id) ?? EMPTY_LINE_KEYS}
                         relocated={relocatedUnitKeys?.has(`${action.organizationCode}|${action.unitCode}`) ?? false}
+                        expanded={expandedIds.has(action.id)}
                         onToggle={toggleSelection}
+                        onToggleExpand={toggleExpand}
+                        onToggleLine={toggleLine}
                       />
                     </div>
                   );
