@@ -11,7 +11,7 @@ export type MoneyInputProps = Omit<
   'type' | 'value' | 'defaultValue' | 'onChange'
 > & {
   value?: number | null;
-  onValueChange?: (value: number | undefined) => void;
+  onValueChange?: (value: number | null) => void;
 };
 
 const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(function MoneyInput(
@@ -29,7 +29,7 @@ const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(function 
       placeholder={placeholder}
       value={formatMoneyInput(value)}
       onChange={(event) => {
-        onValueChange?.(parseMoneyInput(event.target.value));
+        onValueChange?.(parseMoneyInput(event.target.value) ?? null);
       }}
       onBlur={onBlur}
       className={cn('tabular-nums', className)}

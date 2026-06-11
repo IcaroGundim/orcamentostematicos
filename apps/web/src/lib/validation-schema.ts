@@ -4,6 +4,11 @@ import { sumDeliveryExecutedValues, usesDeliveryValues } from '@/lib/classificat
 import { getValidationDraft } from '@/lib/validation-draft-cache';
 import type { ThemeBudget, ValidationItem } from '@/types/domain';
 
+const optionalMoneyValueSchema = z.preprocess(
+  (value) => (value === null || value === '' ? undefined : value),
+  z.coerce.number().optional(),
+);
+
 export const validationFormSchema = z.object({
   realizedDescription: z.string().optional(),
   informedExecutedValue: z.coerce.number().min(0, 'Informe um valor válido.'),
@@ -20,7 +25,7 @@ export const validationFormSchema = z.object({
           .min(1, 'Selecione o município.')
           .refine(isAcreMunicipalityOption, 'Selecione o município.'),
         beneficiaries: z.string().min(1, 'Informe o público beneficiado.'),
-        executedValue: z.coerce.number().optional(),
+        executedValue: optionalMoneyValueSchema,
       }),
     )
     .min(1, 'Cadastre ao menos uma entrega.'),

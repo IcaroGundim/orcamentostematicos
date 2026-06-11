@@ -1,8 +1,8 @@
 'use client';
 
-import { PackageIcon, PlusIcon, SaveIcon, Trash2Icon } from 'lucide-react';
+import { EraserIcon, PackageIcon, PlusIcon, SaveIcon, Trash2Icon } from 'lucide-react';
 import { useMemo } from 'react';
-import { Controller, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
+import { Controller, useWatch, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
@@ -36,7 +36,7 @@ export type ValidationFormProps = {
 };
 
 export function ValidationForm({ form, deliveries, theme, classification, editable, programName, onSave, isSaving = false }: ValidationFormProps) {
-  const watchedDeliveries = form.watch('deliveries');
+  const watchedDeliveries = useWatch({ control: form.control, name: 'deliveries' });
   const perDeliveryValues = usesDeliveryValues(theme, classification);
   const deliveryTotal = useMemo(
     () => sumDeliveryExecutedValues(watchedDeliveries ?? []),
@@ -44,6 +44,25 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
   );
   const { errors } = form.formState;
   const deliveryFields = deliveries.fields;
+
+  const clearDelivery = (index: number) => {
+    const options = { shouldValidate: false, shouldDirty: true } as const;
+    const currentDelivery = form.getValues(`deliveries.${index}`);
+    form.setValue(
+      `deliveries.${index}`,
+      {
+        ...currentDelivery,
+        name: '',
+        description: '',
+        quantity: 0,
+        municipality: '',
+        beneficiaries: '',
+        executedValue: null,
+      },
+      options,
+    );
+    form.clearErrors(`deliveries.${index}`);
+  };
 
   return (
     <Card className="mt-0">
@@ -110,6 +129,7 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
                     perDeliveryValues={perDeliveryValues}
                     form={form}
                     onRemove={() => deliveries.remove(index)}
+                    onClear={() => clearDelivery(index)}
                   />
                 ))}
                 <li>
@@ -212,6 +232,7 @@ function DeliveryItem({
   perDeliveryValues,
   form,
   onRemove,
+  onClear,
 }: {
   index: number;
   editable: boolean;
@@ -219,6 +240,7 @@ function DeliveryItem({
   perDeliveryValues: boolean;
   form: UseFormReturn<ValidationFormInput, unknown, ValidationFormValues>;
   onRemove: () => void;
+  onClear: () => void;
 }) {
   const { errors } = form.formState;
   const rowErrors = errors.deliveries?.[index];
@@ -235,18 +257,32 @@ function DeliveryItem({
             Entrega
           </span>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          disabled={!editable || !canRemove}
-          onClick={onRemove}
-          title={canRemove ? 'Remover entrega' : 'É necessário manter ao menos uma entrega'}
-        >
-          <Trash2Icon className="size-4" data-icon="inline-start" />
-          Remover
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            disabled={!editable}
+            onClick={onClear}
+            title="Limpar os campos preenchidos desta entrega"
+          >
+            <EraserIcon className="size-4" data-icon="inline-start" />
+            Limpar campos
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            disabled={!editable || !canRemove}
+            onClick={onRemove}
+            title={canRemove ? 'Remover entrega' : 'É necessário manter ao menos uma entrega'}
+          >
+            <Trash2Icon className="size-4" data-icon="inline-start" />
+            Remover
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-4 p-4 md:grid-cols-2">
