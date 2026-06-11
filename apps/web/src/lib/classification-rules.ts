@@ -15,8 +15,17 @@ export function usesDeliveryValues(theme: ThemeBudget | string, classification: 
   );
 }
 
+/** OCAD Não Exclusivo: ponderador fixo em 36% da dotação da ação (não editável). */
+export function isOcadNaoExclusivo(theme: ThemeBudget | string, classification: string): boolean {
+  return theme === 'OCAD' && classification === 'NAO_EXCLUSIVO';
+}
+
 export function isWeightingFactorLocked(theme: ThemeBudget | string, classification: string): boolean {
-  return isExclusiveAllocation(theme, classification) || (theme === 'OSG' && classification === 'CATEGORIA_3');
+  return (
+    isExclusiveAllocation(theme, classification) ||
+    (theme === 'OSG' && classification === 'CATEGORIA_3') ||
+    isOcadNaoExclusivo(theme, classification)
+  );
 }
 
 export function shouldHideWeightingFactor(theme: ThemeBudget | string, classification: string): boolean {
@@ -31,6 +40,7 @@ export function resolveWeightingFactor(
   if (isExclusiveAllocation(theme, classification)) return 1;
   if (theme === 'OSG' && classification === 'CATEGORIA_2') return null;
   if (theme === 'OSG' && classification === 'CATEGORIA_3') return 0.5;
+  if (isOcadNaoExclusivo(theme, classification)) return 0.36;
   if (input == null || Number.isNaN(input)) return null;
   return input;
 }
@@ -44,6 +54,9 @@ export function lockedWeightingFactorLabel(theme: ThemeBudget | string, classifi
   }
   if (theme === 'OSG' && classification === 'CATEGORIA_3') {
     return 'Categoria 3: 50% referente à demografia do Acre (ponderador fixo em 0,5).';
+  }
+  if (isOcadNaoExclusivo(theme, classification)) {
+    return 'Não exclusivo: 36% da dotação da ação (ponderador fixo em 0,36).';
   }
   if (usesDeliveryValues(theme, classification)) {
     if (theme === 'CLIMATICO') {
