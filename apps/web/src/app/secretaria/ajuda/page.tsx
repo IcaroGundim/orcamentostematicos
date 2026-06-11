@@ -14,7 +14,7 @@ export default function SecretariaAjudaPage() {
       router.push('/login');
       return;
     }
-    if (session.user.role !== 'SECRETARIA_REPRESENTANTE' && session.user.role !== 'SECRETARIA_REVISOR') {
+    if (session.user.role !== 'SECRETARIA_REPRESENTANTE') {
       router.push('/seplan');
     }
   }, [router]);

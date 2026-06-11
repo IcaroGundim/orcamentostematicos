@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import {
@@ -7,7 +7,6 @@ import {
   ChevronRightIcon,
   ExternalLinkIcon,
   GraduationCapIcon,
-  ShieldCheckIcon,
   UserCheckIcon,
 } from 'lucide-react';
 import { StatusBadge } from '@/components/domain/badges';
@@ -32,9 +31,8 @@ const SECTIONS = [
   { id: 'regras', title: '4. Regras metodológicas' },
   { id: 'validacao', title: '5. Validar Entregas' },
   { id: 'status', title: '6. Status e envios' },
-  { id: 'revisao', title: '7. Revisão interna' },
-  { id: 'faq', title: '8. Boas práticas e FAQ' },
-  { id: 'glossario', title: '9. Glossário' },
+  { id: 'faq', title: '7. Boas práticas e FAQ' },
+  { id: 'glossario', title: '8. Glossário' },
 ] as const;
 
 const THEME_AXES = {
@@ -70,39 +68,14 @@ const THEME_CLASSIFICATIONS = {
 
 const STATUS_ROWS: Array<{ status: ValidationStatus; description: string }> = [
   { status: 'RASCUNHO', description: 'Em preenchimento pelo Representante.' },
-  { status: 'ENVIADO_REVISOR', description: 'Enviado ao Revisor interno para análise.' },
-  { status: 'DEVOLVIDO_REVISOR', description: 'Devolvido pelo Revisor para correção.' },
-  { status: 'APROVADO_REVISOR', description: 'Aprovado internamente; pronto para envio à SEPLAN.' },
   { status: 'ENVIADO', description: 'Enviado à SEPLAN para revisão final.' },
   { status: 'DEVOLVIDO', description: 'Devolvido pela SEPLAN para correção.' },
   { status: 'APROVADO', description: 'Aprovado pela SEPLAN.' },
 ];
 
-const EDITABLE_STATUSES: ValidationStatus[] = ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
+const EDITABLE_STATUSES: ValidationStatus[] = ['RASCUNHO', 'DEVOLVIDO'];
 
-function ProfileBadge({ profile }: { profile: 'representante' | 'revisor' | 'ambos' }) {
-  if (profile === 'ambos') {
-    return (
-      <div className="flex flex-wrap gap-2 not-prose">
-        <Badge variant="outline" className="border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-          <UserCheckIcon className="size-3.5" data-icon="inline-start" />
-          Representante
-        </Badge>
-        <Badge variant="outline" className="border-blue-600/40 bg-blue-500/10 text-blue-700 dark:text-blue-300">
-          <ShieldCheckIcon className="size-3.5" data-icon="inline-start" />
-          Revisor interno
-        </Badge>
-      </div>
-    );
-  }
-  if (profile === 'revisor') {
-    return (
-      <Badge variant="outline" className="not-prose border-blue-600/40 bg-blue-500/10 text-blue-700 dark:text-blue-300">
-        <ShieldCheckIcon className="size-3.5" data-icon="inline-start" />
-        Revisor interno
-      </Badge>
-    );
-  }
+function ProfileBadge() {
   return (
     <Badge variant="outline" className="not-prose border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
       <UserCheckIcon className="size-3.5" data-icon="inline-start" />
@@ -168,7 +141,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'introducao':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="ambos" />
+          <ProfileBadge />
           <p>
             A plataforma <strong className="text-foreground">Orçamentos Temáticos</strong> apoia o acompanhamento e a
             validação das ações orçamentárias classificadas nos três orçamentos temáticos do Estado do Acre:
@@ -192,14 +165,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
             <div className="rounded-lg border border-emerald-600/30 bg-emerald-500/5 p-3">
               <p className="mb-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">Representante</p>
               <p className="text-xs">
-                Classifica ações, preenche validações e envia respostas para revisão interna e SEPLAN.
-              </p>
-            </div>
-            <div className="rounded-lg border border-blue-600/30 bg-blue-500/5 p-3">
-              <p className="mb-1 text-sm font-semibold text-blue-800 dark:text-blue-300">Revisor interno</p>
-              <p className="text-xs">
-                Corresponde sempre ao gestor ou secretário da secretaria. Analisa validações enviadas, aprova ou
-                devolve com comentário. O envio à SEPLAN é do Representante.
+                Classifica ações, preenche validações e envia as respostas diretamente à SEPLAN.
               </p>
             </div>
           </div>
@@ -213,7 +179,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'acesso':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="ambos" />
+          <ProfileBadge />
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-4">
               <h4 className="font-semibold text-foreground">Login e perfis</h4>
@@ -223,9 +189,8 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
                   pela SEPLAN.
                 </li>
                 <li>
-                  Perfis <code className="rounded bg-muted px-1 py-0.5 text-xs">SECRETARIA_REPRESENTANTE</code> e{' '}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">SECRETARIA_REVISOR</code> são direcionados para{' '}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">/secretaria</code>.
+                  O perfil <code className="rounded bg-muted px-1 py-0.5 text-xs">SECRETARIA_REPRESENTANTE</code> é
+                  direcionado para <code className="rounded bg-muted px-1 py-0.5 text-xs">/secretaria</code>.
                 </li>
                 <li>Demais perfis são redirecionados para a área SEPLAN.</li>
               </ol>
@@ -257,12 +222,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
               <HelpTable
                 headers={['Perfil', 'Abas / tela', 'Ações em lote']}
                 rows={[
-                  [
-                    'Representante',
-                    'Curadoria temática; Validar Entregas',
-                    'Enviar p/ Revisão Interna; Enviar p/ SEPLAN',
-                  ],
-                  ['Revisor interno', 'Revisão de Entregas', 'Aprovar Tudo; Devolver p/ Correção'],
+                  ['Representante', 'Curadoria temática; Validar Entregas', 'Enviar p/ SEPLAN'],
                 ]}
               />
             </div>
@@ -273,7 +233,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'curadoria':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="representante" />
+          <ProfileBadge />
           <p>
             Na aba <strong className="text-foreground">Curadoria temática</strong>, classifique ações do QDD vigente
             atribuídas à sua unidade.
@@ -322,7 +282,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'regras':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="representante" />
+          <ProfileBadge />
           <h4 className="font-semibold text-foreground">Ponderadores</h4>
           <HelpTable
             headers={['Tema', 'Classificação', 'Ponderador', 'Comportamento']}
@@ -384,7 +344,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'validacao':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="representante" />
+          <ProfileBadge />
           <p>
             Na aba <strong className="text-foreground">Validar Entregas</strong>, selecione uma ação na lista{' '}
             <em>Ações recebidas</em> e preencha o formulário à direita.
@@ -427,7 +387,7 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
     case 'status':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="representante" />
+          <ProfileBadge />
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="space-y-4">
               <h4 className="font-semibold text-foreground">Status das validações</h4>
@@ -460,19 +420,13 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
               <h4 className="font-semibold text-foreground">Fluxo resumido</h4>
               <ol className="list-decimal space-y-1.5 pl-5 text-xs">
                 <li>Classificar ação → validação em Rascunho</li>
-                <li>Preencher e salvar → Enviar para Revisão Interna</li>
-                <li>Revisor aprova ou devolve</li>
-                <li>Se aprovado → Enviar para SEPLAN</li>
+                <li>Preencher e salvar → Enviar para SEPLAN</li>
                 <li>SEPLAN aprova ou devolve</li>
               </ol>
               <h4 className="font-semibold text-foreground">Ações em lote (Representante)</h4>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
-                  <strong className="text-foreground">Enviar para Revisão Interna</strong> — Rascunho, Devolvido ou
-                  Devolvido pelo Revisor (completas)
-                </li>
-                <li>
-                  <strong className="text-foreground">Enviar para SEPLAN</strong> — Aprovado pelo Revisor
+                  <strong className="text-foreground">Enviar para SEPLAN</strong> — Rascunho ou Devolvido (completas)
                 </li>
                 <li>
                   <strong className="text-foreground">Pendências</strong> — popover com campos incompletos
@@ -483,62 +437,19 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
         </div>
       );
 
-    case 'revisao':
-      return (
-        <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="revisor" />
-          <p>
-            O Revisor interno é sempre o <strong className="text-foreground">gestor ou secretário</strong> da
-            secretaria. Acessa apenas <strong className="text-foreground">Revisão de Entregas</strong> (sem Curadoria
-            temática).
-          </p>
-          <h4 className="font-semibold text-foreground">Revisão item a item</h4>
-          <p>
-            Com validação em <StatusBadge status="ENVIADO_REVISOR" /> selecionada:
-          </p>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>
-              <strong className="text-foreground">Aprovar</strong> → status Aprovado pelo Revisor
-            </li>
-            <li>
-              <strong className="text-foreground">Devolver</strong> → comentário obrigatório → Devolvido pelo Revisor
-            </li>
-          </ul>
-          <p>Comentários da SEPLAN e do Revisor aparecem em alertas no topo do painel.</p>
-          <h4 className="font-semibold text-foreground">Ações em lote</h4>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>
-              <strong className="text-foreground">Aprovar Tudo</strong> — todas aguardando revisão interna
-            </li>
-            <li>
-              <strong className="text-foreground">Devolver para Correção</strong> — justificativa obrigatória para o
-              lote
-            </li>
-          </ul>
-          <Callout variant="atencao" title="Atenção">
-            O envio à SEPLAN é feito <strong>posteriormente pelo Representante</strong>, após aprovação interna.
-          </Callout>
-        </div>
-      );
-
     case 'faq':
       return (
         <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-          <ProfileBadge profile="ambos" />
+          <ProfileBadge />
           <h4 className="font-semibold text-foreground">Ordem recomendada</h4>
           <ol className="list-decimal space-y-1 pl-5">
             <li>Classifique ações na Curadoria temática</li>
             <li>Preencha validações em Validar Entregas</li>
             <li>Salve rascunhos frequentemente</li>
-            <li>Envie para Revisão Interna</li>
-            <li>Após aprovação do Revisor, envie para SEPLAN</li>
+            <li>Envie para SEPLAN</li>
           </ol>
           <h4 className="font-semibold text-foreground">Após devolução</h4>
           <ul className="list-disc space-y-1 pl-5">
-            <li>
-              <strong className="text-foreground">Devolvido pelo Revisor</strong> — leia o comentário, corrija e
-              reenvie para revisão interna
-            </li>
             <li>
               <strong className="text-foreground">Devolvido</strong> (SEPLAN) — leia o comentário da SEPLAN, corrija e
               reenvie
@@ -605,12 +516,6 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
             <dd>Perfil SECRETARIA_REPRESENTANTE — curadoria, preenchimento e envios.</dd>
           </div>
           <div>
-            <dt className="font-semibold text-foreground">Revisor interno</dt>
-            <dd>
-              Perfil SECRETARIA_REVISOR — gestor ou secretário da secretaria; revisão e devolução interna.
-            </dd>
-          </div>
-          <div>
             <dt className="font-semibold text-foreground">SEPLAN</dt>
             <dd>Secretaria de Planejamento — importação do QDD e revisão final.</dd>
           </div>
@@ -666,9 +571,8 @@ function HelpAside({ className }: { className?: string }) {
             {[
               'Classificar ação na curadoria',
               'Preencher entregas e salvar rascunho',
-              'Enviar para Revisão Interna',
-              'Revisor aprova ou devolve',
-              'Enviar para SEPLAN após aprovação',
+              'Enviar para SEPLAN',
+              'SEPLAN aprova ou devolve',
             ].map((step, index) => (
               <li key={step} className="flex gap-2">
                 <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold tabular-nums text-primary">
@@ -687,16 +591,9 @@ function HelpAside({ className }: { className?: string }) {
         </CardHeader>
         <CardContent className="space-y-4 pt-0 text-xs text-muted-foreground">
           <div className="rounded-lg border border-emerald-600/25 bg-emerald-500/5 p-3">
-            <ProfileBadge profile="representante" />
+            <ProfileBadge />
             <p className="mt-2 leading-relaxed">
               Curadoria temática, validação de entregas e envios em lote.
-            </p>
-          </div>
-          <div className="rounded-lg border border-blue-600/25 bg-blue-500/5 p-3">
-            <ProfileBadge profile="revisor" />
-            <p className="mt-2 leading-relaxed">
-              Sempre o gestor ou secretário da secretaria. Revisão interna, aprovação ou devolução com comentário
-              obrigatório.
             </p>
           </div>
         </CardContent>
@@ -760,7 +657,7 @@ export function SecretariaHelpContent() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Guia da Secretaria</h1>
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground md:text-base">
-            Orientações para Representantes e Revisores internos da plataforma Orçamentos Temáticos.
+            Orientações para Representantes da plataforma Orçamentos Temáticos.
           </p>
         </div>
         <Button asChild variant="outline" className="shrink-0">

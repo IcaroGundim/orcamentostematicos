@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logUserActivity } from '@/lib/user-activity';
 import type { UserRole } from '@/types/domain';
 
-const VALID_ROLES: UserRole[] = ['SEPLAN_ADMIN', 'SECRETARIA_REPRESENTANTE', 'SECRETARIA_REVISOR'];
+const VALID_ROLES: UserRole[] = ['SEPLAN_ADMIN', 'SECRETARIA_REPRESENTANTE'];
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);

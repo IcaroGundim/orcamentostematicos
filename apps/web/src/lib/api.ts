@@ -85,9 +85,6 @@ export const classificationLabels: Record<string, string> = {
 
 export const statusLabels = {
   RASCUNHO: 'Rascunho',
-  ENVIADO_REVISOR: 'Aguardando Revisão Interna',
-  DEVOLVIDO_REVISOR: 'Devolvido pelo Revisor',
-  APROVADO_REVISOR: 'Aprovado pelo Revisor',
   ENVIADO: 'Enviado',
   DEVOLVIDO: 'Devolvido',
   APROVADO: 'Aprovado',

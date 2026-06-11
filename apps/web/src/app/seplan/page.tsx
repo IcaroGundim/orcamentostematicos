@@ -132,13 +132,7 @@ import { functionalColumnFilterMatches, type FunctionalColumnFilterValue } from 
 import { ThematicCurationPanel, type AssignmentForm } from '@/components/domain/thematic-curation-panel';
 import { UsersPanel } from '@/components/domain/users-panel';
 import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
-import {
-  buildResultsRows,
-  defaultExportFilename,
-  exportResultsCsv,
-  exportResultsXlsx,
-  type ResultsThemeSummary,
-} from '@/lib/results-export';
+import type { ResultsThemeSummary } from '@/lib/results-export';
 
 type ImportPreview = {
   previewId: string;
@@ -963,8 +957,11 @@ export default function SeplanPage() {
     });
   }, [approvedValidations]);
 
-  function handleExportXlsx() {
+  // O módulo de export (que embute a lib xlsx, pesada) é carregado sob demanda
+  // no clique, para não entrar no bundle inicial da página.
+  async function handleExportXlsx() {
     try {
+      const { exportResultsXlsx, defaultExportFilename } = await import('@/lib/results-export');
       exportResultsXlsx(approvedValidations, defaultExportFilename('xlsx'));
       toast.success('Relatório XLSX exportado.');
     } catch (err) {
@@ -972,8 +969,9 @@ export default function SeplanPage() {
     }
   }
 
-  function handleExportCsv() {
+  async function handleExportCsv() {
     try {
+      const { buildResultsRows, exportResultsCsv, defaultExportFilename } = await import('@/lib/results-export');
       const rows = buildResultsRows(approvedValidations);
       exportResultsCsv(rows, defaultExportFilename('csv'));
       toast.success('Relatório CSV exportado.');
@@ -1201,17 +1199,6 @@ export default function SeplanPage() {
                     <span>
                       <span className="block font-medium">Secretaria (Representante)</span>
                       <span className="block text-xs text-muted-foreground">Curadoria temática e validação de entregas</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.open('/secretaria?preview=revisor', '_blank', 'noopener')}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <ClipboardCheckIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span>
-                      <span className="block font-medium">Revisor de Secretaria</span>
-                      <span className="block text-xs text-muted-foreground">Revisão interna de entregas</span>
                     </span>
                   </button>
                 </PopoverContent>

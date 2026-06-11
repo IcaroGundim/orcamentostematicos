@@ -48,7 +48,6 @@ import { RemoveClassificationPopover } from '@/components/domain/remove-classifi
 import { ThematicCurationPanel } from '@/components/domain/thematic-curation-panel';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
-import { InternalReviewToolbar } from '@/components/domain/internal-review-toolbar';
 import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
 import { ValidationForm } from '@/components/domain/validation-form';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels } from '@/lib/api';
@@ -116,8 +115,6 @@ export default function SecretariaPage() {
   const [userRole, setUserRole] = useState<string>('');
   const [previewRole, setPreviewRole] = useState<string | null>(null);
   const isPreview = previewRole !== null;
-  const [isActionReviewing, setIsActionReviewing] = useState(false);
-  const [isReviewingAll, setIsReviewingAll] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const prevCurrentIdRef = useRef<string | null>(null);
   const currentIdRef = useRef<string>('');
@@ -141,20 +138,14 @@ export default function SecretariaPage() {
 
     let effectiveRole = session.user.role;
     if (isAdmin && previewParam) {
-      effectiveRole = previewParam === 'revisor' ? 'SECRETARIA_REVISOR' : 'SECRETARIA_REPRESENTANTE';
+      effectiveRole = 'SECRETARIA_REPRESENTANTE';
       setPreviewRole(effectiveRole);
-    } else if (
-      session.user.role !== 'SECRETARIA_REPRESENTANTE' &&
-      session.user.role !== 'SECRETARIA_REVISOR'
-    ) {
+    } else if (session.user.role !== 'SECRETARIA_REPRESENTANTE') {
       router.push('/seplan');
       return;
     }
 
     setUserRole(effectiveRole);
-    if (effectiveRole === 'SECRETARIA_REVISOR') {
-      setActiveTab('validations');
-    }
     load().catch((err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Erro ao carregar dados. O servidor pode estar indisponível.');
     });
@@ -183,92 +174,6 @@ export default function SecretariaPage() {
     setSubmitIssues([]);
     setSubmitIssuesOpen(false);
   }, [currentId]);
-
-  async function handleInternalApprove(id: string) {
-    if (blockPreviewAction()) return;
-    if (isActionReviewing) return;
-    setIsActionReviewing(true);
-    try {
-      await api(`/validations/${id}/internal-approve`, {
-        method: 'POST',
-      });
-      toast.success('Validação aprovada com sucesso! Aguardando envio à SEPLAN pelo representante.');
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao aprovar validação.');
-    } finally {
-      setIsActionReviewing(false);
-    }
-  }
-
-  async function handleInternalReturn(id: string, comment: string) {
-    if (blockPreviewAction()) return;
-    if (isActionReviewing) return;
-    const trimmed = comment.trim();
-    if (!trimmed) {
-      toast.warning('O comentário de devolução é obrigatório.');
-      return;
-    }
-    setIsActionReviewing(true);
-    try {
-      await api(`/validations/${id}/internal-return`, {
-        method: 'POST',
-        body: JSON.stringify({ internalReviewerComment: trimmed }),
-      });
-      toast.success('Validação devolvida com sucesso para o técnico.');
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao devolver validação.');
-    } finally {
-      setIsActionReviewing(false);
-    }
-  }
-
-  async function reviewAll(approve: boolean, reviewerComment?: string) {
-    if (blockPreviewAction()) return;
-    if (isReviewingAll) return;
-
-    const pending = validations.filter((item) => item.status === 'ENVIADO_REVISOR');
-    if (!pending.length) {
-      toast.info('Nenhuma validação pendente de revisão.');
-      return;
-    }
-
-    const comment = reviewerComment?.trim() ?? '';
-    if (!approve && !comment) {
-      toast.warning('O comentário de devolução é obrigatório para realizar a devolução.');
-      return;
-    }
-
-    setIsReviewingAll(true);
-    try {
-      const result = await api<{ revisados?: number; error?: string }>('/validations/review-all', {
-        method: 'POST',
-        body: JSON.stringify({ approve, reviewerComment: comment }),
-      });
-
-      if (result.error) {
-        toast.error(result.error);
-      } else if (result.revisados) {
-        toast.success(
-          approve
-            ? `Aprovadas com sucesso ${result.revisados} validação(ões)!`
-            : `Devolvidas com sucesso ${result.revisados} validação(ões) para o técnico!`
-        );
-        await load();
-      } else {
-        toast.info('Nenhuma validação revisada.');
-      }
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : `Erro ao realizar a revisão em lote.`
-      );
-    } finally {
-      setIsReviewingAll(false);
-    }
-  }
 
   async function load() {
     const [validationData, meta, actionData, summaryData] = await Promise.all([
@@ -388,14 +293,14 @@ export default function SecretariaPage() {
     }
   }
 
-  async function submitAll(toSeplan: boolean) {
+  async function submitAll() {
     if (blockPreviewAction()) return;
     if (isSubmittingAll) return;
 
-    const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
+    const targetStatuses = ['RASCUNHO', 'DEVOLVIDO'];
     const pending = validations.filter((item) => targetStatuses.includes(item.status));
     if (!pending.length) {
-      toast.info(`Nenhuma validação pronta para ${toSeplan ? 'envio à SEPLAN' : 'revisão interna'}.`);
+      toast.info('Nenhuma validação pronta para envio à SEPLAN.');
       return;
     }
 
@@ -431,7 +336,7 @@ export default function SecretariaPage() {
 
       const result = await api<{ enviadas: number; incompletas: number }>('/validations/submit-all', {
         method: 'POST',
-        body: JSON.stringify({ toSeplan }),
+        body: JSON.stringify({}),
       });
 
       if (result.enviadas === 0 && result.incompletas === 0) {
@@ -445,22 +350,14 @@ export default function SecretariaPage() {
         }
         const reminder =
           issues.length > 0 ? ' Confira o botão Pendências ao lado.' : '';
-        toast.success(
-          toSeplan
-            ? `Respostas enviadas para SEPLAN: ${parts.join(', ')}.${reminder}`
-            : `Respostas enviadas para Revisão Interna: ${parts.join(', ')}.${reminder}`
-        );
+        toast.success(`Respostas enviadas para SEPLAN: ${parts.join(', ')}.${reminder}`);
       }
 
       await load();
       clearAllValidationDrafts();
       prevCurrentIdRef.current = null;
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : `Erro ao enviar respostas para ${toSeplan ? 'SEPLAN' : 'Revisão Interna'}.`,
-      );
+      toast.error(err instanceof Error ? err.message : 'Erro ao enviar respostas para SEPLAN.');
     } finally {
       setIsSubmittingAll(false);
     }
@@ -610,9 +507,7 @@ export default function SecretariaPage() {
   const editable =
     !isPreview &&
     userRole === 'SECRETARIA_REPRESENTANTE' &&
-    (current?.status === 'RASCUNHO' ||
-      current?.status === 'DEVOLVIDO' ||
-      current?.status === 'DEVOLVIDO_REVISOR');
+    (current?.status === 'RASCUNHO' || current?.status === 'DEVOLVIDO');
   const selectedAction = actions.find((action) => action.id === selectedActionId);
   const currentTheme = assignment.theme;
   const axes = metadata?.axes[currentTheme] ?? [];
@@ -707,9 +602,7 @@ export default function SecretariaPage() {
             <span>
               <span className="font-semibold">Modo de pré-visualização.</span>{' '}
               Você está vendo a tela como{' '}
-              <span className="font-semibold">
-                {previewRole === 'SECRETARIA_REVISOR' ? 'Revisor de Secretaria' : 'Representante de Secretaria'}
-              </span>
+              <span className="font-semibold">Representante de Secretaria</span>
               . As ações de edição estão desativadas.
             </span>
           </div>
@@ -727,40 +620,24 @@ export default function SecretariaPage() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          {userRole !== 'SECRETARIA_REVISOR' ? (
-            <TabsList>
-              <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
-              <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
-            </TabsList>
-          ) : (
-            <h1 className="text-xl font-bold tracking-tight text-foreground">Revisão de Entregas</h1>
-          )}
+          <TabsList>
+            <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
+            <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
+          </TabsList>
           <div className="flex flex-wrap items-center gap-2">
-            {userRole === 'SECRETARIA_REVISOR' && activeTab === 'validations' && current ? (
-              <InternalReviewToolbar
-                validation={current}
-                isReviewing={isActionReviewing}
-                onApprove={handleInternalApprove}
-                onReturn={handleInternalReturn}
-              />
-            ) : null}
             <SummaryCountBadge count={validations.length} label="validações" />
             <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />
-            {(userRole === 'SECRETARIA_REPRESENTANTE' || userRole === 'SECRETARIA_REVISOR') && (
+            {userRole === 'SECRETARIA_REPRESENTANTE' && (
               <SecretariaBulkActions
-                role={userRole === 'SECRETARIA_REVISOR' ? 'REVISOR' : 'REPRESENTANTE'}
                 validations={validations}
                 isSubmittingAll={isSubmittingAll}
-                isReviewingAll={isReviewingAll}
                 submitIssues={submitIssues}
                 submitIssuesOpen={submitIssuesOpen}
                 onSubmitIssuesOpenChange={(open) => {
                   setSubmitIssuesOpen(open);
                   if (!open) setSubmitIssues([]);
                 }}
-                onSubmitInternal={() => void submitAll(false)}
-                onSubmitSeplan={() => void submitAll(true)}
-                onReviewAll={reviewAll}
+                onSubmitSeplan={() => void submitAll()}
               />
             )}
 
@@ -882,13 +759,6 @@ export default function SecretariaPage() {
                           <AlertDescription>{current.reviewerComment}</AlertDescription>
                         </Alert>
                       ) : null}
-                      {current.internalReviewerComment ? (
-                        <Alert className="border-amber-500/25 bg-amber-500/5 text-amber-800 dark:text-amber-300">
-                          <InfoIcon className="text-amber-500" />
-                          <AlertTitle className="text-amber-600 font-semibold">Comentário do Revisor Interno</AlertTitle>
-                          <AlertDescription>{current.internalReviewerComment}</AlertDescription>
-                        </Alert>
-                      ) : null}
                     </CardContent>
                   </Card>
 
@@ -923,31 +793,25 @@ export default function SecretariaPage() {
         </TabsContent>
 
         <TabsContent value="curation">
-          {userRole !== 'SECRETARIA_REVISOR' ? (
-            <ThematicCurationPanel
-              actions={actions}
-              metadata={metadata}
-              selectedActionId={selectedActionId}
-              onSelectActionId={setSelectedActionId}
-              expandedActionId={expandedActionId}
-              onExpandActionId={setExpandedActionId}
-              assignment={assignment}
-              onAssignmentChange={setAssignment}
-              selectedActionHasTheme={selectedActionHasTheme}
-              isRemovingAssignment={isRemovingAssignment}
-              removePopoverOpen={removePopoverOpen}
-              onRemovePopoverOpenChange={setRemovePopoverOpen}
-              assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
-              onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
-              onCreateAssignment={createAssignment}
-              onUpdateAssignment={updateAssignment}
-              onConfirmRemoveAssignment={confirmRemoveAssignment}
-            />
-          ) : (
-            <div className="p-8 text-center text-muted-foreground bg-card rounded-lg border border-border">
-              Acesso não autorizado para esta funcionalidade.
-            </div>
-          )}
+          <ThematicCurationPanel
+            actions={actions}
+            metadata={metadata}
+            selectedActionId={selectedActionId}
+            onSelectActionId={setSelectedActionId}
+            expandedActionId={expandedActionId}
+            onExpandActionId={setExpandedActionId}
+            assignment={assignment}
+            onAssignmentChange={setAssignment}
+            selectedActionHasTheme={selectedActionHasTheme}
+            isRemovingAssignment={isRemovingAssignment}
+            removePopoverOpen={removePopoverOpen}
+            onRemovePopoverOpenChange={setRemovePopoverOpen}
+            assignmentIdsPendingRemoval={assignmentIdsPendingRemoval}
+            onAssignmentIdsPendingRemovalChange={setAssignmentIdsPendingRemoval}
+            onCreateAssignment={createAssignment}
+            onUpdateAssignment={updateAssignment}
+            onConfirmRemoveAssignment={confirmRemoveAssignment}
+          />
         </TabsContent>
       </Tabs>
     </main>

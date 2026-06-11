@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const row = await prisma.actionValidation.update({
     where: { id },
-    data: { status: 'ENVIADO_REVISOR', submittedAt: new Date() },
+    data: { status: 'ENVIADO', submittedAt: new Date() },
   }).catch(() => null);
 
   if (!row) return notFound('Validação não encontrada.');

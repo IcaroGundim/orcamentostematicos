@@ -16,10 +16,7 @@ export async function POST(req: NextRequest) {
   if (user.role !== 'SECRETARIA_REPRESENTANTE') return forbidden();
   if (!user.organizationCode) return forbidden();
 
-  const body = await req.json().catch(() => null);
-  const toSeplan = !!body?.toSeplan;
-
-  const targetStatuses = toSeplan ? ['APROVADO_REVISOR'] : ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR'];
+  const targetStatuses = ['RASCUNHO', 'DEVOLVIDO'];
 
   const scope = await scopeWhere(user);
   const rows = await prisma.actionValidation.findMany({
@@ -59,16 +56,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (completeIds.length) {
-    const nextStatus = toSeplan ? 'ENVIADO' : 'ENVIADO_REVISOR';
     await prisma.actionValidation.updateMany({
       where: { id: { in: completeIds } },
-      data: { status: nextStatus as any, submittedAt: new Date() },
+      data: { status: 'ENVIADO', submittedAt: new Date() },
     });
     await logUserActivity({
       userId: user.id,
       action: 'VALIDATION_BULK_SUBMIT',
       organizationCode: user.organizationCode,
-      metadata: { count: completeIds.length, toSeplan },
+      metadata: { count: completeIds.length },
     });
   }
 

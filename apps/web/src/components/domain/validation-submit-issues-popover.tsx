@@ -39,7 +39,7 @@ export function ValidationSubmitIssuesPopover({
           <div className="min-w-0 flex-1 space-y-1">
             <p className="font-semibold leading-none text-destructive">Itens pendentes antes do envio</p>
             <p className="text-sm text-muted-foreground">
-              Complete os campos abaixo antes de enviar para Revisão Interna.
+              Complete os campos abaixo antes de enviar para a SEPLAN.
             </p>
           </div>
         </div>

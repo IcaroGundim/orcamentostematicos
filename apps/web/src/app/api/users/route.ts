@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { logUserActivity } from '@/lib/user-activity';
 import type { UserRole } from '@/types/domain';
 
-const VALID_ROLES: UserRole[] = ['SEPLAN_ADMIN', 'SECRETARIA_REPRESENTANTE', 'SECRETARIA_REVISOR'];
+const VALID_ROLES: UserRole[] = ['SEPLAN_ADMIN', 'SECRETARIA_REPRESENTANTE'];
 
 const ACTIVE_SESSION_WINDOW_MS = 30 * 60 * 1000;
 
@@ -53,9 +53,8 @@ export async function GET(req: NextRequest) {
     curationGroups.map((g) => [g.createdBy, g._count._all]),
   );
 
-  // pendingReview / pendingValidation: por (organizationCode, role).
-  // - REVISOR: itens ENVIADO_REVISOR no escopo da sua organização.
-  // - REPRESENTANTE: itens RASCUNHO/DEVOLVIDO/DEVOLVIDO_REVISOR no escopo.
+  // pendingValidation / pendingDrafts: por (organizationCode, role).
+  // - REPRESENTANTE: itens RASCUNHO/DEVOLVIDO no escopo.
   const orgsInPlay = Array.from(
     new Set(users.map((u) => u.organizationCode).filter((c): c is string => Boolean(c))),
   );
@@ -78,15 +77,12 @@ export async function GET(req: NextRequest) {
     const lastSession = latestSession.get(u.id) ?? null;
     const sessionActive = !!lastSession && now - lastSession.getTime() < ACTIVE_SESSION_WINDOW_MS;
     const org = u.organizationCode;
-    let pendingReview = 0;
+    const pendingReview = 0;
     let pendingValidation = 0;
     let pendingDrafts = 0;
     if (org) {
-      if (u.role === 'SECRETARIA_REVISOR') {
-        pendingReview = sumStatuses(org, ['ENVIADO_REVISOR']);
-      }
       if (u.role === 'SECRETARIA_REPRESENTANTE') {
-        pendingDrafts = sumStatuses(org, ['RASCUNHO', 'DEVOLVIDO', 'DEVOLVIDO_REVISOR']);
+        pendingDrafts = sumStatuses(org, ['RASCUNHO', 'DEVOLVIDO']);
         pendingValidation = sumStatuses(org, ['ENVIADO']);
       }
       if (u.role === 'SEPLAN_ADMIN') {

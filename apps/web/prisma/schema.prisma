@@ -9,7 +9,6 @@ datasource db {
 enum UserRole {
   SEPLAN_ADMIN
   SECRETARIA_REPRESENTANTE
-  SECRETARIA_REVISOR
 }
 
 enum ThemeBudget {
@@ -26,9 +25,6 @@ enum AssignmentStatus {
 
 enum ValidationStatus {
   RASCUNHO
-  ENVIADO_REVISOR
-  DEVOLVIDO_REVISOR
-  APROVADO_REVISOR
   ENVIADO
   DEVOLVIDO
   APROVADO
@@ -254,7 +250,6 @@ model ActionValidation {
   submittedAt          DateTime?
   reviewedAt           DateTime?
   reviewerComment      String?
-  internalReviewerComment String?
   updatedAt            DateTime         @updatedAt
 
   deliveries Json @default("[]")

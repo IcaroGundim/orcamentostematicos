@@ -18,13 +18,11 @@ export type QuickAccessEntry = {
 const ROLE_LABELS: Record<UserRole, string> = {
   SEPLAN_ADMIN: 'SEPLAN (Admin)',
   SECRETARIA_REPRESENTANTE: 'Técnico',
-  SECRETARIA_REVISOR: 'Revisor',
 };
 
 const ROLE_BADGES: Record<UserRole, string> = {
   SEPLAN_ADMIN: 'SEPLAN',
   SECRETARIA_REPRESENTANTE: 'Técnico',
-  SECRETARIA_REVISOR: 'Revisor',
 };
 
 function getStorage(): Storage | null {

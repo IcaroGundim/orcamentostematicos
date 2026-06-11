@@ -53,11 +53,12 @@ export async function getAllowedUnits(user: ScopedUser): Promise<Array<{ organiz
 }
 
 /**
- * Devolve um fragmento Prisma `where` que restringe `organizationCode`+`unitCode`
- * ao escopo do usuário. Para SEPLAN_ADMIN retorna `{}` (sem restrição).
+ * Constrói o fragmento Prisma `where` a partir de uma lista de unidades já
+ * resolvida por `getAllowedUnits` (evita re-consultar o escopo no mesmo request).
  */
-export async function scopeWhere(user: ScopedUser): Promise<Record<string, unknown>> {
-  const allowed = await getAllowedUnits(user);
+export function scopeWhereFromAllowed(
+  allowed: Array<{ organizationCode: string; unitCode: string }> | null,
+): Record<string, unknown> {
   if (allowed === null) return {};
   if (allowed.length === 0) {
     // Força match vazio: nenhum registro tem organizationCode === ''
@@ -68,18 +69,50 @@ export async function scopeWhere(user: ScopedUser): Promise<Record<string, unkno
   };
 }
 
+/** Point-check de controle de unidade sobre uma lista de unidades já resolvida. */
+export function controlsUnitFromAllowed(
+  allowed: Array<{ organizationCode: string; unitCode: string }> | null,
+  organizationCode: string,
+  unitCode: string,
+): boolean {
+  if (!allowed) return true;
+  return allowed.some((u) => u.organizationCode === organizationCode && u.unitCode === unitCode);
+}
+
+/**
+ * Devolve um fragmento Prisma `where` que restringe `organizationCode`+`unitCode`
+ * ao escopo do usuário. Para SEPLAN_ADMIN retorna `{}` (sem restrição).
+ */
+export async function scopeWhere(user: ScopedUser): Promise<Record<string, unknown>> {
+  return scopeWhereFromAllowed(await getAllowedUnits(user));
+}
+
 /**
  * Verifica se o usuário controla a unidade indicada (point-check usado para
  * autorização em mutations sobre um único registro).
  */
 export async function userControlsUnit(user: ScopedUser, organizationCode: string, unitCode: string): Promise<boolean> {
   if (user.role === 'SEPLAN_ADMIN') return true;
-  const allowed = await getAllowedUnits(user);
-  if (!allowed) return true;
-  return allowed.some((u) => u.organizationCode === organizationCode && u.unitCode === unitCode);
+  return controlsUnitFromAllowed(await getAllowedUnits(user), organizationCode, unitCode);
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
+
+/**
+ * Campos de ExpenseLine efetivamente serializados por `mapAction` — usar como
+ * `select` evita trafegar colunas não usadas (ex.: `actionId`) do banco em
+ * consultas que retornam milhares de linhas.
+ */
+const expenseLineSelect = {
+  id: true, organizationCode: true, organizationName: true,
+  unitCode: true, unitName: true, application: true,
+  functionalProgram: true, projectActivity: true,
+  expenseAccount: true, expenseDescription: true,
+  reduced: true, source: true, initialBudget: true,
+  supplemented: true, updatedBudget: true, committed: true,
+  liquidated: true, payableToLiquidate: true,
+  paid: true, payable: true, available: true,
+} as const;
 
 export async function listActions(user: ScopedUser, filters: {
   year?: number;
@@ -100,7 +133,7 @@ export async function listActions(user: ScopedUser, filters: {
 
   const rows = await prisma.budgetAction.findMany({
     where,
-    include: { expenseLines: true, assignments: true },
+    include: { expenseLines: { select: expenseLineSelect }, assignments: true },
     orderBy: [{ organizationCode: 'asc' }, { unitCode: 'asc' }, { projectActivity: 'asc' }],
   });
   return rows.map(mapAction);
@@ -128,32 +161,49 @@ export async function listOrganizations() {
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 export async function getSummary(user: ScopedUser) {
-  const [actions, assignments, cycles, validations] = await Promise.all([
-    listActions(user, {}),
-    prisma.thematicAssignment.findMany(),
-    prisma.validationCycle.findMany(),
-    listValidations(user),
+  // Resolve escopo e import vigente uma única vez e busca apenas os campos que a
+  // agregação usa — evita materializar o grafo completo (expenseLines etc.).
+  const [vigenteId, allowed] = await Promise.all([getVigenteImportId(), getAllowedUnits(user)]);
+  const scope = scopeWhereFromAllowed(allowed);
+
+  const [actions, assignments, cycleCount, validations] = await Promise.all([
+    vigenteId
+      ? prisma.budgetAction.findMany({
+          where: { importId: vigenteId, ...scope },
+          select: { id: true, liquidated: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; liquidated: number }>),
+    prisma.thematicAssignment.findMany({
+      select: { id: true, actionId: true, theme: true, classification: true, createdAt: true },
+    }),
+    prisma.validationCycle.count(),
+    prisma.actionValidation.findMany({ where: scope, select: { status: true } }),
   ]);
 
   const actionIds = new Set(actions.map((a) => a.id));
   const userAssignments = uniqueAssignmentsByActionTheme(assignments.filter((a) => actionIds.has(a.actionId)));
 
   const themes = ['OCAD', 'OSG', 'CLIMATICO'];
-  const statuses = ['RASCUNHO', 'ENVIADO_REVISOR', 'DEVOLVIDO_REVISOR', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
+  const statuses = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
+
+  const liquidatedByAction = new Map(actions.map((a) => [a.id, a.liquidated]));
+  const validationCountByStatus = new Map<string, number>();
+  for (const v of validations) {
+    validationCountByStatus.set(v.status, (validationCountByStatus.get(v.status) ?? 0) + 1);
+  }
 
   return {
     actions: actions.length,
     assignments: userAssignments.length,
-    cycles: cycles.length,
+    cycles: cycleCount,
     validations: validations.length,
     totalsByTheme: themes.map((theme) => {
       const themeAssignments = userAssignments.filter((a) => a.theme === theme);
       const themedActionIds = new Set(themeAssignments.map((a) => a.actionId));
-      const liquidated = actions.filter((a) => themedActionIds.has(a.id)).reduce((s, a) => s + a.totals.liquidated, 0);
+      const liquidated = actions.filter((a) => themedActionIds.has(a.id)).reduce((s, a) => s + a.liquidated, 0);
       return { theme, actions: themedActionIds.size, liquidated };
     }),
     totalsByClassification: (() => {
-      const liquidatedByAction = new Map(actions.map((a) => [a.id, a.totals.liquidated]));
       const groups = new Map<string, { theme: string; classification: string; actionIds: Set<string> }>();
       for (const a of userAssignments) {
         const classification = a.classification ?? '';
@@ -172,7 +222,7 @@ export async function getSummary(user: ScopedUser) {
     })(),
     validationsByStatus: statuses.map((status) => ({
       status,
-      count: validations.filter((v) => v.status === status).length,
+      count: validationCountByStatus.get(status) ?? 0,
     })),
   };
 }
@@ -184,7 +234,7 @@ export async function listValidations(user: ScopedUser) {
   const rows = await prisma.actionValidation.findMany({
     where,
     include: {
-      action: { include: { expenseLines: true, assignments: true } },
+      action: { include: { expenseLines: { select: expenseLineSelect }, assignments: true } },
       assignment: true,
       cycle: true,
     },
@@ -326,7 +376,6 @@ export function mapValidation(row: any) {
     evidences: Array.isArray(row.evidences) ? row.evidences : [],
     observations: row.observations ?? undefined,
     reviewerComment: row.reviewerComment ?? undefined,
-    internalReviewerComment: row.internalReviewerComment ?? undefined,
     action: row.action ? mapAction(row.action) : undefined,
     assignment: row.assignment ? mapAssignment(row.assignment) : undefined,
     cycle: row.cycle ? mapCycle(row.cycle) : undefined,
@@ -349,20 +398,17 @@ export async function reconcileExecutorsForVigenteImport(): Promise<void> {
   });
   if (units.length === 0) return;
 
-  for (const row of units) {
-    await prisma.unitExecutor.upsert({
-      where: {
-        organizationCode_unitCode: { organizationCode: row.organizationCode, unitCode: row.code },
-      },
-      update: {},
-      create: {
-        organizationCode: row.organizationCode,
-        unitCode: row.code,
-        executorOrgCode: row.organizationCode,
-        executorUnitCode: null,
-      },
-    });
-  }
+  // `skipDuplicates` sobre a PK (organizationCode, unitCode) equivale ao upsert
+  // com `update: {}`: cria o default se não existe e preserva o que já existe.
+  await prisma.unitExecutor.createMany({
+    data: units.map((row) => ({
+      organizationCode: row.organizationCode,
+      unitCode: row.code,
+      executorOrgCode: row.organizationCode,
+      executorUnitCode: null,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 // ── addImportedBudget ────────────────────────────────────────────────────────

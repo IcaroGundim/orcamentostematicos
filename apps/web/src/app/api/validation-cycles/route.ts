@@ -12,14 +12,20 @@ export async function GET(req: NextRequest) {
     orderBy: { openedAt: 'desc' },
     include: { validations: { select: { status: true } } },
   });
-  return ok(rows.map((row) => ({
-    ...mapCycle(row),
-    validationCount: row.validations.length,
-    validationsByStatus: VALIDATION_STATUSES.map((status) => ({
-      status,
-      count: row.validations.filter((v) => v.status === status).length,
-    })),
-  })));
+  return ok(rows.map((row) => {
+    const countByStatus = new Map<string, number>();
+    for (const v of row.validations) {
+      countByStatus.set(v.status, (countByStatus.get(v.status) ?? 0) + 1);
+    }
+    return {
+      ...mapCycle(row),
+      validationCount: row.validations.length,
+      validationsByStatus: VALIDATION_STATUSES.map((status) => ({
+        status,
+        count: countByStatus.get(status) ?? 0,
+      })),
+    };
+  }));
 }
 
 /**

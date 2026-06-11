@@ -52,15 +52,11 @@ import type {
 const roleLabels: Record<UserRole, string> = {
   SEPLAN_ADMIN: 'SEPLAN (Admin)',
   SECRETARIA_REPRESENTANTE: 'Representante',
-  SECRETARIA_REVISOR: 'Revisor',
 };
 
 const actionLabels: Record<string, string> = {
-  VALIDATION_SUBMIT: 'Enviou validação ao revisor',
+  VALIDATION_SUBMIT: 'Enviou validação à SEPLAN',
   VALIDATION_BULK_SUBMIT: 'Envio em lote de validações',
-  VALIDATION_REVIEWER_APPROVE: 'Aprovou validação (revisor)',
-  VALIDATION_REVIEWER_RETURN: 'Devolveu validação (revisor)',
-  VALIDATION_BULK_REVIEW: 'Revisão em lote',
   VALIDATION_APPROVE: 'Aprovou validação (SEPLAN)',
   VALIDATION_RETURN: 'Devolveu validação (SEPLAN)',
   VALIDATION_REVERT: 'Reabriu validação aprovada',
@@ -324,7 +320,6 @@ export function UsersPanel({ organizations }: Props) {
               <SelectItem value="ALL">Todos os papéis</SelectItem>
               <SelectItem value="SEPLAN_ADMIN">{roleLabels.SEPLAN_ADMIN}</SelectItem>
               <SelectItem value="SECRETARIA_REPRESENTANTE">{roleLabels.SECRETARIA_REPRESENTANTE}</SelectItem>
-              <SelectItem value="SECRETARIA_REVISOR">{roleLabels.SECRETARIA_REVISOR}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
