@@ -89,10 +89,12 @@ import { FunctionalClassificationFilters } from '@/components/domain/functional-
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
+  buildVerifiedDeliveryExecutedMap,
   isWeightingFactorLocked,
   lockedWeightingFactorLabel,
   resolveWeightingFactor,
   shouldHideWeightingFactor,
+  thematicBudgetContribution,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
 import {
@@ -835,6 +837,11 @@ export default function SeplanPage() {
 
   const years = useMemo(() => [...new Set(actions.map((action) => String(action.year)))].sort(), [actions]);
 
+  const executedByAssignment = useMemo(
+    () => buildVerifiedDeliveryExecutedMap(validations),
+    [validations],
+  );
+
   const themeGaugeData = useMemo(() => {
     const acc = new Map<ThemeBudget, { liquidated: number; planned: number }>();
     for (const action of actions) {
@@ -842,9 +849,17 @@ export default function SeplanPage() {
       for (const asgn of action.assignments) {
         if (seen.has(asgn.theme)) continue;
         seen.add(asgn.theme);
+        const contribution = thematicBudgetContribution({
+          theme: asgn.theme,
+          classification: asgn.classification,
+          weightingFactor: asgn.weightingFactor,
+          updatedBudget: action.totals.updatedBudget,
+          liquidated: action.totals.liquidated,
+          deliveryExecutedValue: executedByAssignment.get(asgn.id),
+        });
         const entry = acc.get(asgn.theme) ?? { liquidated: 0, planned: 0 };
-        entry.liquidated += action.totals.liquidated;
-        entry.planned += action.totals.updatedBudget;
+        entry.liquidated += contribution.liquidated;
+        entry.planned += contribution.planned;
         acc.set(asgn.theme, entry);
       }
     }
@@ -858,16 +873,16 @@ export default function SeplanPage() {
       const pct = planned > 0 ? Math.min((liquidated / planned) * 100, 100) : 0;
       return { key, label, liquidated, planned, pct };
     });
-  }, [actions]);
+  }, [actions, executedByAssignment]);
 
   const axisReport = useMemo(
-    () => buildAxisExecutionReport(actions, metadata),
-    [actions, metadata],
+    () => buildAxisExecutionReport(actions, metadata, executedByAssignment),
+    [actions, metadata, executedByAssignment],
   );
 
   const classificationReport = useMemo(
-    () => buildClassificationExecutionReport(actions, metadata),
-    [actions, metadata],
+    () => buildClassificationExecutionReport(actions, metadata, executedByAssignment),
+    [actions, metadata, executedByAssignment],
   );
 
   const trackingByYear = useMemo(() => {
@@ -1255,6 +1270,7 @@ export default function SeplanPage() {
                 actions={actions}
                 organizations={organizations}
                 relocatedUnitKeys={relocatedUnitKeys}
+                vigenteImport={vigenteImport}
               />
             </div>
           ) : null}

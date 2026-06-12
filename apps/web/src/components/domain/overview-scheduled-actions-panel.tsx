@@ -37,7 +37,8 @@ import { formatMoney, themeLabels } from '@/lib/api';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { organizationAcronym } from '@/lib/organization-acronym';
-import type { BudgetAction } from '@/types/domain';
+import type { BudgetAction, BudgetImport } from '@/types/domain';
+import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
 
 const ALL = 'ALL';
 const ROW_GAP = 2;
@@ -55,6 +56,8 @@ type Props = {
   organizations: OrganizationOption[];
   /** Chaves "organizationCode|unitCode" de unidades marcadas como realocadas. */
   relocatedUnitKeys?: Set<string>;
+  /** Importação vigente, usada para exibir exercício e data de atualização dos dados. */
+  vigenteImport?: BudgetImport | null;
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -216,6 +219,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   actions,
   organizations,
   relocatedUnitKeys,
+  vigenteImport,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -532,6 +536,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         </CardDescription>
         <CardAction>
           <div className="flex flex-wrap items-center justify-end gap-2 md:gap-3">
+            <DataReferenceBadge vigenteImport={vigenteImport} />
             <label className="flex cursor-pointer items-center gap-2 text-sm font-medium select-none">
               Emendas
               <button

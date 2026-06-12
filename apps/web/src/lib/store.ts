@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { listGovernmentStructure } from './government-structure';
 import { actionLogicalKey } from './qdd-parser';
 import { prisma } from './prisma';
+import { buildVerifiedDeliveryExecutedMap, thematicBudgetContribution } from './classification-rules';
 
 export function createId(prefix: string) {
   return `${prefix}-${randomUUID()}`;
@@ -174,10 +175,13 @@ export async function getSummary(user: ScopedUser) {
         })
       : Promise.resolve([] as Array<{ id: string; liquidated: number }>),
     prisma.thematicAssignment.findMany({
-      select: { id: true, actionId: true, theme: true, classification: true, createdAt: true },
+      select: { id: true, actionId: true, theme: true, classification: true, weightingFactor: true, createdAt: true },
     }),
     prisma.validationCycle.count(),
-    prisma.actionValidation.findMany({ where: scope, select: { status: true } }),
+    prisma.actionValidation.findMany({
+      where: scope,
+      select: { status: true, theme: true, assignmentId: true, deliveries: true },
+    }),
   ]);
 
   const actionIds = new Set(actions.map((a) => a.id));
@@ -187,6 +191,20 @@ export async function getSummary(user: ScopedUser) {
   const statuses = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'];
 
   const liquidatedByAction = new Map(actions.map((a) => [a.id, a.liquidated]));
+
+  // Valor executado validado nas entregas (categorias por entrega) por assignment.
+  const classificationByAssignment = new Map(userAssignments.map((a) => [a.id, a.classification ?? '']));
+  const executedByAssignment = buildVerifiedDeliveryExecutedMap(
+    validations.map((v) => ({
+      assignmentId: v.assignmentId,
+      theme: v.theme,
+      status: v.status,
+      deliveries: Array.isArray(v.deliveries)
+        ? (v.deliveries as Array<{ executedValue?: number | null | unknown }>)
+        : [],
+      classification: classificationByAssignment.get(v.assignmentId) ?? '',
+    })),
+  );
   const validationCountByStatus = new Map<string, number>();
   for (const v of validations) {
     validationCountByStatus.set(v.status, (validationCountByStatus.get(v.status) ?? 0) + 1);
@@ -199,25 +217,47 @@ export async function getSummary(user: ScopedUser) {
     validations: validations.length,
     totalsByTheme: themes.map((theme) => {
       const themeAssignments = userAssignments.filter((a) => a.theme === theme);
-      const themedActionIds = new Set(themeAssignments.map((a) => a.actionId));
-      const liquidated = actions.filter((a) => themedActionIds.has(a.id)).reduce((s, a) => s + a.liquidated, 0);
-      return { theme, actions: themedActionIds.size, liquidated };
+      const seen = new Set<string>();
+      let liquidated = 0;
+      for (const a of themeAssignments) {
+        if (seen.has(a.actionId)) continue;
+        seen.add(a.actionId);
+        liquidated += thematicBudgetContribution({
+          theme: a.theme,
+          classification: a.classification ?? '',
+          weightingFactor: a.weightingFactor,
+          updatedBudget: 0,
+          liquidated: liquidatedByAction.get(a.actionId) ?? 0,
+          deliveryExecutedValue: executedByAssignment.get(a.id),
+        }).liquidated;
+      }
+      return { theme, actions: seen.size, liquidated };
     }),
     totalsByClassification: (() => {
-      const groups = new Map<string, { theme: string; classification: string; actionIds: Set<string> }>();
+      const groups = new Map<string, { theme: string; classification: string; actionIds: Set<string>; liquidated: number }>();
       for (const a of userAssignments) {
         const classification = a.classification ?? '';
         if (!classification) continue;
         const key = `${a.theme}|${classification}`;
-        const group = groups.get(key) ?? { theme: a.theme, classification, actionIds: new Set<string>() };
-        group.actionIds.add(a.actionId);
+        const group = groups.get(key) ?? { theme: a.theme, classification, actionIds: new Set<string>(), liquidated: 0 };
+        if (!group.actionIds.has(a.actionId)) {
+          group.actionIds.add(a.actionId);
+          group.liquidated += thematicBudgetContribution({
+            theme: a.theme,
+            classification,
+            weightingFactor: a.weightingFactor,
+            updatedBudget: 0,
+            liquidated: liquidatedByAction.get(a.actionId) ?? 0,
+            deliveryExecutedValue: executedByAssignment.get(a.id),
+          }).liquidated;
+        }
         groups.set(key, group);
       }
       return [...groups.values()].map((group) => ({
         theme: group.theme,
         classification: group.classification,
         actions: group.actionIds.size,
-        liquidated: [...group.actionIds].reduce((s, id) => s + (liquidatedByAction.get(id) ?? 0), 0),
+        liquidated: group.liquidated,
       }));
     })(),
     validationsByStatus: statuses.map((status) => ({

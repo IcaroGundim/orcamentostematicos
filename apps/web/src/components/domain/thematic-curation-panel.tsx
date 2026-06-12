@@ -1,12 +1,22 @@
 'use client';
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   FolderCogIcon,
+  InfoIcon,
   SearchIcon,
   Trash2Icon,
 } from 'lucide-react';
@@ -33,6 +43,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
 import { ThemeBadge } from '@/components/domain/badges';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
@@ -59,10 +71,81 @@ import { actionMatchesFunctionalFilters } from '@/lib/functional-classification'
 import { cn } from '@/lib/utils';
 import type {
   BudgetAction,
+  BudgetImport,
   GovernmentOrganizationCatalog,
   Metadata,
   ThemeBudget,
 } from '@/types/domain';
+
+/** Descrições exibidas ao passar o mouse sobre cada classificação no seletor. */
+const CLASSIFICATION_DESCRIPTIONS: Record<string, string> = {
+  CATEGORIA_1: 'Dotações voltadas ao financiamento exclusivo de políticas para mulheres.',
+  CATEGORIA_2:
+    'Dotações genéricas (não-exclusivas) que incluem entregas estratégicas para as mulheres previstas no PPA ou outros instrumentos de planejamento.',
+  CATEGORIA_3:
+    'Dotações genéricas (não-exclusivas) que incluem entregas para as mulheres não classificadas como estratégicas (não previstas no PPA ou outro instrumento de planejamento de forma explícita).',
+};
+
+/**
+ * Monta a explicação de "gasto exclusivo / não exclusivo" variando apenas o
+ * público beneficiado conforme o orçamento temático.
+ */
+function classificationFieldInfo(opts: {
+  /** Público no singular para a frase de gasto exclusivo. Ex.: "mulheres". */
+  exclusivo: string;
+  /** Público para a frase do gasto não exclusivo. Ex.: "tanto mulheres quanto outros grupos sociais". */
+  conjunto: string;
+  /** Público na frase de participação. Ex.: "das mulheres". */
+  participacao: string;
+  /** Objetivo da política. Ex.: "a igualdade de gênero". */
+  objetivo: string;
+}): ReactNode {
+  return (
+    <div className="flex flex-col gap-2">
+      <p>
+        <strong>Gastos Exclusivos:</strong> São gastos que beneficiam exclusivamente {opts.exclusivo}{' '}
+        sem impacto em outros grupos sociais.
+      </p>
+      <p>
+        <strong>Gastos Não Exclusivos:</strong> Incluem gastos que beneficiam {opts.conjunto}.
+        Obedecem ao critério de que haja ampla participação {opts.participacao} entre beneficiários da
+        política contribuindo para promover {opts.objetivo}.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Explicação exibida no ícone de informação ao lado do rótulo "Classificação".
+ * Varia conforme o orçamento temático (público beneficiado).
+ */
+const CLASSIFICATION_FIELD_INFO: Partial<Record<ThemeBudget, ReactNode>> = {
+  OSG: classificationFieldInfo({
+    exclusivo: 'mulheres',
+    conjunto: 'tanto mulheres quanto outros grupos sociais',
+    participacao: 'das mulheres',
+    objetivo: 'a igualdade de gênero',
+  }),
+  OCAD: classificationFieldInfo({
+    exclusivo: 'crianças e adolescentes',
+    conjunto: 'tanto crianças e adolescentes quanto outros grupos sociais',
+    participacao: 'das crianças e adolescentes',
+    objetivo: 'a garantia dos direitos da criança e do adolescente',
+  }),
+  CLIMATICO: (
+    <div className="flex flex-col gap-2">
+      <p>
+        <strong>Gastos Exclusivos:</strong> São gastos voltados exclusivamente à proteção,
+        conservação ou recuperação do meio ambiente, sem outras finalidades.
+      </p>
+      <p>
+        <strong>Gastos Não Exclusivos:</strong> Incluem gastos que beneficiam o meio ambiente em
+        conjunto com outros objetivos da política. Obedecem ao critério de que haja contribuição
+        relevante para a proteção ambiental e a sustentabilidade.
+      </p>
+    </div>
+  ),
+};
 
 export type AssignmentForm = {
   theme: ThemeBudget;
@@ -598,6 +681,7 @@ function CurationActionsFilters({
 type CurationActionsCardProps = {
   actions: BudgetAction[];
   organizations?: GovernmentOrganizationCatalog[];
+  vigenteImport?: BudgetImport | null;
   selectedActionId: string;
   expandedActionId: string | null;
   onSelectActionId: (id: string) => void;
@@ -614,6 +698,7 @@ type CurationActionsCardProps = {
 const CurationActionsCard = memo(function CurationActionsCard({
   actions,
   organizations,
+  vigenteImport,
   selectedActionId,
   expandedActionId,
   onSelectActionId,
@@ -814,8 +899,9 @@ const CurationActionsCard = memo(function CurationActionsCard({
               {filteredActions.length} de {actions.length} ações no recorte atual
             </CardDescription>
           </div>
-          {canRemove ? (
-            <div className="flex w-full justify-end md:w-auto md:justify-self-end">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto md:justify-self-end md:gap-3">
+            <DataReferenceBadge vigenteImport={vigenteImport} />
+            {canRemove ? (
               <CurationBulkSelectionToolbar
                 isRemoving={isRemovingAssignment}
                 canSelectInFilter={bulkEligibleInFilter.length > 0}
@@ -826,8 +912,8 @@ const CurationActionsCard = memo(function CurationActionsCard({
                 onClear={clearBulkSelection}
                 onRemove={() => setBulkRemoveDialogOpen(true)}
               />
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
         <CurationActionsFilters
           actions={actions}
@@ -1005,7 +1091,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
         </CardTitle>
         <CardDescription className="mt-3">
           {selectedAction ? (
-            <span className="flex flex-col gap-1 rounded-lg border border-primary/20 bg-primary/5 py-1.5 pl-2 pr-3">
+            <span className="flex flex-col gap-1 rounded-lg border border-border bg-white py-1.5 pl-2 pr-3">
               <span className="text-sm font-semibold text-foreground">{selectedAction.application}</span>
               <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
                 {selectedAction.projectActivity}
@@ -1073,7 +1159,28 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
             </Select>
           </Field>
           <Field>
-            <FieldLabel>Classificação</FieldLabel>
+            <FieldLabel className="gap-1.5">
+              Classificação
+              {CLASSIFICATION_FIELD_INFO[assignment.theme] ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="O que é gasto exclusivo ou não exclusivo?"
+                      className="text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none"
+                    >
+                      <InfoIcon className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="right"
+                    className="max-w-xs border border-border bg-white text-sm leading-snug text-black [&>svg]:bg-white [&>svg]:fill-white"
+                  >
+                    {CLASSIFICATION_FIELD_INFO[assignment.theme]}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+            </FieldLabel>
             <Select
               value={assignment.classification || 'UNSELECTED'}
               onValueChange={(value) => {
@@ -1091,11 +1198,26 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
               <SelectContent position="popper">
                 <SelectGroup>
                   <SelectItem value="UNSELECTED">Selecione</SelectItem>
-                  {classifications.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
+                  {classifications.map((item) => {
+                    const description = CLASSIFICATION_DESCRIPTIONS[item.value];
+                    const option = (
+                      <SelectItem value={item.value}>{item.label}</SelectItem>
+                    );
+                    if (!description) {
+                      return <Fragment key={item.value}>{option}</Fragment>;
+                    }
+                    return (
+                      <Tooltip key={item.value}>
+                        <TooltipTrigger asChild>{option}</TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          className="max-w-xs bg-green-950 text-sm leading-snug text-white [&>svg]:bg-green-950 [&>svg]:fill-green-950"
+                        >
+                          {description}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -1261,6 +1383,7 @@ export function ThematicCurationPanel({
       <CurationActionsCard
         actions={actions}
         organizations={organizations}
+        vigenteImport={metadata?.vigenteImport}
         selectedActionId={selectedActionId}
         expandedActionId={expandedActionId}
         onSelectActionId={onSelectActionId}

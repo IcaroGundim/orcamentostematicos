@@ -1,5 +1,11 @@
 import type { ThemeBudget } from '@/types/domain';
 
+/**
+ * Status em que as entregas de uma categoria por entrega são consideradas
+ * verificadas — a partir daí o valor executado conta no planejado/liquidado.
+ */
+export const DELIVERY_VERIFIED_STATUS = 'APROVADO';
+
 /** OCAD Exclusivo, OSG Categoria 1 e Climático Exclusiva exigem 100% do valor do programa (ponderador = 1). */
 export function isExclusiveAllocation(theme: ThemeBudget | string, classification: string): boolean {
   if (theme === 'OCAD') return classification === 'EXCLUSIVO';
@@ -43,6 +49,24 @@ export function resolveWeightingFactor(
   if (isOcadNaoExclusivo(theme, classification)) return 0.36;
   if (input == null || Number.isNaN(input)) return null;
   return input;
+}
+
+/**
+ * Fração da dotação da ação efetivamente atribuída ao tema (ponderador aplicado nas
+ * visões baseadas em orçamento). Ex.: OCAD Não Exclusivo → 0,36; exclusivos → 1.
+ *
+ * Categorias baseadas em entregas (OSG Categoria 2, Climático Não Exclusivo) retornam
+ * 0: nessas, o acompanhamento é pelo valor executado nas entregas (informado na
+ * validação pelas setoriais), e não por um percentual do orçamento — logo, no
+ * planejado/liquidado orçamentário elas só passam a contar após a validação.
+ */
+export function effectiveWeightingFactor(
+  theme: ThemeBudget | string,
+  classification: string,
+  stored?: number | null,
+): number {
+  if (usesDeliveryValues(theme, classification)) return 0;
+  return resolveWeightingFactor(theme, classification, stored ?? null) ?? 1;
 }
 
 export function lockedWeightingFactorLabel(theme: ThemeBudget | string, classification: string): string | null {
@@ -89,6 +113,61 @@ export function sumDeliveryExecutedValues(
   deliveries: Array<{ executedValue?: number | null | unknown }>,
 ): number {
   return deliveries.reduce((sum, delivery) => sum + (Number(delivery.executedValue) || 0), 0);
+}
+
+/**
+ * Mapeia assignmentId → valor executado nas entregas, considerando apenas validações
+ * já verificadas (status {@link DELIVERY_VERIFIED_STATUS}) de categorias por entrega.
+ * Usado para incorporar o executado dessas categorias às visões orçamentárias.
+ */
+export function buildVerifiedDeliveryExecutedMap(
+  validations: Array<{
+    assignmentId: string;
+    theme: ThemeBudget | string;
+    status: string;
+    deliveries?: Array<{ executedValue?: number | null | unknown }> | null;
+    assignment?: { classification?: string | null } | null;
+    classification?: string | null;
+  }>,
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const v of validations) {
+    if (v.status !== DELIVERY_VERIFIED_STATUS) continue;
+    const classification = v.assignment?.classification ?? v.classification ?? '';
+    if (!usesDeliveryValues(v.theme, classification)) continue;
+    map.set(v.assignmentId, sumDeliveryExecutedValues(v.deliveries ?? []));
+  }
+  return map;
+}
+
+/**
+ * Contribuição de uma classificação às visões orçamentárias (planejado e liquidado),
+ * já aplicando o ponderador.
+ *
+ * - Categorias por percentual (exclusivos, OCAD Não Exclusivo 36%, OSG Cat. 3 50%, etc.):
+ *   planejado = dotação atualizada × ponderador; liquidado = liquidado da ação × ponderador.
+ * - Categorias por entrega (OSG Cat. 2, Climático Não Exclusivo): enquanto não validadas,
+ *   contribuem com 0; após a validação das entregas, o valor executado nas entregas conta
+ *   tanto para o planejado quanto para o liquidado.
+ */
+export function thematicBudgetContribution(params: {
+  theme: ThemeBudget | string;
+  classification: string;
+  weightingFactor?: number | null;
+  updatedBudget: number;
+  liquidated: number;
+  /** Valor executado validado nas entregas; usado apenas nas categorias por entrega. */
+  deliveryExecutedValue?: number | null;
+}): { planned: number; liquidated: number } {
+  if (usesDeliveryValues(params.theme, params.classification)) {
+    const executed = Number(params.deliveryExecutedValue) || 0;
+    return { planned: executed, liquidated: executed };
+  }
+  const factor = effectiveWeightingFactor(params.theme, params.classification, params.weightingFactor);
+  return {
+    planned: params.updatedBudget * factor,
+    liquidated: params.liquidated * factor,
+  };
 }
 
 export function resolveInformedExecutedValue(params: {

@@ -33,9 +33,9 @@ const THEME_CLASSIFICATIONS = {
     { value: 'NAO_EXCLUSIVO', label: 'Não exclusivo' },
   ],
   OSG: [
-    { value: 'CATEGORIA_1', label: 'Categoria 1 - dotação exclusiva para mulheres' },
-    { value: 'CATEGORIA_2', label: 'Categoria 2 - dotação genérica estratégica' },
-    { value: 'CATEGORIA_3', label: 'Categoria 3 - dotação genérica não estratégica' },
+    { value: 'CATEGORIA_1', label: 'Categoria 1 - Exclusivo para mulheres' },
+    { value: 'CATEGORIA_2', label: 'Categoria 2 - Não exclusivo (Previsto no PPA)' },
+    { value: 'CATEGORIA_3', label: 'Categoria 3 - Não exclusivo (Não previsto no PPA)' },
   ],
   CLIMATICO: [
     { value: 'EXCLUSIVA', label: 'Exclusiva' },

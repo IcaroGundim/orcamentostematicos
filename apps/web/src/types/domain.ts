@@ -266,6 +266,8 @@ export interface Metadata {
   axes: Record<ThemeBudget, { value: string; label: string }[]>;
   classifications: Record<ThemeBudget, { value: string; label: string }[]>;
   validationStatuses: ValidationStatus[];
+  /** Importação atualmente vigente (exercício e período de referência dos dados). */
+  vigenteImport?: BudgetImport | null;
 }
 
 export interface ValidationCycle {

@@ -1,4 +1,5 @@
 import { themeLabels } from '@/lib/api';
+import { thematicBudgetContribution } from '@/lib/classification-rules';
 import type { FlatThematicChartRow } from '@/types/chart-data';
 import type { BudgetAction, Metadata, ThemeBudget } from '@/types/domain';
 
@@ -29,6 +30,7 @@ function buildExecutionReport(
   actions: BudgetAction[],
   metadata: Metadata | null,
   dimension: ExecutionDimension,
+  executedByAssignment?: Map<string, number>,
 ): AxisExecutionRow[] {
   const agg = new Map<string, AggEntry>();
 
@@ -52,9 +54,17 @@ function buildExecutionReport(
         };
         agg.set(pairKey, entry);
       }
+      const contribution = thematicBudgetContribution({
+        theme: asgn.theme,
+        classification: asgn.classification,
+        weightingFactor: asgn.weightingFactor,
+        updatedBudget: action.totals.updatedBudget,
+        liquidated: action.totals.liquidated,
+        deliveryExecutedValue: executedByAssignment?.get(asgn.id),
+      });
       entry.actionIds.add(action.id);
-      entry.liquidated += action.totals.liquidated;
-      entry.planned += action.totals.updatedBudget;
+      entry.liquidated += contribution.liquidated;
+      entry.planned += contribution.planned;
     }
   }
 
@@ -112,15 +122,17 @@ function buildExecutionReport(
 export function buildAxisExecutionReport(
   actions: BudgetAction[],
   metadata: Metadata | null,
+  executedByAssignment?: Map<string, number>,
 ): AxisExecutionRow[] {
-  return buildExecutionReport(actions, metadata, 'axis');
+  return buildExecutionReport(actions, metadata, 'axis', executedByAssignment);
 }
 
 export function buildClassificationExecutionReport(
   actions: BudgetAction[],
   metadata: Metadata | null,
+  executedByAssignment?: Map<string, number>,
 ): AxisExecutionRow[] {
-  return buildExecutionReport(actions, metadata, 'classification');
+  return buildExecutionReport(actions, metadata, 'classification', executedByAssignment);
 }
 
 export function sortAxisRowsForDisplay(rows: AxisExecutionRow[]): AxisExecutionRow[] {
