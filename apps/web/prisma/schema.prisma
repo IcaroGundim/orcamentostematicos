@@ -93,9 +93,10 @@ model User {
   lastSeenAt       DateTime?
   createdAt        DateTime  @default(now())
 
-  sessions     Session[]
-  assignments  ThematicAssignment[]
-  activityLogs UserActivityLog[]
+  sessions            Session[]
+  assignments         ThematicAssignment[]
+  activityLogs        UserActivityLog[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model UserActivityLog {
@@ -121,6 +122,18 @@ model Session {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  token     String    @id
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model BudgetImport {
