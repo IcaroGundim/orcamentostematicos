@@ -2,7 +2,8 @@
 
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { CalculatorIcon, ChevronDownIcon, ChevronRightIcon, DatabaseIcon, SearchIcon, XIcon } from 'lucide-react';
+import { CalculatorIcon, ChevronDownIcon, ChevronRightIcon, DatabaseIcon, DownloadIcon, SearchIcon, XIcon } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { ThemeBadge } from '@/components/domain/badges';
 import { ExpenseBreakdownTable } from '@/components/domain/expense-breakdown-table';
@@ -16,6 +17,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -37,7 +40,7 @@ import { formatMoney, themeLabels } from '@/lib/api';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { organizationAcronym } from '@/lib/organization-acronym';
-import type { BudgetAction, BudgetImport } from '@/types/domain';
+import type { BudgetAction, BudgetImport, ThemeBudget } from '@/types/domain';
 import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
 
 const ALL = 'ALL';
@@ -232,6 +235,11 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const [selectedLines, setSelectedLines] = useState<Map<string, Set<string>>>(() => new Map());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [calculatorMode, setCalculatorMode] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx');
+  const [exportThemes, setExportThemes] = useState<Set<ThemeBudget>>(
+    () => new Set(Object.keys(themeLabels) as ThemeBudget[]),
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const actionsById = useMemo(() => {
@@ -521,6 +529,32 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     [organizations],
   );
 
+  const toggleExportTheme = useCallback((theme: ThemeBudget) => {
+    setExportThemes((prev) => {
+      const next = new Set(prev);
+      if (next.has(theme)) next.delete(theme);
+      else next.add(theme);
+      return next;
+    });
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    if (exportThemes.size === 0 || displayedActions.length === 0) return;
+    try {
+      const { buildOverviewRows, exportOverview } = await import('@/lib/overview-export');
+      const rows = buildOverviewRows(displayedActions, exportThemes);
+      if (rows.length === 0) {
+        toast.error('Nenhuma ação com tema selecionado para exportar.');
+        return;
+      }
+      exportOverview(rows, exportFormat);
+      setExportOpen(false);
+      toast.success(`Exportação ${exportFormat.toUpperCase()} concluída (${rows.length} linha(s)).`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao exportar.');
+    }
+  }, [displayedActions, exportThemes, exportFormat]);
+
   return (
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" style={{ zoom: 0.85 }}>
       <CardHeader className="shrink-0">
@@ -560,6 +594,54 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               <CalculatorIcon />
               Somar
             </Button>
+            <Popover open={exportOpen} onOpenChange={setExportOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="lg" className="h-8 md:h-9">
+                  <DownloadIcon />
+                  Exportar
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 space-y-4">
+                <div className="space-y-1.5">
+                  <Label className={filterFieldLabelClass}>Formato</Label>
+                  <Select
+                    value={exportFormat}
+                    onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                      <SelectItem value="csv">CSV (.csv)</SelectItem>
+                      <SelectItem value="json">JSON (.json)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className={filterFieldLabelClass}>Orçamentos temáticos</Label>
+                  <div className="space-y-2">
+                    {(Object.entries(themeLabels) as [ThemeBudget, string][]).map(([key, label]) => (
+                      <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={exportThemes.has(key)}
+                          onCheckedChange={() => toggleExportTheme(key)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleExport}
+                  disabled={exportThemes.size === 0 || displayedActions.length === 0}
+                >
+                  <DownloadIcon />
+                  Exportar
+                </Button>
+              </PopoverContent>
+            </Popover>
             <Button
               variant="outline"
               size="lg"

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { themeLabels } from '@/lib/api';
+import { downloadBlob, escapeCsvCell, todayStamp } from '@/lib/export-utils';
 import type { ThemeBudget, ValidationItem } from '@/types/domain';
 
 export type ResultsExportRow = {
@@ -89,12 +90,6 @@ export function buildResultsRows(validations: ValidationItem[]): ResultsExportRo
     ciclo: v.cycle?.name ?? '',
     ano: v.cycle?.year ?? v.action?.year ?? 0,
   }));
-}
-
-function todayStamp() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export function defaultExportFilename(ext: 'xlsx' | 'csv') {
@@ -194,15 +189,6 @@ export function exportResultsXlsx(
   XLSX.writeFile(workbook, filename);
 }
 
-function escapeCsvCell(value: string | number | null | undefined): string {
-  if (value == null) return '';
-  const str = typeof value === 'number' ? String(value) : String(value);
-  if (/[";\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
 export function exportResultsCsv(
   rows: ResultsExportRow[],
   filename = defaultExportFilename('csv'),
@@ -215,12 +201,5 @@ export function exportResultsCsv(
   const csv = '\ufeff' + [headerLine, ...bodyLines].join('\r\n');
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
