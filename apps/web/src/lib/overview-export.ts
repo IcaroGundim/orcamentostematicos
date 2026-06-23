@@ -28,6 +28,7 @@ export type OverviewExportRow = {
   liquidado: number;
   disponivel: number;
   planejadoPonderado: number;
+  orcamentoAtualizadoPonderado: number | null;
   liquidadoPonderado: number;
   ano: number;
   observacao: string;
@@ -50,6 +51,7 @@ const COLUMN_ORDER: (keyof OverviewExportRow)[] = [
   'liquidado',
   'disponivel',
   'planejadoPonderado',
+  'orcamentoAtualizadoPonderado',
   'liquidadoPonderado',
   'ano',
   'observacao',
@@ -72,6 +74,7 @@ const HEADERS: Record<keyof OverviewExportRow, string> = {
   liquidado: 'Liquidado',
   disponivel: 'Disponível',
   planejadoPonderado: 'Planejado ponderado',
+  orcamentoAtualizadoPonderado: 'Orçamento atualizado ponderado',
   liquidadoPonderado: 'Liquidado ponderado',
   ano: 'Ano',
   observacao: 'Observação',
@@ -93,13 +96,21 @@ export function buildOverviewRows(
       if (!selectedThemes.has(a.theme)) continue;
 
       const byDelivery = usesDeliveryValues(a.theme, a.classification);
+      // Planejado ponderado é sobre o orçamento inicial (planejado) — por isso passamos
+      // initialBudget como base do `planned`. A coluna de orçamento atualizado ponderado
+      // (abaixo) é que usa o updatedBudget. O `liquidated` independe da base orçamentária
+      // (é liquidado × ponderador), e o comportamento das categorias por entrega é mantido.
       const { planned, liquidated } = thematicBudgetContribution({
         theme: a.theme,
         classification: a.classification,
         weightingFactor: a.weightingFactor,
-        updatedBudget: action.totals.updatedBudget,
+        updatedBudget: action.totals.initialBudget,
         liquidated: action.totals.liquidated,
       });
+
+      const ponderador = byDelivery
+        ? null
+        : resolveWeightingFactor(a.theme, a.classification, a.weightingFactor);
 
       rows.push({
         tema: themeLabels[a.theme] ?? a.theme,
@@ -112,14 +123,14 @@ export function buildOverviewRows(
         programaFuncional: action.functionalProgram ?? '',
         eixo: a.axis ?? '',
         classificacao: classificationLabels[a.classification] ?? a.classification,
-        ponderador: byDelivery
-          ? null
-          : resolveWeightingFactor(a.theme, a.classification, a.weightingFactor),
+        ponderador,
         orcamentoInicial: action.totals.initialBudget,
         orcamentoAtualizado: action.totals.updatedBudget,
         liquidado: action.totals.liquidated,
         disponivel: action.totals.updatedBudget - action.totals.liquidated,
         planejadoPonderado: planned,
+        orcamentoAtualizadoPonderado:
+          ponderador == null ? null : action.totals.updatedBudget * ponderador,
         liquidadoPonderado: liquidated,
         ano: action.year,
         observacao: byDelivery ? DELIVERY_NOTE : '',
