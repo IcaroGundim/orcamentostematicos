@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CalculatorIcon, ChevronDownIcon, ChevronRightIcon, DatabaseIcon, DownloadIcon, SearchIcon, XIcon } from 'lucide-react';
 import { toast } from 'sonner';
@@ -241,6 +241,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     () => new Set(Object.keys(themeLabels) as ThemeBudget[]),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevExpandedIdsRef = useRef<Set<string>>(expandedIds);
 
   const actionsById = useMemo(() => {
     const map = new Map<string, BudgetAction>();
@@ -492,6 +493,32 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     // isso causaria sobreposição entre linhas (pior ao expandir o detalhamento).
     measureElement: (element) => (element as HTMLElement).offsetHeight + ROW_GAP,
   });
+
+  // Ao expandir/recolher uma ação, a altura da linha muda e o virtualizer precisa
+  // reposicionar as linhas seguintes. Sob `zoom` o ResizeObserver interno é
+  // intermitente, então re-medimos explicitamente as linhas afetadas no próximo frame
+  // (mesmo padrão do painel de Curadoria) para evitar sobreposição.
+  useLayoutEffect(() => {
+    const prev = prevExpandedIdsRef.current;
+    const changedIds = new Set<string>();
+    for (const id of expandedIds) if (!prev.has(id)) changedIds.add(id);
+    for (const id of prev) if (!expandedIds.has(id)) changedIds.add(id);
+    prevExpandedIdsRef.current = expandedIds;
+    if (changedIds.size === 0) return;
+
+    const frame = requestAnimationFrame(() => {
+      for (const id of changedIds) {
+        const index = displayedActions.findIndex((a) => a.id === id);
+        if (index < 0) continue;
+        const node = scrollRef.current?.querySelector<HTMLElement>(
+          `[data-index="${index}"]`,
+        );
+        if (node) virtualizer.measureElement(node);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+    // virtualizer.measureElement é estável; omitido das deps de propósito
+  }, [expandedIds, displayedActions]);
 
   const handleOrganizationChange = useCallback((value: string) => {
     setOrganizationCode(value);
