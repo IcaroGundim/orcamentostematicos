@@ -33,10 +33,11 @@ export function SummaryCountBadge({ count, label }: { count: number; label: stri
 }
 
 export function StatusBadge({ status }: { status: ValidationStatus }) {
+  // Devolvido é exibido como Rascunho (o status interno permanece DEVOLVIDO).
+  const display = status === 'DEVOLVIDO' ? 'RASCUNHO' : status;
   const variant =
-    status === 'APROVADO' ? 'default' :
-    status === 'DEVOLVIDO' ? 'destructive' :
-    status === 'ENVIADO' ? 'outline' :
+    display === 'APROVADO' ? 'default' :
+    display === 'ENVIADO' ? 'outline' :
     'secondary';
-  return <Badge variant={variant}>{statusLabels[status]}</Badge>;
+  return <Badge variant={variant}>{statusLabels[display]}</Badge>;
 }

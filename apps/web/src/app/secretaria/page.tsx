@@ -49,6 +49,7 @@ import { ThematicCurationPanel } from '@/components/domain/thematic-curation-pan
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
+import { SecretariaOnboardingSlides } from '@/components/domain/secretaria-onboarding-slides';
 import { ValidationForm } from '@/components/domain/validation-form';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels } from '@/lib/api';
 import {
@@ -81,7 +82,7 @@ import {
   type ValidationFormValues,
   type ValidationSubmitIssue,
 } from '@/lib/validation-schema';
-import type { BudgetAction, Metadata, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
+import type { BudgetAction, Metadata, Organization, Summary, ThematicAssignment, ThemeBudget, ValidationItem } from '@/types/domain';
 
 type FormInput = ValidationFormInput;
 type FormValues = ValidationFormValues;
@@ -111,8 +112,9 @@ export default function SecretariaPage() {
   const [isSubmittingAll, setIsSubmittingAll] = useState(false);
   const [submitIssues, setSubmitIssues] = useState<ValidationSubmitIssue[]>([]);
   const [submitIssuesOpen, setSubmitIssuesOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('curation');
+  const [activeTab, setActiveTab] = useState('apresentacao');
   const [userRole, setUserRole] = useState<string>('');
+  const [organizationName, setOrganizationName] = useState('');
   const [previewRole, setPreviewRole] = useState<string | null>(null);
   const isPreview = previewRole !== null;
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -176,17 +178,22 @@ export default function SecretariaPage() {
   }, [currentId]);
 
   async function load() {
-    const [validationData, meta, actionData, summaryData] = await Promise.all([
+    const [validationData, meta, actionData, summaryData, orgs] = await Promise.all([
       api<ValidationItem[]>('/validations/my'),
       api<Metadata>('/metadata'),
       api<BudgetAction[]>('/budget-actions'),
       api<Summary>('/reports/summary'),
+      api<Organization[]>('/organizations'),
     ]);
 
     setValidations(validationData);
     setMetadata(meta);
     setActions(actionData);
     setSummary(summaryData);
+
+    const session = getStoredSession();
+    const org = orgs.find((o) => o.code === session?.user.organizationCode);
+    setOrganizationName(org?.name ?? actionData[0]?.organizationName ?? '');
     setCurrentId((id) => id || validationData[0]?.id || '');
     setSelectedActionId((id) => id || actionData[0]?.id || '');
   }
@@ -551,10 +558,20 @@ export default function SecretariaPage() {
     <main className="min-h-screen bg-background">
       <header className="border-b border-primary/30 bg-primary text-primary-foreground shadow-sm">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />
             <span className="text-primary-foreground/50 font-semibold select-none" style={{ fontSize: '22px' }}>|</span>
-            <span className="font-semibold uppercase tracking-widest" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <span className="font-semibold uppercase tracking-widest" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
+              {organizationName ? (
+                <span
+                  className="truncate text-sm font-medium text-primary-foreground/80"
+                  title={organizationName}
+                >
+                  {organizationName}
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" asChild>
@@ -621,6 +638,7 @@ export default function SecretariaPage() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <TabsList>
+            <TabsTrigger value="apresentacao">Como funciona</TabsTrigger>
             <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
             <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
           </TabsList>
@@ -643,6 +661,10 @@ export default function SecretariaPage() {
 
           </div>
         </div>
+
+        <TabsContent value="apresentacao" className="mt-0">
+          <SecretariaOnboardingSlides onFinish={() => handleTabChange('curation')} />
+        </TabsContent>
 
         <TabsContent value="validations" forceMount className="mt-0 data-[state=inactive]:hidden">
           <div className="grid w-full gap-5 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)]">

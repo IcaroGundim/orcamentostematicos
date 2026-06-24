@@ -196,6 +196,12 @@ function gaugeColor(pct: number): string {
   return 'var(--color-chart-4)';
 }
 
+// Contagem por status "de exibição": DEVOLVIDO é mostrado junto de RASCUNHO.
+function displayStatusCount(byStatus: Record<string, number>, status: string): number {
+  if (status === 'RASCUNHO') return (byStatus['RASCUNHO'] ?? 0) + (byStatus['DEVOLVIDO'] ?? 0);
+  return byStatus[status] ?? 0;
+}
+
 export default function SeplanPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
@@ -1369,21 +1375,21 @@ export default function SeplanPage() {
                               </SelectContent>
                             </Select>
                           </Field>
-                          {selectedPeriodType === 'MES_ISOLADO' ? (
-                            <Field>
-                              <FieldLabel>Mês de referência</FieldLabel>
-                              <Select value={String(selectedReferenceMonth)} onValueChange={(v) => setSelectedReferenceMonth(Number(v))}>
-                                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    {MONTH_NAMES.map((name, i) => (
-                                      <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </Field>
-                          ) : null}
+                          <Field>
+                            <FieldLabel>
+                              {selectedPeriodType === 'ACUMULADO_ANUAL' ? 'Mês de referência (até)' : 'Mês de referência'}
+                            </FieldLabel>
+                            <Select value={String(selectedReferenceMonth)} onValueChange={(v) => setSelectedReferenceMonth(Number(v))}>
+                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {MONTH_NAMES.map((name, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>{name}</SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </Field>
                         </FieldGroup>
                         <Button
                           asChild
@@ -1623,11 +1629,11 @@ export default function SeplanPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="flex flex-col gap-4">
-                        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                          {(['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as const).map((status) => (
+                        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                          {(['RASCUNHO', 'ENVIADO', 'APROVADO'] as const).map((status) => (
                             <div key={status} className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2.5">
                               <StatusBadge status={status} />
-                              <span className="text-lg font-semibold">{year.byStatus[status] ?? 0}</span>
+                              <span className="text-lg font-semibold">{displayStatusCount(year.byStatus, status)}</span>
                             </div>
                           ))}
                         </div>
@@ -1686,12 +1692,12 @@ export default function SeplanPage() {
                                   {pending > 0 ? (
                                     <Badge className="bg-primary text-primary-foreground">{pending} a revisar</Badge>
                                   ) : null}
-                                  {(['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as const)
-                                    .filter((s) => (org.byStatus[s] ?? 0) > 0)
+                                  {(['RASCUNHO', 'ENVIADO', 'APROVADO'] as const)
+                                    .filter((s) => displayStatusCount(org.byStatus, s) > 0)
                                     .map((s) => (
                                       <span key={s} className="flex items-center gap-1.5 text-xs">
                                         <StatusBadge status={s} />
-                                        <span className="font-semibold tabular-nums">{org.byStatus[s]}</span>
+                                        <span className="font-semibold tabular-nums">{displayStatusCount(org.byStatus, s)}</span>
                                       </span>
                                     ))}
                                 </div>

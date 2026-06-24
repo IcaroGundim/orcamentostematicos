@@ -37,6 +37,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatMoney, themeLabels } from '@/lib/api';
+import { effectiveWeightingFactor } from '@/lib/classification-rules';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { organizationAcronym } from '@/lib/organization-acronym';
@@ -44,6 +45,7 @@ import type { BudgetAction, BudgetImport, ThemeBudget } from '@/types/domain';
 import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
 
 const ALL = 'ALL';
+const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
 
@@ -230,6 +232,10 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [theme, setTheme] = useState(ALL);
   const [onlyEmendas, setOnlyEmendas] = useState(false);
+  const [weightedTheme, setWeightedTheme] = useState<ThemeBudget | typeof NO_WEIGHTING>(
+    NO_WEIGHTING,
+  );
+  const weighted = weightedTheme !== NO_WEIGHTING;
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedLines, setSelectedLines] = useState<Map<string, Set<string>>>(() => new Map());
@@ -383,6 +389,24 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       ),
     [displayedActions],
   );
+
+  // Totais ponderados pelo tema selecionado: soma, por ação exibida, a contribuição da
+  // atribuição daquele tema (orçamento × ponderador). Categorias por entrega = 0.
+  const weightedTotals = useMemo(() => {
+    let initialBudget = 0;
+    let updatedBudget = 0;
+    let liquidated = 0;
+    for (const action of displayedActions) {
+      for (const a of action.assignments) {
+        if (a.theme !== weightedTheme) continue;
+        const factor = effectiveWeightingFactor(a.theme, a.classification, a.weightingFactor);
+        initialBudget += action.totals.initialBudget * factor;
+        updatedBudget += action.totals.updatedBudget * factor;
+        liquidated += action.totals.liquidated * factor;
+      }
+    }
+    return { initialBudget, updatedBudget, liquidated };
+  }, [displayedActions, weightedTheme]);
 
   const selectedCount = selectedIds.size + selectedLines.size;
 
@@ -611,6 +635,29 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                 <span aria-hidden className={switchThumbClass} />
               </button>
             </label>
+            <label className="flex items-center gap-2 text-sm font-medium select-none">
+              Ponderar por
+              <Select
+                value={weightedTheme}
+                onValueChange={(value) =>
+                  setWeightedTheme(value as ThemeBudget | typeof NO_WEIGHTING)
+                }
+              >
+                <SelectTrigger className="h-8 w-[10rem] min-w-0 md:h-9">
+                  <SelectValue placeholder="Nenhum" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectItem value={NO_WEIGHTING}>Nenhum</SelectItem>
+                    {Object.entries(themeLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </label>
             <Button
               variant={calculatorMode ? 'default' : 'outline'}
               size="lg"
@@ -745,9 +792,18 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         <div className="grid min-w-0 shrink-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5 md:gap-3">
           {[
             { label: 'Ações', value: displayedActions.length.toLocaleString('pt-BR') },
-            { label: 'Planejado inicial', value: formatMoney(totals.initialBudget) },
-            { label: 'Orçamento atualizado', value: formatMoney(totals.updatedBudget) },
-            { label: 'Liquidado', value: formatMoney(totals.liquidated) },
+            {
+              label: weighted ? 'Planejado inicial ponderado' : 'Planejado inicial',
+              value: formatMoney((weighted ? weightedTotals : totals).initialBudget),
+            },
+            {
+              label: weighted ? 'Orçamento atualizado ponderado' : 'Orçamento atualizado',
+              value: formatMoney((weighted ? weightedTotals : totals).updatedBudget),
+            },
+            {
+              label: weighted ? 'Liquidado ponderado' : 'Liquidado',
+              value: formatMoney((weighted ? weightedTotals : totals).liquidated),
+            },
             {
               label: 'Disponível',
               value: formatMoney(totals.updatedBudget - totals.liquidated),

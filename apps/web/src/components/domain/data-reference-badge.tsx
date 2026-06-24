@@ -6,12 +6,14 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Data (extenso) até quando os dados estão atualizados: último dia do mês anterior
- * ao de referência. Ex.: QDD inserido em junho → dados até "31 de maio".
+ * Data (extenso) até quando os dados estão atualizados: o dia em que o QDD foi
+ * incluído combinado com o mês de referência da importação.
+ * Ex.: QDD com referência em junho, incluído em 24/06 → "24 de junho".
  */
 function formatUpdatedThrough(vigente: BudgetImport) {
-  const through = new Date(vigente.year, vigente.referenceMonth - 1, 0);
-  return `${through.getDate()} de ${(MONTH_NAMES[through.getMonth()] ?? '').toLowerCase()}`;
+  const day = new Date(vigente.importedAt).getDate();
+  const month = (MONTH_NAMES[vigente.referenceMonth - 1] ?? '').toLowerCase();
+  return `${day} de ${month}`;
 }
 
 /**
