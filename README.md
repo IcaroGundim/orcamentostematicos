@@ -46,6 +46,37 @@ npx tsx prisma/seed.ts
 Credenciais padrão do seed: `admin@seplan.ac.gov.br` / `admin123` (SEPLAN).
 
 
+## Banco de dados: mudanças de schema e backups
+
+> ⚠️ **`DATABASE_URL` é PRODUÇÃO.** Um `prisma db push` destrutivo já apagou toda a
+> curadoria temática (tabela `ThematicAssignment`). **Nunca** rode `prisma db push` cru,
+> `prisma migrate reset` ou DDL destrutivo contra produção. A retenção do Neon é de só ~6h
+> (aumentar é pago), então **backup é a rede de segurança** — nunca mexa no schema sem um.
+
+**Mudança de schema (fluxo obrigatório):** use sempre o push protegido, nunca o cru.
+
+```bash
+cd apps/web
+npm run db:push          # faz backup, mostra o diff, bloqueia perda de dados, pede confirmação
+# só se um DROP for realmente intencional (dados já preservados no backup):
+npm run db:push -- --allow-destructive
+npm run db:diff          # apenas prever as diferenças, sem aplicar
+```
+
+`db:push` (`scripts/safe-push.mjs`) sempre: (1) roda `db:backup`; (2) exibe o diff
+schema × banco; (3) **aborta** se o push removeria tabela/coluna, exigindo
+`--allow-destructive` explícito; (4) só então executa o `prisma db push`.
+
+**Backups:**
+
+- Automático: `.github/workflows/backup.yml` roda diariamente (e sob demanda via
+  *Run workflow*) e **commita** os dumps em `backups/<data>/`. Requer o segredo
+  `DATABASE_URL` no repositório. Dispare manualmente **antes** de qualquer operação de risco.
+- Cada backup traz `curadoria.json` (dump bruto restaurável), `marcacoes.{json,csv,xlsx}`
+  (marcações com a chave lógica, prontas para reimportar) e as validações/ciclos.
+- Hábito recomendado: exporte a Visão Geral periodicamente com **todos os temas**
+  selecionados (foi um export assim que permitiu recuperar OCAD após o incidente).
+
 ## Fluxo principal
 
 1. Entrar como SEPLAN Admin.

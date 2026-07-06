@@ -1,0 +1,113 @@
+// Backup versionável da curadoria temática.
+//
+// Gera, em backups/<AAAA-MM-DD>/, uma cópia restaurável das tabelas críticas:
+//   - curadoria.json  : dump bruto de ThematicAssignment, ActionValidation,
+//                       ValidationCycle e metadados de BudgetImport.
+//   - marcacoes.json  : marcações denormalizadas com as colunas da CHAVE LÓGICA
+//   - marcacoes.csv     (year|org|unit|projectActivity|application) — formato
+//   - marcacoes.xlsx    já validado para reconstrução via actionLogicalKey.
+//
+// Uso: DATABASE_URL="postgresql://..." node apps/web/scripts/backup.mjs
+// Roda no CI (GitHub Actions) e localmente antes de qualquer mudança de risco.
+
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import * as XLSX from 'xlsx';
+
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('Defina DATABASE_URL.');
+  process.exit(1);
+}
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // apps/web/scripts
+const repoRoot = path.resolve(scriptDir, '..', '..', '..');
+const stamp = new Date().toISOString().slice(0, 10); // AAAA-MM-DD (UTC)
+const outDir = path.join(repoRoot, 'backups', stamp);
+fs.mkdirSync(outDir, { recursive: true });
+
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
+
+// Serializa BigInt/Date de forma estável.
+const jsonReplacer = (_k, v) => (typeof v === 'bigint' ? Number(v) : v);
+const writeJson = (name, data) =>
+  fs.writeFileSync(path.join(outDir, name), JSON.stringify(data, jsonReplacer, 2));
+
+function toCsv(rows, columns) {
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const head = columns.join(';');
+  const body = rows.map((r) => columns.map((c) => esc(r[c])).join(';'));
+  return '﻿' + [head, ...body].join('\r\n');
+}
+
+(async () => {
+  // 1) Dumps brutos (restauráveis 1:1).
+  const [assignments, validations, cycles, imports] = await Promise.all([
+    prisma.$queryRawUnsafe('SELECT * FROM "ThematicAssignment"'),
+    prisma.$queryRawUnsafe('SELECT * FROM "ActionValidation"'),
+    prisma.$queryRawUnsafe('SELECT * FROM "ValidationCycle"'),
+    prisma.$queryRawUnsafe(
+      'SELECT id, filename, year, "referenceMonth", "periodType", status, "actionCount", "importedAt" FROM "BudgetImport"',
+    ),
+  ]);
+
+  writeJson('curadoria.json', {
+    generatedAt: new Date().toISOString(),
+    counts: {
+      thematicAssignments: assignments.length,
+      actionValidations: validations.length,
+      validationCycles: cycles.length,
+      budgetImports: imports.length,
+    },
+    thematicAssignments: assignments,
+    actionValidations: validations,
+    validationCycles: cycles,
+    budgetImports: imports,
+  });
+
+  // 2) Marcações denormalizadas (chave lógica) — o artefato de restore.
+  const marcacoes = await prisma.$queryRawUnsafe(`
+    SELECT ta.id, ta.theme, ta.axis, ta.classification, ta."weightingFactor",
+           ta.justification, ta.status, ta."createdBy", ta."createdAt",
+           ba.year, ba."organizationCode", ba."organizationName",
+           ba."unitCode", ba."unitName", ba."projectActivity", ba.application,
+           bi.status AS "importStatus"
+    FROM "ThematicAssignment" ta
+    JOIN "BudgetAction" ba ON ba.id = ta."actionId"
+    JOIN "BudgetImport" bi ON bi.id = ba."importId"
+    ORDER BY ta.theme, ba."organizationCode", ba."unitCode", ba."projectActivity"
+  `);
+
+  const columns = [
+    'theme', 'axis', 'classification', 'weightingFactor', 'justification', 'status',
+    'year', 'organizationCode', 'organizationName', 'unitCode', 'unitName',
+    'projectActivity', 'application', 'importStatus', 'createdBy', 'createdAt', 'id',
+  ];
+
+  writeJson('marcacoes.json', marcacoes);
+  fs.writeFileSync(path.join(outDir, 'marcacoes.csv'), toCsv(marcacoes, columns));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(marcacoes.map((r) => {
+    const o = {};
+    for (const c of columns) o[c] = r[c] ?? null;
+    return o;
+  }), { header: columns });
+  XLSX.utils.book_append_sheet(wb, ws, 'Marcações');
+  XLSX.writeFile(wb, path.join(outDir, 'marcacoes.xlsx'));
+
+  const byTheme = {};
+  for (const m of marcacoes) byTheme[m.theme] = (byTheme[m.theme] || 0) + 1;
+  console.log(`[backup] ${outDir}`);
+  console.log(`  marcações: ${marcacoes.length}`, JSON.stringify(byTheme));
+  console.log(`  validações: ${validations.length} | ciclos: ${cycles.length} | imports: ${imports.length}`);
+
+  await prisma.$disconnect();
+})().catch((e) => { console.error('ERR', e.message); process.exit(1); });

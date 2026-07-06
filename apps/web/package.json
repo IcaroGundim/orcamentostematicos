@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:backup": "node scripts/backup.mjs",
+    "db:push": "node scripts/safe-push.mjs",
+    "db:diff": "prisma migrate diff --from-schema ./prisma/schema.prisma --to-config-datasource ./prisma.config.ts --script"
   },
   "dependencies": {
     "@hookform/resolvers": "latest",
