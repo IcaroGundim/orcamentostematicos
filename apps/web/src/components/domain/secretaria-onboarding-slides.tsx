@@ -86,7 +86,7 @@ const THEME_CARDS = [
     lei: 'Lei estadual nº 3.762/2021',
     Icon: GraduationCapIcon,
     color: 'text-[#0e7490]',
-    ring: 'border-[#0891b2]/30 bg-[#66d9ff]/10',
+    ring: 'border-[#22d3ee]/55 bg-[#a5f3fc]/45',
   },
   {
     name: 'OSG',
@@ -95,7 +95,7 @@ const THEME_CARDS = [
     lei: 'Lei estadual nº 4.168/2023',
     Icon: VenusIcon,
     color: 'text-[#7c3aed]',
-    ring: 'border-[#9333ea]/30 bg-[#c084fc]/10',
+    ring: 'border-[#c084fc]/55 bg-[#e9d5ff]/50',
   },
   {
     name: 'Climático',
@@ -104,7 +104,7 @@ const THEME_CARDS = [
     lei: 'Lei estadual nº 4.679/2025',
     Icon: CloudSunIcon,
     color: 'text-[#047857]',
-    ring: 'border-[#059669]/30 bg-[#34d399]/10',
+    ring: 'border-[#34d399]/55 bg-[#a7f3d0]/45',
   },
 ];
 
@@ -137,12 +137,18 @@ const SLIDES: Slide[] = [
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
           {THEME_CARDS.map(({ name, full, desc, lei, Icon, color, ring }) => (
-            <div key={name} className={cn('flex flex-col rounded-xl border p-4', ring)}>
-              <Icon className={cn('size-6', color)} />
-              <p className="mt-2 text-base font-semibold text-foreground">{name}</p>
-              <p className="text-xs font-medium text-foreground/70">{full}</p>
-              <p className="mt-1.5 text-xs text-muted-foreground">{desc}</p>
-              <p className="mt-2 text-[0.7rem] font-medium text-muted-foreground/80">{lei}</p>
+            <div key={name} className={cn('relative flex flex-col overflow-hidden rounded-xl border p-4', ring)}>
+              <Icon
+                aria-hidden
+                className={cn(
+                  'pointer-events-none absolute -bottom-1 -right-1 size-20 opacity-[0.12]',
+                  color,
+                )}
+              />
+              <p className="relative text-base font-semibold text-foreground">{name}</p>
+              <p className="relative text-xs font-medium text-foreground/70">{full}</p>
+              <p className="relative mt-1.5 text-xs text-muted-foreground">{desc}</p>
+              <p className="relative mt-2 text-[0.7rem] font-medium text-muted-foreground/80">{lei}</p>
             </div>
           ))}
         </div>
@@ -425,10 +431,29 @@ export function SecretariaOnboardingSlides({ onFinish }: { onFinish: () => void 
         </div>
 
         {/* Painel de conteúdo */}
-        <div className="flex flex-col justify-center overflow-y-auto bg-card p-8 lg:p-12">
-          <div key={`content-${index}`} className="animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
-            <h2 className="text-2xl font-semibold tracking-tight lg:text-3xl">{slide.title}</h2>
-            <div className="mt-5 text-base leading-relaxed text-muted-foreground">{slide.body}</div>
+        <div className="relative flex flex-col overflow-hidden bg-card">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-16 -top-20 size-72 rounded-full bg-neutral-400/20 blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-24 -left-12 size-64 rounded-full bg-black/8 blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.55_0_0_/_0.08),transparent_55%),radial-gradient(ellipse_at_bottom_left,oklch(0.2_0_0_/_0.06),transparent_50%)]"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle_at_1px_1px,oklch(0.25_0_0)_1px,transparent_0)] [background-size:18px_18px]"
+          />
+
+          <div className="relative z-10 flex flex-1 flex-col justify-center overflow-y-auto p-8 lg:p-12">
+            <div key={`content-${index}`} className="animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
+              <h2 className="text-2xl font-semibold tracking-tight lg:text-3xl">{slide.title}</h2>
+              <div className="mt-5 text-base leading-relaxed text-muted-foreground">{slide.body}</div>
+            </div>
           </div>
         </div>
       </div>

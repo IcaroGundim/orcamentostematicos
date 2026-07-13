@@ -99,6 +99,40 @@ export async function fetchCurationSnapshot() {
   return { actions, summary };
 }
 
+/**
+ * Um snapshot vindo do refetch é "suspeito" quando regride o que já temos em
+ * tela: zera ações que existiam, ou perde todas as marcações que estavam
+ * presentes. Isso acontece se o `GET /budget-actions` disparado logo após a
+ * escrita voltar 200 vazio/degradado (leitura logo após o commit, cold start,
+ * import vigente ambíguo). Nesses casos preservamos o estado otimista — que já
+ * está correto — em vez de apagar a tela.
+ */
+export function isSnapshotSafe(current: BudgetAction[], fresh: BudgetAction[]): boolean {
+  if (current.length > 0 && fresh.length === 0) return false;
+  const countAssignments = (list: BudgetAction[]) =>
+    list.reduce((total, action) => total + action.assignments.length, 0);
+  if (countAssignments(current) > 0 && countAssignments(fresh) === 0) return false;
+  return true;
+}
+
+/**
+ * Refetch + aplicação segura do snapshot: só sobrescreve o estado se o snapshot
+ * novo não for uma regressão (ver `isSnapshotSafe`). Retorna `true` se aplicou,
+ * `false` se preservou o estado otimista. `current` deve ser o array JÁ com a
+ * atualização otimista aplicada, para a comparação refletir o que o usuário vê.
+ */
+export async function reconcileCurationSnapshot(
+  current: BudgetAction[],
+  setActions: (actions: BudgetAction[]) => void,
+  setSummary: (summary: Summary) => void,
+): Promise<boolean> {
+  const fresh = await fetchCurationSnapshot();
+  if (!isSnapshotSafe(current, fresh.actions)) return false;
+  setActions(fresh.actions);
+  setSummary(fresh.summary);
+  return true;
+}
+
 export async function syncCurationSnapshot(
   setActions: (actions: BudgetAction[]) => void,
   setSummary: (summary: Summary) => void,

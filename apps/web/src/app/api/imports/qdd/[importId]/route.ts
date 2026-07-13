@@ -25,6 +25,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const vigente = await tx.budgetImport.findFirst({
       where: { status: 'VIGENTE' },
+      orderBy: { importedAt: 'desc' },
       select: { id: true },
     });
 

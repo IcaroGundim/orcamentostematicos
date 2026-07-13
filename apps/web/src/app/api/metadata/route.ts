@@ -47,7 +47,10 @@ export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  const vigenteImport = await prisma.budgetImport.findFirst({ where: { status: 'VIGENTE' } });
+  const vigenteImport = await prisma.budgetImport.findFirst({
+    where: { status: 'VIGENTE' },
+    orderBy: { importedAt: 'desc' },
+  });
 
   return ok({
     themes: ['OCAD', 'OSG', 'CLIMATICO'],

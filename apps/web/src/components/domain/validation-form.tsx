@@ -65,7 +65,7 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
   };
 
   return (
-    <Card className="mt-0">
+    <Card size="sm" className="mt-0">
       <CardHeader>
         <CardTitle>Formulário de validação</CardTitle>
         <CardDescription>
@@ -73,8 +73,8 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={(event) => event.preventDefault()} className="flex flex-col gap-8">
-          <section className="flex flex-col gap-4">
+        <form onSubmit={(event) => event.preventDefault()} className="flex flex-col gap-5">
+          <section className="flex flex-col gap-3">
             <SectionHeader
               eyebrow="Etapa 1"
               title={
@@ -119,7 +119,7 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
                 </Button>
               </Empty>
             ) : (
-              <ul className="flex flex-col gap-3">
+              <ul className="flex flex-col gap-2">
                 {deliveryFields.map((field, index) => (
                   <DeliveryItem
                     key={field.id}
@@ -148,14 +148,14 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
             )}
           </section>
 
-          <section className="flex flex-col gap-4 border-t pt-6">
+          <section className="flex flex-col gap-3 border-t pt-4">
             <SectionHeader
               eyebrow="Etapa 2"
               title="Informações complementares"
               hint="Status, valores e observações gerais da validação."
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               {perDeliveryValues ? (
                 <Field>
                   <FieldLabel>Total das entregas</FieldLabel>
@@ -188,7 +188,7 @@ export function ValidationForm({ form, deliveries, theme, classification, editab
             </div>
           </section>
 
-          <div className="flex flex-wrap justify-end gap-2 border-t pt-5">
+          <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
             <Button type="button" disabled={!editable || isSaving} onClick={form.handleSubmit(onSave)}>
               <SaveIcon data-icon="inline-start" />
               {isSaving ? 'Salvando…' : 'Salvar rascunho'}
@@ -248,7 +248,7 @@ function DeliveryItem({
 
   return (
     <li className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-4 py-2">
+      <header className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-border bg-background px-1.5 text-xs font-bold tabular-nums text-foreground">
             {index + 1}
@@ -285,9 +285,8 @@ function DeliveryItem({
         </div>
       </header>
 
-      <div className="grid gap-4 p-4 md:grid-cols-2">
+      <div className="grid gap-3 p-3 md:grid-cols-4">
         <Field
-          className="md:col-span-2"
           data-disabled={!editable || undefined}
           data-invalid={!!rowErrors?.name || undefined}
         >
@@ -299,26 +298,6 @@ function DeliveryItem({
             {...form.register(`deliveries.${index}.name`)}
           />
           <FieldError errors={[rowErrors?.name]} />
-        </Field>
-
-        <Field
-          className="md:col-span-2"
-          data-disabled={!editable || undefined}
-          data-invalid={!!rowErrors?.description || undefined}
-        >
-          <FieldLabel htmlFor={`delivery-description-${index}`}>
-            Descrição{' '}
-            <span className="font-normal text-muted-foreground">
-              (descreva detalhadamente o que foi executado — ex.: "Distribuição de 500 cestas básicas a famílias em situação de vulnerabilidade nos bairros X e Y")
-            </span>
-          </FieldLabel>
-          <Textarea
-            id={`delivery-description-${index}`}
-            disabled={!editable}
-            rows={2}
-            {...form.register(`deliveries.${index}.description`)}
-          />
-          <FieldError errors={[rowErrors?.description]} />
         </Field>
 
         <Field data-disabled={!editable || undefined} data-invalid={!!rowErrors?.quantity || undefined}>
@@ -363,7 +342,6 @@ function DeliveryItem({
         </Field>
 
         <Field
-          className={perDeliveryValues ? undefined : 'md:col-span-2'}
           data-disabled={!editable || undefined}
           data-invalid={!!rowErrors?.beneficiaries || undefined}
         >
@@ -375,6 +353,26 @@ function DeliveryItem({
             {...form.register(`deliveries.${index}.beneficiaries`)}
           />
           <FieldError errors={[rowErrors?.beneficiaries]} />
+        </Field>
+
+        <Field
+          className="md:col-span-4"
+          data-disabled={!editable || undefined}
+          data-invalid={!!rowErrors?.description || undefined}
+        >
+          <FieldLabel htmlFor={`delivery-description-${index}`}>
+            Descrição{' '}
+            <span className="font-normal text-muted-foreground">
+              (descreva detalhadamente o que foi executado — ex.: "Distribuição de 500 cestas básicas a famílias em situação de vulnerabilidade nos bairros X e Y")
+            </span>
+          </FieldLabel>
+          <Textarea
+            id={`delivery-description-${index}`}
+            disabled={!editable}
+            rows={2}
+            {...form.register(`deliveries.${index}.description`)}
+          />
+          <FieldError errors={[rowErrors?.description]} />
         </Field>
 
         {perDeliveryValues ? (

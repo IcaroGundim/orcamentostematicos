@@ -16,11 +16,22 @@ export function createId(prefix: string) {
 // ── Vigente import ───────────────────────────────────────────────────────────
 
 export async function getVigenteImportId(): Promise<string | null> {
-  const row = await prisma.budgetImport.findFirst({
+  // Determinístico: sempre o import VIGENTE mais recente. Sem `orderBy`, o
+  // `findFirst` pode escolher imports diferentes entre chamadas caso a invariante
+  // "um único VIGENTE" seja violada — o que faria uma leitura eventual voltar
+  // ações/marcações vazias e "apagar" a tela até um F5.
+  const rows = await prisma.budgetImport.findMany({
     where: { status: 'VIGENTE' },
+    orderBy: { importedAt: 'desc' },
     select: { id: true },
   });
-  return row?.id ?? null;
+  if (rows.length > 1) {
+    console.warn(
+      `[getVigenteImportId] Invariante violada: ${rows.length} imports VIGENTE simultâneos ` +
+        `(${rows.map((r) => r.id).join(', ')}). Usando o mais recente.`,
+    );
+  }
+  return rows[0]?.id ?? null;
 }
 
 // ── Scope (Órgão Executor) ───────────────────────────────────────────────────

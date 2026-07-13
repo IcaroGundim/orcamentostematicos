@@ -21,7 +21,7 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -63,9 +63,9 @@ import {
 import {
   appendActionAssignment,
   decrementSummaryAssignments,
-  fetchCurationSnapshot,
   incrementSummaryAssignments,
   patchActionAssignments,
+  reconcileCurationSnapshot,
 } from '@/lib/curation-actions';
 import {
   clearAllValidationDrafts,
@@ -94,6 +94,97 @@ const initialAssignment = {
   weightingFactor: '',
   justification: '',
 };
+
+const SECRETARIA_TAB_ITEMS = [
+  { value: 'apresentacao', label: 'Como funciona' },
+  { value: 'curation', label: 'Curadoria temática' },
+  { value: 'validations', label: 'Validar Entregas' },
+] as const;
+
+/** Abas com indicador azul deslizante (sem piscar o texto ao trocar). */
+function SecretariaTabList({ activeTab }: { activeTab: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef(activeTab);
+  const [highlightTab, setHighlightTab] = useState(activeTab);
+  const [pill, setPill] = useState({ left: 0, width: 0, ready: false });
+
+  const updatePill = useCallback((tabValue: string) => {
+    const list = listRef.current;
+    if (!list) return;
+    const trigger = list.querySelector<HTMLElement>(`[data-tab-value="${tabValue}"]`);
+    if (!trigger) return;
+    setPill({
+      left: trigger.offsetLeft,
+      width: trigger.offsetWidth,
+      ready: true,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    highlightRef.current = activeTab;
+    setHighlightTab(activeTab);
+    updatePill(activeTab);
+  }, [activeTab, updatePill]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const onResize = () => updatePill(highlightRef.current);
+    const ro = new ResizeObserver(onResize);
+    ro.observe(list);
+    window.addEventListener('resize', onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [updatePill]);
+
+  return (
+    <TabsList
+      ref={listRef}
+      className="relative border border-primary bg-white"
+      onMouseLeave={() => {
+        highlightRef.current = activeTab;
+        setHighlightTab(activeTab);
+        updatePill(activeTab);
+      }}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute top-[3px] z-0 h-[calc(100%-6px)] rounded-md bg-primary shadow-md',
+          'transition-[left,width] duration-500 ease-out',
+          pill.ready ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{ left: pill.left, width: pill.width }}
+      />
+      {SECRETARIA_TAB_ITEMS.map((tab) => {
+        const highlighted = highlightTab === tab.value;
+        return (
+          <TabsTrigger
+            key={tab.value}
+            value={tab.value}
+            data-tab-value={tab.value}
+            onMouseEnter={() => {
+              highlightRef.current = tab.value;
+              setHighlightTab(tab.value);
+              updatePill(tab.value);
+            }}
+            className={cn(
+              'relative z-10 border-0 bg-transparent shadow-none transition-none',
+              'data-active:bg-transparent data-active:shadow-none',
+              highlighted
+                ? 'text-white data-active:text-white hover:text-white'
+                : 'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
+            )}
+          >
+            {tab.label}
+          </TabsTrigger>
+        );
+      })}
+    </TabsList>
+  );
+}
 
 export default function SecretariaPage() {
   const router = useRouter();
@@ -387,13 +478,12 @@ export default function SecretariaPage() {
           ),
         }),
       });
-      setActions((prev) => appendActionAssignment(prev, selectedActionId, created));
+      const optimistic = appendActionAssignment(actions, selectedActionId, created);
+      setActions(optimistic);
       setSummary((prev) => incrementSummaryAssignments(prev, 1));
       toast.success('Ação classificada no orçamento temático.');
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A validação RASCUNHO é gerada automaticamente no backend; recarrega
         // para que apareça imediatamente na aba Validações.
         const freshValidations = await api<ValidationItem[]>('/validations/my');
@@ -428,12 +518,11 @@ export default function SecretariaPage() {
           justification: assignment.justification,
         }),
       });
-      setActions((prev) => appendActionAssignment(prev, selectedActionId, updated));
+      const optimistic = appendActionAssignment(actions, selectedActionId, updated);
+      setActions(optimistic);
       toast.success('Classificação atualizada.');
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A classificação alterada reflete na aba Validações.
         const freshValidations = await api<ValidationItem[]>('/validations/my');
         setValidations(freshValidations);
@@ -476,8 +565,10 @@ export default function SecretariaPage() {
         }
       });
 
+      const optimistic =
+        succeeded.length > 0 ? patchActionAssignments(snapshot, actionId, succeeded) : snapshot;
       if (succeeded.length > 0) {
-        setActions((prev) => patchActionAssignments(prev, actionId, succeeded));
+        setActions(optimistic);
         setSummary((prev) => (prev ? decrementSummaryAssignments(prev, succeeded.length) : prev));
       } else {
         setActions(snapshot);
@@ -497,9 +588,7 @@ export default function SecretariaPage() {
       }
 
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
       } catch {
         /* mantém estado otimista */
       }
@@ -574,7 +663,11 @@ export default function SecretariaPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" asChild>
+            <Button
+              variant="secondary"
+              asChild
+              className="border-0 bg-white text-primary hover:bg-white/90 hover:text-primary"
+            >
               <Link href="/secretaria/ajuda">
                 <CircleHelpIcon data-icon="inline-start" />
                 Ajuda
@@ -582,7 +675,10 @@ export default function SecretariaPage() {
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="secondary">
+                <Button
+                  variant="secondary"
+                  className="border-0 bg-white text-primary hover:bg-white/90 hover:text-primary"
+                >
                   <BookOpenIcon data-icon="inline-start" />
                   Legislação
                   <ChevronDownIcon className="ml-1 size-4 opacity-70" />
@@ -637,11 +733,7 @@ export default function SecretariaPage() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="apresentacao">Como funciona</TabsTrigger>
-            <TabsTrigger value="curation">Curadoria temática</TabsTrigger>
-            <TabsTrigger value="validations">Validar Entregas</TabsTrigger>
-          </TabsList>
+          <SecretariaTabList activeTab={activeTab} />
           <div className="flex flex-wrap items-center gap-2">
             <SummaryCountBadge count={validations.length} label="validações" />
             <SummaryCountBadge count={summary?.assignments ?? 0} label="classificações" />

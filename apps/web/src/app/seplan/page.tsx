@@ -101,10 +101,10 @@ import {
   appendActionAssignment,
   collectBulkRemoveTargets,
   decrementSummaryAssignments,
-  fetchCurationSnapshot,
   incrementSummaryAssignments,
   patchActionAssignments,
   patchBulkActionAssignments,
+  reconcileCurationSnapshot,
   type BulkRemoveThemeFilter,
 } from '@/lib/curation-actions';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
@@ -437,12 +437,11 @@ export default function SeplanPage() {
         }),
       });
       toast.success('Ação classificada no orçamento temático.');
-      setActions((current) => appendActionAssignment(current, selectedActionId, created));
+      const optimistic = appendActionAssignment(actions, selectedActionId, created);
+      setActions(optimistic);
       setSummary((current) => incrementSummaryAssignments(current, 1));
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
       } catch {
         /* mantém estado otimista */
       }
@@ -473,11 +472,10 @@ export default function SeplanPage() {
         }),
       });
       toast.success('Classificação atualizada.');
-      setActions((current) => appendActionAssignment(current, selectedActionId, updated));
+      const optimistic = appendActionAssignment(actions, selectedActionId, updated);
+      setActions(optimistic);
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
       } catch {
         /* mantém estado otimista */
       }
@@ -517,8 +515,10 @@ export default function SeplanPage() {
         }
       });
 
+      const optimistic =
+        succeeded.length > 0 ? patchActionAssignments(snapshot, actionId, succeeded) : snapshot;
       if (succeeded.length > 0) {
-        setActions((prev) => patchActionAssignments(prev, actionId, succeeded));
+        setActions(optimistic);
         setSummary((prev) => decrementSummaryAssignments(prev, succeeded.length));
       } else {
         setActions(snapshot);
@@ -538,9 +538,7 @@ export default function SeplanPage() {
       }
 
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
       } catch {
         /* mantém estado otimista */
       }
@@ -591,8 +589,10 @@ export default function SeplanPage() {
 
       const totalRemoved = [...removedByAction.values()].reduce((sum, ids) => sum + ids.length, 0);
 
+      const optimistic =
+        totalRemoved > 0 ? patchBulkActionAssignments(snapshot, removedByAction) : snapshot;
       if (totalRemoved > 0) {
-        setActions((prev) => patchBulkActionAssignments(prev, removedByAction));
+        setActions(optimistic);
         setSummary((prev) => decrementSummaryAssignments(prev, totalRemoved));
       } else {
         setActions(snapshot);
@@ -612,9 +612,7 @@ export default function SeplanPage() {
       }
 
       try {
-        const fresh = await fetchCurationSnapshot();
-        setActions(fresh.actions);
-        setSummary(fresh.summary);
+        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
       } catch {
         /* mantém estado otimista */
       }
