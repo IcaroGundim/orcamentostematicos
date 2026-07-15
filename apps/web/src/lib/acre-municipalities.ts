@@ -37,3 +37,21 @@ export function normalizeMunicipality(value: string | undefined): '' | AcreMunic
   if (!value) return '';
   return isAcreMunicipalityOption(value) ? value : '';
 }
+
+export function parseMunicipalitySelection(value: string | undefined): AcreMunicipalityOption[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((municipality) => municipality.trim())
+    .filter(isAcreMunicipalityOption);
+}
+
+export function normalizeMunicipalitySelection(value: string | undefined): string {
+  return parseMunicipalitySelection(value).join(', ');
+}
+
+export function isValidMunicipalitySelection(value: string): boolean {
+  if (!value.trim()) return false;
+  const entries = value.split(',').map((municipality) => municipality.trim());
+  return entries.length > 0 && entries.every(isAcreMunicipalityOption);
+}

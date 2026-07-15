@@ -6,7 +6,7 @@ import {
   chartHeightForRowCount,
 } from '@/components/charts/LiquidatedByAxisChart';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HoverTabsList, Tabs } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatMoney } from '@/lib/api';
 import {
@@ -96,10 +96,13 @@ export function AxisExecutionByThemePanel({
       {hasClassification ? (
         <div className="flex justify-end">
           <Tabs value={dimension} onValueChange={(value) => setDimension(value as Dimension)}>
-            <TabsList>
-              <TabsTrigger value="axis">Por eixo</TabsTrigger>
-              <TabsTrigger value="classification">Por classificação</TabsTrigger>
-            </TabsList>
+            <HoverTabsList
+              activeValue={dimension}
+              items={[
+                { value: 'axis', content: 'Por eixo' },
+                { value: 'classification', content: 'Por classificação' },
+              ]}
+            />
           </Tabs>
         </div>
       ) : null}

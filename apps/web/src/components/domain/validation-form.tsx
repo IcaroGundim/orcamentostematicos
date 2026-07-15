@@ -7,19 +7,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { MoneyInput } from '@/components/ui/money-input';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { formatMoney } from '@/lib/api';
-import { ACRE_MUNICIPALITY_OPTIONS } from '@/lib/acre-municipalities';
+import {
+  ACRE_MUNICIPALITY_OPTIONS,
+  parseMunicipalitySelection,
+} from '@/lib/acre-municipalities';
 import { sumDeliveryExecutedValues, usesDeliveryValues } from '@/lib/classification-rules';
 import { blankDelivery, type ValidationFormInput, type ValidationFormValues } from '@/lib/validation-schema';
 import type { ThemeBudget } from '@/types/domain';
@@ -245,15 +242,16 @@ function DeliveryItem({
   const { errors } = form.formState;
   const rowErrors = errors.deliveries?.[index];
   const municipality = form.watch(`deliveries.${index}.municipality`);
+  const selectedMunicipalities = parseMunicipalitySelection(municipality);
 
   return (
-    <li className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-3 py-1.5">
+    <li className="overflow-hidden rounded-lg border border-black bg-card shadow-sm">
+      <header className="flex items-center justify-between gap-2 border-b border-black bg-green-900 px-3 py-1.5">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-border bg-background px-1.5 text-xs font-bold tabular-nums text-foreground">
+          <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-black bg-background px-1.5 text-xs font-bold tabular-nums text-foreground">
             {index + 1}
           </span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
             Entrega
           </span>
         </div>
@@ -262,7 +260,7 @@ function DeliveryItem({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="h-8 px-2 text-white hover:bg-white/15 hover:text-white"
             disabled={!editable}
             onClick={onClear}
             title="Limpar os campos preenchidos desta entrega"
@@ -274,7 +272,7 @@ function DeliveryItem({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="h-8 px-2 text-red-200 hover:bg-white/15 hover:text-red-100"
             disabled={!editable || !canRemove}
             onClick={onRemove}
             title={canRemove ? 'Remover entrega' : 'É necessário manter ao menos uma entrega'}
@@ -293,6 +291,7 @@ function DeliveryItem({
           <FieldLabel htmlFor={`delivery-name-${index}`}>Nome da entrega</FieldLabel>
           <Input
             id={`delivery-name-${index}`}
+            className="border-black focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
             disabled={!editable}
             placeholder="Nome da Entrega"
             {...form.register(`deliveries.${index}.name`)}
@@ -304,6 +303,7 @@ function DeliveryItem({
           <FieldLabel htmlFor={`delivery-quantity-${index}`}>Quantidade</FieldLabel>
           <Input
             id={`delivery-quantity-${index}`}
+            className="border-black focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
             disabled={!editable}
             type="number"
             min={0}
@@ -314,30 +314,52 @@ function DeliveryItem({
         </Field>
 
         <Field data-disabled={!editable || undefined} data-invalid={!!rowErrors?.municipality || undefined}>
-          <FieldLabel htmlFor={`delivery-municipality-${index}`}>Município</FieldLabel>
-          <Select
-            value={municipality || undefined}
-            disabled={!editable}
-            onValueChange={(value) =>
-              form.setValue(`deliveries.${index}.municipality`, value, {
-                shouldValidate: true,
-                shouldDirty: true,
-              })
-            }
-          >
-            <SelectTrigger id={`delivery-municipality-${index}`} className="w-full">
-              <SelectValue placeholder="Selecione o município" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {ACRE_MUNICIPALITY_OPTIONS.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <FieldLabel htmlFor={`delivery-municipality-${index}`}>Municípios</FieldLabel>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                id={`delivery-municipality-${index}`}
+                type="button"
+                variant="outline"
+                disabled={!editable}
+                className="h-8 w-full justify-start overflow-hidden border-black bg-background px-3 text-left font-normal focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
+              >
+                <span className="truncate">
+                  {selectedMunicipalities.length
+                    ? selectedMunicipalities.join(', ')
+                    : 'Selecione os municípios'}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1">
+              <div className="max-h-64 overflow-y-auto">
+                {ACRE_MUNICIPALITY_OPTIONS.map((name) => {
+                  const checked = selectedMunicipalities.includes(name);
+                  return (
+                    <label
+                      key={name}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-gray-700 hover:text-white"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        className="border-black data-[state=checked]:border-gray-900 data-[state=checked]:bg-gray-900"
+                        onCheckedChange={(nextChecked) => {
+                          const next = nextChecked
+                            ? [...selectedMunicipalities, name]
+                            : selectedMunicipalities.filter((item) => item !== name);
+                          form.setValue(`deliveries.${index}.municipality`, next.join(', '), {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                          });
+                        }}
+                      />
+                      <span>{name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
           <FieldError errors={[rowErrors?.municipality]} />
         </Field>
 
@@ -348,6 +370,7 @@ function DeliveryItem({
           <FieldLabel htmlFor={`delivery-beneficiaries-${index}`}>Público beneficiado</FieldLabel>
           <Input
             id={`delivery-beneficiaries-${index}`}
+            className="border-black focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
             disabled={!editable}
             placeholder="Ex.: Estudantes da rede pública de ensino"
             {...form.register(`deliveries.${index}.beneficiaries`)}
@@ -368,6 +391,7 @@ function DeliveryItem({
           </FieldLabel>
           <Textarea
             id={`delivery-description-${index}`}
+            className="border-black focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
             disabled={!editable}
             rows={2}
             {...form.register(`deliveries.${index}.description`)}
@@ -384,6 +408,7 @@ function DeliveryItem({
               render={({ field }) => (
                 <MoneyInput
                   id={`delivery-executed-value-${index}`}
+                  className="border-black focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
                   name={field.name}
                   disabled={!editable}
                   value={typeof field.value === 'number' ? field.value : undefined}

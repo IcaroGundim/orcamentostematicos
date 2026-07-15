@@ -5,6 +5,7 @@ import {
   AlertCircleIcon,
   ArrowLeftIcon,
   CheckCircle2Icon,
+  ExternalLinkIcon,
   LoaderCircleIcon,
   LogInIcon,
   MailIcon,
@@ -33,6 +34,66 @@ import { Input } from '@/components/ui/input';
 import { api, setStoredSession, type Session } from '@/lib/api';
 import { hasQuickAccessEntry, recordSuccessfulLogin } from '@/lib/local-quick-access';
 import type { User } from '@/types/domain';
+
+const BI_DASHBOARDS = [
+  {
+    title: 'Orçamento Criança e Adolescente',
+    shortTitle: 'Orçamento Criança e Adolescente — OCAD',
+    image: '/bi-ocad-placeholder.webp',
+    imageAlt: 'Crianças e adolescentes em uma paisagem amazônica',
+    imagePosition: 'center 70%',
+    href: 'https://seplan.ac.gov.br/planejamento-governamental/orcamentos-tematicos/orcamento-crianca-e-adolescente-ocad/',
+  },
+  {
+    title: 'Relatório Orçamento Sensível ao Gênero',
+    shortTitle: 'Orçamento Sensível ao Gênero — OSG',
+    image: '/bi-osg-placeholder.webp',
+    imageAlt: 'Ilustração de mulheres de diferentes perfis e profissões',
+    imagePosition: 'center 72%',
+    href: 'https://seplan.ac.gov.br/planejamento-governamental/orcamentos-tematicos/relatorio-orcamento-sensivel-ao-genero-osg/',
+  },
+  {
+    title: 'Orçamento Climático do Estado do Acre',
+    shortTitle: 'Orçamento Climático do Estado do Acre',
+    image: '/bi-climatico-placeholder.webp',
+    imageAlt: 'Floresta amazônica e rio ao pôr do sol',
+    imagePosition: 'center center',
+    href: 'https://seplan.ac.gov.br/planejamento-governamental/orcamentos-tematicos/orcamento-climatico-do-estado-do-acre/',
+  },
+] as const;
+
+function BiDashboardLinks({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <div className="grid gap-3">
+      {BI_DASHBOARDS.map((dashboard) => (
+        <a
+          key={dashboard.href}
+          href={dashboard.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${dashboard.shortTitle} (abre em uma nova aba)`}
+          className={mobile
+            ? 'group relative isolate min-h-24 overflow-hidden rounded-xl border border-black bg-black shadow-sm outline-none transition-transform hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-gray-300'
+            : 'group relative isolate min-h-36 overflow-hidden rounded-xl border border-white/45 bg-black shadow-md outline-none transition-transform hover:-translate-y-1 hover:shadow-lg focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-green-900'}
+        >
+          <Image
+            src={dashboard.image}
+            alt={dashboard.imageAlt}
+            fill
+            sizes={mobile ? '(max-width: 1023px) 384px' : '512px'}
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            style={{ objectPosition: dashboard.imagePosition }}
+          />
+          <span className="absolute inset-0 bg-black/50 transition-colors group-hover:bg-black/60" aria-hidden />
+          <span className="absolute inset-0 flex items-center justify-center gap-2 px-3 py-5 text-center text-sm font-semibold leading-snug text-white">
+            {mobile ? dashboard.shortTitle : dashboard.title}
+            <ExternalLinkIcon className="size-4 shrink-0 opacity-80" aria-hidden />
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
 
 type View = 'login' | 'forgot' | 'reset';
 
@@ -491,14 +552,23 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-5">
-            <div className="h-px w-16 bg-primary-foreground/30" />
-            <h1 className="max-w-md text-5xl font-semibold leading-[1.15] tracking-tight">
-              Orçamentos<br />Temáticos
-            </h1>
-            <p className="max-w-lg text-base leading-7 text-primary-foreground/70">
-              Os orçamentos temáticos são instrumentos estratégicos que organizam e apresentam a aplicação dos recursos públicos de forma segmentada, permitindo uma análise detalhada das políticas públicas voltadas a áreas prioritárias.
-            </p>
+          <div className="grid gap-8 2xl:grid-cols-[minmax(280px,0.75fr)_minmax(560px,1.25fr)] 2xl:items-center">
+            <div className="flex flex-col gap-5">
+              <div className="h-px w-16 bg-primary-foreground/30" />
+              <h1 className="max-w-md text-5xl font-semibold leading-[1.15] tracking-tight">
+                Orçamentos<br />Temáticos
+              </h1>
+              <p className="max-w-lg text-base leading-7 text-primary-foreground/70">
+                Os orçamentos temáticos são instrumentos estratégicos que organizam e apresentam a aplicação dos recursos públicos de forma segmentada, permitindo uma análise detalhada das políticas públicas voltadas a áreas prioritárias.
+              </p>
+            </div>
+
+            <div className="flex w-full max-w-lg flex-col gap-3 2xl:justify-self-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-foreground/65">
+                Acesse em:
+              </p>
+              <BiDashboardLinks />
+            </div>
           </div>
 
           <p className="text-xs text-primary-foreground/35">
@@ -534,6 +604,16 @@ export default function LoginPage() {
           >
             <LoginCard />
           </Suspense>
+
+          <section className="flex w-full max-w-sm flex-col gap-3 lg:hidden" aria-labelledby="bi-links-mobile-title">
+            <div className="text-center">
+              <h2 id="bi-links-mobile-title" className="text-sm font-semibold">
+                Painéis de Orçamentos Temáticos
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">Acesse os painéis de BI da SEPLAN</p>
+            </div>
+            <BiDashboardLinks mobile />
+          </section>
         </div>
 
       </section>

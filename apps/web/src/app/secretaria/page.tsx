@@ -21,7 +21,7 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HoverTabsList, Tabs, TabsContent } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { StatusBadge, SummaryCountBadge, ThemeBadge } from '@/components/domain/badges';
@@ -101,88 +101,12 @@ const SECRETARIA_TAB_ITEMS = [
   { value: 'validations', label: 'Validar Entregas' },
 ] as const;
 
-/** Abas com indicador azul deslizante (sem piscar o texto ao trocar). */
 function SecretariaTabList({ activeTab }: { activeTab: string }) {
-  const listRef = useRef<HTMLDivElement>(null);
-  const highlightRef = useRef(activeTab);
-  const [highlightTab, setHighlightTab] = useState(activeTab);
-  const [pill, setPill] = useState({ left: 0, width: 0, ready: false });
-
-  const updatePill = useCallback((tabValue: string) => {
-    const list = listRef.current;
-    if (!list) return;
-    const trigger = list.querySelector<HTMLElement>(`[data-tab-value="${tabValue}"]`);
-    if (!trigger) return;
-    setPill({
-      left: trigger.offsetLeft,
-      width: trigger.offsetWidth,
-      ready: true,
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    highlightRef.current = activeTab;
-    setHighlightTab(activeTab);
-    updatePill(activeTab);
-  }, [activeTab, updatePill]);
-
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const onResize = () => updatePill(highlightRef.current);
-    const ro = new ResizeObserver(onResize);
-    ro.observe(list);
-    window.addEventListener('resize', onResize);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', onResize);
-    };
-  }, [updatePill]);
-
   return (
-    <TabsList
-      ref={listRef}
-      className="relative border border-primary bg-white"
-      onMouseLeave={() => {
-        highlightRef.current = activeTab;
-        setHighlightTab(activeTab);
-        updatePill(activeTab);
-      }}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute top-[3px] z-0 h-[calc(100%-6px)] rounded-md bg-primary shadow-md',
-          'transition-[left,width] duration-500 ease-out',
-          pill.ready ? 'opacity-100' : 'opacity-0',
-        )}
-        style={{ left: pill.left, width: pill.width }}
-      />
-      {SECRETARIA_TAB_ITEMS.map((tab) => {
-        const highlighted = highlightTab === tab.value;
-        return (
-          <TabsTrigger
-            key={tab.value}
-            value={tab.value}
-            data-tab-value={tab.value}
-            onMouseEnter={() => {
-              highlightRef.current = tab.value;
-              setHighlightTab(tab.value);
-              updatePill(tab.value);
-            }}
-            className={cn(
-              'relative z-10 border-0 bg-transparent shadow-none transition-none',
-              'data-active:bg-transparent data-active:shadow-none',
-              highlighted
-                ? 'text-white data-active:text-white hover:text-white'
-                : 'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
-            )}
-          >
-            {tab.label}
-          </TabsTrigger>
-        );
-      })}
-    </TabsList>
+    <HoverTabsList
+      activeValue={activeTab}
+      items={SECRETARIA_TAB_ITEMS.map((tab) => ({ value: tab.value, content: tab.label }))}
+    />
   );
 }
 
@@ -645,7 +569,7 @@ export default function SecretariaPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <header className="border-b border-primary/30 bg-primary text-primary-foreground shadow-sm">
+      <header className="border-b border-black bg-green-900 text-white shadow-sm">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />
@@ -824,7 +748,7 @@ export default function SecretariaPage() {
               {current ? (
                 <>
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="bg-card text-card-foreground [&_[data-slot=card-title]]:text-card-foreground [&_[data-slot=card-description]]:text-muted-foreground">
                       <CardTitle>{current.action?.application}</CardTitle>
                       <CardDescription>{current.action?.projectActivity} | {current.action?.organizationName}</CardDescription>
                       <CardAction className="flex flex-wrap items-center gap-2">

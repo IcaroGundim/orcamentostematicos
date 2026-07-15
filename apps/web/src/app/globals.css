@@ -5,24 +5,24 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --muted: oklch(0.945 0.025 145);
-  --border: oklch(0.84 0.035 145);
+  --muted: oklch(0.97 0 0);
+  --border: oklch(0 0 0);
   --primary: oklch(0.34 0.12 165);
   --primary-foreground: oklch(0.99 0 0);
-  --accent: oklch(0.93 0.03 165);
+  --accent: oklch(0.96 0 0);
   --background: oklch(1 0 0);
   --foreground: oklch(0.16 0.025 150);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.16 0.025 150);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.16 0.025 150);
-  --secondary: oklch(0.91 0.04 145);
-  --secondary-foreground: oklch(0.22 0.07 160);
-  --muted-foreground: oklch(0.42 0.035 150);
-  --accent-foreground: oklch(0.22 0.07 160);
+  --secondary: oklch(0.95 0 0);
+  --secondary-foreground: oklch(0.22 0 0);
+  --muted-foreground: oklch(0.42 0 0);
+  --accent-foreground: oklch(0.22 0 0);
   --destructive: oklch(0.55 0.18 28);
-  --input: oklch(0.82 0.03 145);
-  --ring: oklch(0.46 0.12 165);
+  --input: oklch(0 0 0);
+  --ring: oklch(0.78 0 0);
   --chart-1: oklch(0.34 0.12 165);
   --chart-2: oklch(0.52 0.14 150);
   --chart-3: oklch(0.68 0.16 55);

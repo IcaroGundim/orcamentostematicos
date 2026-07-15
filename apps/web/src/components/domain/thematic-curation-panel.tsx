@@ -358,7 +358,7 @@ const CurationActionRow = memo(function CurationActionRow({
       aria-pressed={isSelected}
       className={cn(
         'group/item flex w-full cursor-pointer flex-col gap-2 rounded-lg border-2 border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:border-primary focus-visible:bg-muted/50 focus-visible:outline-none',
-        isSelected && 'border-primary bg-primary/5 hover:bg-primary/5',
+        isSelected && 'border-primary bg-gray-50 hover:bg-gray-50 focus-visible:bg-gray-50',
         isBulkSelected && !isSelected && 'border-primary/50 bg-primary/[0.03]',
       )}
     >
@@ -1085,7 +1085,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
 
   return (
     <Card className="h-fit min-w-0 gap-0 self-start">
-      <CardHeader className="relative z-10 border-b border-border bg-card shadow-sm">
+      <CardHeader className="relative z-10 border-b border-border shadow-sm">
         <CardTitle className="font-sans text-base font-bold uppercase tracking-[0.16em] text-muted-foreground leading-tight">
           Classificação da Ação
         </CardTitle>

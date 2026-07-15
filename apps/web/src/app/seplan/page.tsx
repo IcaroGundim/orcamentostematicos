@@ -25,7 +25,7 @@ import {
   UploadIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Cell, Pie, PieChart } from 'recharts';
 import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
@@ -77,7 +77,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { HoverTabsList, Tabs, TabsContent } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -170,6 +170,152 @@ function formatPeriod(referenceMonth: number, year: number, periodType: QddPerio
 }
 
 type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | 'results' | 'reports';
+
+type AdminSidebarNavItem = {
+  id: SectionId;
+  label: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  badge?: number;
+};
+
+type AdminSidebarNavGroup = {
+  label: string;
+  items: AdminSidebarNavItem[];
+};
+
+function AdminSidebarNavigation({
+  groups,
+  activeSection,
+  onSelect,
+}: {
+  groups: AdminSidebarNavGroup[];
+  activeSection: SectionId;
+  onSelect: (section: SectionId) => void;
+}) {
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const activeSectionRef = useRef(activeSection);
+  const highlightedSectionRef = useRef(activeSection);
+  const [highlightedSection, setHighlightedSection] = useState(activeSection);
+  const [highlight, setHighlight] = useState({ top: 0, left: 0, width: 0, height: 0, ready: false });
+
+  const updateHighlight = useCallback((section: SectionId) => {
+    const navigation = navigationRef.current;
+    if (!navigation) return;
+
+    const target = navigation.querySelector<HTMLElement>(`[data-admin-nav-item="${section}"]`);
+    if (!target) return;
+
+    const navigationRect = navigation.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    setHighlight({
+      top: targetRect.top - navigationRect.top,
+      left: targetRect.left - navigationRect.left,
+      width: targetRect.width,
+      height: targetRect.height,
+      ready: true,
+    });
+  }, []);
+
+  const highlightSection = useCallback((section: SectionId) => {
+    highlightedSectionRef.current = section;
+    setHighlightedSection(section);
+    updateHighlight(section);
+  }, [updateHighlight]);
+
+  useLayoutEffect(() => {
+    activeSectionRef.current = activeSection;
+    highlightedSectionRef.current = activeSection;
+    setHighlightedSection(activeSection);
+    updateHighlight(activeSection);
+  }, [activeSection, updateHighlight]);
+
+  useEffect(() => {
+    const navigation = navigationRef.current;
+    if (!navigation) return;
+
+    const onResize = () => updateHighlight(highlightedSectionRef.current);
+    const resizeObserver = new ResizeObserver(onResize);
+    resizeObserver.observe(navigation);
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [updateHighlight]);
+
+  return (
+    <div
+      ref={navigationRef}
+      className="relative"
+      onMouseLeave={() => highlightSection(activeSectionRef.current)}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute z-10 rounded-md bg-green-900 shadow-md',
+          'transition-[top,left,width,height] duration-300 ease-out',
+          highlight.ready ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{
+          top: highlight.top,
+          left: highlight.left,
+          width: highlight.width,
+          height: highlight.height,
+        }}
+      />
+
+      {groups.map((group) => (
+        <SidebarGroup key={group.label}>
+          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isHighlighted = highlightedSection === item.id;
+
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      isActive={activeSection === item.id}
+                      data-admin-nav-item={item.id}
+                      tooltip={item.label}
+                      onClick={() => onSelect(item.id)}
+                      onFocus={() => highlightSection(item.id)}
+                      onMouseEnter={() => highlightSection(item.id)}
+                      className={cn(
+                        'relative z-20 bg-transparent shadow-none transition-none',
+                        'hover:bg-transparent hover:shadow-none focus:bg-transparent focus-visible:bg-transparent focus-visible:shadow-none data-active:bg-transparent data-active:shadow-none',
+                        isHighlighted
+                          ? 'text-white hover:text-white data-active:text-white [&_svg]:text-white data-active:[&_svg]:text-white'
+                          : 'text-sidebar-foreground hover:text-sidebar-foreground data-active:text-sidebar-foreground [&_svg]:text-sidebar-foreground data-active:[&_svg]:text-sidebar-foreground',
+                      )}
+                    >
+                      <Icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                    {typeof item.badge === 'number' && item.badge > 0 ? (
+                      <SidebarMenuBadge
+                        className={cn(
+                          'z-30',
+                          isHighlighted
+                            ? 'text-white peer-data-active/menu-button:text-white'
+                            : 'text-sidebar-foreground peer-data-active/menu-button:text-sidebar-foreground'
+                        )}
+                      >
+                        {item.badge}
+                      </SidebarMenuBadge>
+                    ) : null}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ))}
+    </div>
+  );
+}
 
 type ActionColumnFilters = {
   organizationCode: string;
@@ -1065,12 +1211,7 @@ export default function SeplanPage() {
   const unitCount = uniqueBy(actions, (action) => `${action.organizationCode}-${action.unitCode}`).length;
   const expenseLineCount = actions.reduce((total, action) => total + (action.expenseLinesCount ?? action.expenseLines?.length ?? 0), 0);
 
-  const navItems: {
-    id: SectionId;
-    label: string;
-    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-    badge?: number;
-  }[] = [
+  const navItems: AdminSidebarNavItem[] = [
     { id: 'overview', label: 'Visão geral', icon: GaugeIcon },
     { id: 'structure', label: 'Estrutura vigente', icon: DatabaseIcon, badge: actions.length },
     { id: 'curation', label: 'Curadoria temática', icon: FolderCogIcon, badge: summary?.assignments ?? 0 },
@@ -1092,77 +1233,15 @@ export default function SeplanPage() {
         </SidebarHeader>
         <div className="mx-3 h-px shrink-0 bg-sidebar-border" aria-hidden="true" />
         <SidebarContent className="[--sidebar:oklch(0.97_0.005_165)] [--sidebar-foreground:oklch(0.25_0.04_165)] [--sidebar-accent:oklch(0.90_0.02_165)] [--sidebar-accent-foreground:oklch(0.18_0.05_165)] [--sidebar-border:oklch(0.85_0.03_165)]">
-          <SidebarGroup>
-            <SidebarGroupLabel>Painel</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {[navItems[0], navItems[6]].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        isActive={activeSection === item.id}
-                        tooltip={item.label}
-                        onClick={() => setActiveSection(item.id)}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                      {typeof item.badge === 'number' && item.badge > 0 ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <SidebarGroupLabel>Dados e curadoria</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {[navItems[1], navItems[2]].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        isActive={activeSection === item.id}
-                        tooltip={item.label}
-                        onClick={() => setActiveSection(item.id)}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                      {typeof item.badge === 'number' && item.badge > 0 ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <SidebarGroupLabel>Validação</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {[navItems[3], navItems[4], navItems[5]].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton
-                        isActive={activeSection === item.id}
-                        tooltip={item.label}
-                        onClick={() => setActiveSection(item.id)}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                      {typeof item.badge === 'number' && item.badge > 0 ? <SidebarMenuBadge>{item.badge}</SidebarMenuBadge> : null}
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <AdminSidebarNavigation
+            groups={[
+              { label: 'Painel', items: [navItems[0], navItems[6]] },
+              { label: 'Dados e curadoria', items: [navItems[1], navItems[2]] },
+              { label: 'Valida\u00e7\u00e3o', items: [navItems[3], navItems[4], navItems[5]] },
+            ]}
+            activeSection={activeSection}
+            onSelect={setActiveSection}
+          />
         </SidebarContent>
         <div className="mx-3 h-px shrink-0 bg-sidebar-border" aria-hidden="true" />
         <SidebarFooter className="[--sidebar:oklch(0.97_0.005_165)] [--sidebar-foreground:oklch(0.25_0.04_165)] [--sidebar-accent:oklch(0.90_0.02_165)] [--sidebar-accent-foreground:oklch(0.18_0.05_165)] [--sidebar-border:oklch(0.85_0.03_165)]">
@@ -1188,7 +1267,7 @@ export default function SeplanPage() {
       </Sidebar>
 
       <SidebarInset className="flex h-svh min-h-0 flex-col overflow-hidden">
-        <header className="sticky top-0 z-30 shrink-0 border-b border-primary-foreground/20 bg-primary text-primary-foreground shadow-sm">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
           <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger size="icon-lg" className="size-10 shrink-0 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
@@ -1282,13 +1361,16 @@ export default function SeplanPage() {
           {activeSection === 'structure' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
               <Tabs value={structureSubTab} onValueChange={setStructureSubTab} className="flex flex-col gap-5">
-                <TabsList>
-                  <TabsTrigger value="base">Base vigente</TabsTrigger>
-                  <TabsTrigger value="executors">Atribuição de execução</TabsTrigger>
-                  <TabsTrigger value="users">Usuários</TabsTrigger>
-                  <TabsTrigger value="duplicates">Unidades duplicadas</TabsTrigger>
-                  <TabsTrigger value="reconciliation">Conferência com QDD</TabsTrigger>
-                </TabsList>
+                <HoverTabsList
+                  activeValue={structureSubTab}
+                  items={[
+                    { value: 'base', content: 'Base vigente' },
+                    { value: 'executors', content: 'Atribuição de execução' },
+                    { value: 'users', content: 'Usuários' },
+                    { value: 'duplicates', content: 'Unidades duplicadas' },
+                    { value: 'reconciliation', content: 'Conferência com QDD' },
+                  ]}
+                />
 
                 <TabsContent value="users">
                   <UsersPanel organizations={governmentStructure.organizations} />
@@ -2017,10 +2099,14 @@ export default function SeplanPage() {
                 value={reportsViewTab}
                 onValueChange={(value) => setReportsViewTab(value as 'overview' | 'by-axis')}
               >
-                <TabsList className="w-fit">
-                  <TabsTrigger value="overview">Visão geral</TabsTrigger>
-                  <TabsTrigger value="by-axis">Execução por eixo</TabsTrigger>
-                </TabsList>
+                <HoverTabsList
+                  activeValue={reportsViewTab}
+                  className="w-fit"
+                  items={[
+                    { value: 'overview', content: 'Visão geral' },
+                    { value: 'by-axis', content: 'Execução por eixo' },
+                  ]}
+                />
 
                 <TabsContent value="overview" className="mt-5 flex flex-col gap-5">
                   <Card >
@@ -2117,22 +2203,28 @@ export default function SeplanPage() {
                         value={reportsThemeTab}
                         onValueChange={(value) => setReportsThemeTab(value as ThemeBudget)}
                       >
-                        <TabsList className="w-fit">
-                          {(['OCAD', 'OSG', 'CLIMATICO'] as const).map((theme) => {
+                        <HoverTabsList
+                          activeValue={reportsThemeTab}
+                          className="w-fit"
+                          items={(['OCAD', 'OSG', 'CLIMATICO'] as const).map((theme) => {
                             const tabTotals = themeAxisTotals(axisReport, theme, actions);
-                            return (
-                              <TabsTrigger key={theme} value={theme} className="gap-1.5">
-                                {themeLabels[theme]}
-                                {tabTotals.actionsCount > 0 ? (
-                                  <span
-                                    className="size-1.5 shrink-0 rounded-full bg-primary"
-                                    aria-hidden
-                                  />
-                                ) : null}
-                              </TabsTrigger>
-                            );
+                            return {
+                              value: theme,
+                              className: 'gap-1.5',
+                              content: (
+                                <>
+                                  {themeLabels[theme]}
+                                  {tabTotals.actionsCount > 0 ? (
+                                    <span
+                                      className="size-1.5 shrink-0 rounded-full bg-primary"
+                                      aria-hidden
+                                    />
+                                  ) : null}
+                                </>
+                              ),
+                            };
                           })}
-                        </TabsList>
+                        />
                         {(['OCAD', 'OSG', 'CLIMATICO'] as const).map((theme) => {
                           const themeRows = filterAxisReportByTheme(axisReport, theme);
                           const totals = themeAxisTotals(axisReport, theme, actions);

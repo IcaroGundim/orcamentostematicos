@@ -74,6 +74,110 @@ function TabsTrigger({
   )
 }
 
+type HoverTabsListItem = {
+  value: string
+  content: React.ReactNode
+  className?: string
+}
+
+function HoverTabsList({
+  activeValue,
+  items,
+  className,
+}: {
+  activeValue: string
+  items: readonly HoverTabsListItem[]
+  className?: string
+}) {
+  const listRef = React.useRef<HTMLDivElement>(null)
+  const highlightRef = React.useRef(activeValue)
+  const [highlightTab, setHighlightTab] = React.useState(activeValue)
+  const [pill, setPill] = React.useState({ left: 0, width: 0, ready: false })
+
+  const updatePill = React.useCallback((tabValue: string) => {
+    const list = listRef.current
+    if (!list) return
+    const trigger = list.querySelector<HTMLElement>(`[data-hover-tab-value="${tabValue}"]`)
+    if (!trigger) return
+    setPill({
+      left: trigger.offsetLeft,
+      width: trigger.offsetWidth,
+      ready: true,
+    })
+  }, [])
+
+  React.useLayoutEffect(() => {
+    highlightRef.current = activeValue
+    setHighlightTab(activeValue)
+    updatePill(activeValue)
+  }, [activeValue, updatePill])
+
+  React.useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const onResize = () => updatePill(highlightRef.current)
+    const resizeObserver = new ResizeObserver(onResize)
+    resizeObserver.observe(list)
+    window.addEventListener('resize', onResize)
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', onResize)
+    }
+  }, [updatePill])
+
+  return (
+    <TabsList
+      ref={listRef}
+      className={cn('relative border border-primary bg-white', className)}
+      onMouseLeave={() => {
+        highlightRef.current = activeValue
+        setHighlightTab(activeValue)
+        updatePill(activeValue)
+      }}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute top-[3px] z-0 h-[calc(100%-6px)] rounded-md bg-primary shadow-md',
+          'transition-[left,width] duration-500 ease-out',
+          pill.ready ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{ left: pill.left, width: pill.width }}
+      />
+      {items.map((item) => {
+        const highlighted = highlightTab === item.value
+        return (
+          <TabsTrigger
+            key={item.value}
+            value={item.value}
+            data-hover-tab-value={item.value}
+            onFocus={() => {
+              highlightRef.current = item.value
+              setHighlightTab(item.value)
+              updatePill(item.value)
+            }}
+            onMouseEnter={() => {
+              highlightRef.current = item.value
+              setHighlightTab(item.value)
+              updatePill(item.value)
+            }}
+            className={cn(
+              'relative z-10 border-0 bg-transparent shadow-none transition-none',
+              'data-active:bg-transparent data-active:shadow-none',
+              highlighted
+                ? 'text-white data-active:text-white hover:text-white'
+                : 'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
+              item.className,
+            )}
+          >
+            {item.content}
+          </TabsTrigger>
+        )
+      })}
+    </TabsList>
+  )
+}
+
 function TabsContent({
   className,
   forceMount,
@@ -93,4 +197,4 @@ function TabsContent({
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+export { Tabs, TabsList, TabsTrigger, HoverTabsList, TabsContent, tabsListVariants }

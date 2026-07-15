@@ -52,7 +52,10 @@ export function FunctionalProgramLine({
       ) : program ? (
         <span>{program}</span>
       ) : null}
-      <Badge variant="secondary" className="shrink-0 font-mono text-xs">
+      <Badge
+        variant="secondary"
+        className="shrink-0 bg-green-900 font-mono text-xs text-white hover:bg-green-900"
+      >
         {activity}
       </Badge>
       {children}

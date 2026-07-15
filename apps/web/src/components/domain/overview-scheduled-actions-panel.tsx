@@ -809,7 +809,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               value: formatMoney(totals.updatedBudget - totals.liquidated),
             },
           ].map((stat) => (
-            <div key={stat.label} className="min-w-0 border-0 bg-transparent p-0 md:rounded-lg md:border md:bg-muted/30 md:p-3">
+            <div key={stat.label} className="min-w-0 border-0 bg-transparent p-0 md:rounded-lg md:border md:bg-white md:p-3">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-xs">{stat.label}</p>
               <p className="truncate text-sm font-semibold tabular-nums md:mt-0.5 md:text-lg">{stat.value}</p>
             </div>

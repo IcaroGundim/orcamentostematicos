@@ -39,5 +39,12 @@ export function StatusBadge({ status }: { status: ValidationStatus }) {
     display === 'APROVADO' ? 'default' :
     display === 'ENVIADO' ? 'outline' :
     'secondary';
-  return <Badge variant={variant}>{statusLabels[display]}</Badge>;
+  return (
+    <Badge
+      variant={variant}
+      className={display === 'RASCUNHO' ? 'bg-green-900 text-white hover:bg-green-900' : undefined}
+    >
+      {statusLabels[display]}
+    </Badge>
+  );
 }

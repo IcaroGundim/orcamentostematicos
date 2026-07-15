@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { isAcreMunicipalityOption, normalizeMunicipality } from '@/lib/acre-municipalities';
+import {
+  isValidMunicipalitySelection,
+  normalizeMunicipalitySelection,
+} from '@/lib/acre-municipalities';
 import { sumDeliveryExecutedValues, usesDeliveryValues } from '@/lib/classification-rules';
 import { getValidationDraft } from '@/lib/validation-draft-cache';
 import type { ThemeBudget, ValidationItem } from '@/types/domain';
@@ -22,8 +25,8 @@ export const validationFormSchema = z.object({
         quantity: z.coerce.number().min(0, 'Informe uma quantidade válida.'),
         municipality: z
           .string()
-          .min(1, 'Selecione o município.')
-          .refine(isAcreMunicipalityOption, 'Selecione o município.'),
+          .min(1, 'Selecione ao menos um município.')
+          .refine(isValidMunicipalitySelection, 'Selecione apenas municípios válidos.'),
         beneficiaries: z.string().min(1, 'Informe o público beneficiado.'),
         executedValue: optionalMoneyValueSchema,
       }),
@@ -65,7 +68,7 @@ export function normalizeDeliveries(
     ? deliveries.map((delivery, index) => ({
         ...delivery,
         name: delivery.name?.trim() || `Entrega ${index + 1}`,
-        municipality: normalizeMunicipality(delivery.municipality),
+        municipality: normalizeMunicipalitySelection(delivery.municipality),
         executedValue: delivery.executedValue,
       }))
     : [blankDelivery()];
