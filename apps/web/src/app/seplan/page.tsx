@@ -40,6 +40,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { AxisExecutionByThemePanel } from '@/components/domain/axis-execution-by-theme-panel';
+import { AcreDeliveriesMap } from '@/components/domain/acre-deliveries-map';
 import { DeliveryReviewList } from '@/components/domain/delivery-review-list';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -131,6 +132,7 @@ import { ExecutionAssignmentCard } from '@/components/domain/execution-assignmen
 import { RelocatedUnitsPanel } from '@/components/domain/relocated-units-panel';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { functionalColumnFilterMatches, type FunctionalColumnFilterValue } from '@/lib/functional-classification';
+import { aggregateApprovedDeliveriesByMunicipality } from '@/lib/municipality-delivery-totals';
 import { ThematicCurationPanel, type AssignmentForm } from '@/components/domain/thematic-curation-panel';
 import { UsersPanel } from '@/components/domain/users-panel';
 import { QddStructureReconciliationPanel } from '@/components/domain/qdd-structure-reconciliation-panel';
@@ -1091,6 +1093,16 @@ export default function SeplanPage() {
     [validations],
   );
 
+  const municipalityDeliverySummaries = useMemo(
+    () => ({
+      ALL: aggregateApprovedDeliveriesByMunicipality(validations),
+      OSG: aggregateApprovedDeliveriesByMunicipality(validations, 'OSG'),
+      OCAD: aggregateApprovedDeliveriesByMunicipality(validations, 'OCAD'),
+      CLIMATICO: aggregateApprovedDeliveriesByMunicipality(validations, 'CLIMATICO'),
+    }),
+    [validations],
+  );
+
   const resultsByTheme = useMemo<
     (ResultsThemeSummary & { items: ValidationItem[] })[]
   >(() => {
@@ -1803,10 +1815,19 @@ export default function SeplanPage() {
                                   const hasExecValue =
                                     typeof validation.informedExecutedValue === 'number' && validation.informedExecutedValue > 0;
                                   return (
-                                    <Card key={validation.id} size="sm" className="bg-muted/40">
+                                    <Card key={validation.id} size="sm" className="overflow-hidden bg-card">
                                       <CardHeader>
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <ThemeBadge theme={validation.theme} />
+                                          <ThemeBadge
+                                            theme={validation.theme}
+                                            className={
+                                              validation.theme === 'OSG'
+                                                ? '!border-violet-100 !bg-violet-100 !text-violet-950'
+                                                : validation.theme === 'OCAD'
+                                                  ? '!border-cyan-100 !bg-cyan-100 !text-cyan-950'
+                                                  : '!border-emerald-100 !bg-emerald-100 !text-emerald-950'
+                                            }
+                                          />
                                           <StatusBadge status={validation.status} />
                                         </div>
                                         <CardTitle className="mt-2">{validation.action?.application}</CardTitle>
@@ -1817,6 +1838,7 @@ export default function SeplanPage() {
                                         <CardAction className="flex flex-wrap gap-2">
                                           <Button
                                             variant="outline"
+                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'ENVIADO'}
                                             onClick={() => void reviewValidation(validation.id, 'approve')}
                                           >
@@ -1825,6 +1847,7 @@ export default function SeplanPage() {
                                           </Button>
                                           <Button
                                             variant="destructive"
+                                            className="!border-red-100 !bg-white !text-red-700 hover:!bg-red-50 hover:!text-red-800 disabled:!border-white/75 disabled:!bg-white disabled:!text-red-700/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'ENVIADO'}
                                             onClick={() => void reviewValidation(validation.id, 'return')}
                                           >
@@ -1833,7 +1856,7 @@ export default function SeplanPage() {
                                           </Button>
                                           <Button
                                             variant="outline"
-                                            className="text-muted-foreground"
+                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'APROVADO'}
                                             onClick={() => void revertApproval(validation.id)}
                                           >
@@ -1843,25 +1866,25 @@ export default function SeplanPage() {
                                         </CardAction>
                                       </CardHeader>
                                       <CardContent className="flex flex-col gap-3">
-                                        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                                          <div className="rounded-md border bg-card px-3 py-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Entregas</p>
-                                            <p className="mt-0.5 text-base font-semibold tabular-nums">{deliveriesCount}</p>
+                                        <div className="grid overflow-hidden rounded-lg bg-muted/60 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:divide-border/30">
+                                          <div className="min-w-0 px-3 py-2.5">
+                                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Entregas</p>
+                                            <p className="mt-1 text-base font-semibold tabular-nums">{deliveriesCount}</p>
                                           </div>
-                                          <div className="rounded-md border bg-card px-3 py-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Valor executado</p>
-                                            <p className="mt-0.5 text-base font-semibold tabular-nums">
+                                          <div className="min-w-0 border-t border-border/30 px-3 py-2.5 sm:border-t-0">
+                                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Valor executado</p>
+                                            <p className="mt-1 text-base font-semibold tabular-nums">
                                               {hasExecValue ? formatMoney(validation.informedExecutedValue!) : '—'}
                                             </p>
                                           </div>
-                                          <div className="rounded-md border bg-card px-3 py-2" title={municipalities.join(', ')}>
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Municípios</p>
-                                            <p className="mt-0.5 truncate text-base font-semibold">{municipalitiesLabel}</p>
+                                          <div className="min-w-0 border-t border-border/30 px-3 py-2.5 sm:border-t-0" title={municipalities.join(', ')}>
+                                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Municípios</p>
+                                            <p className="mt-1 truncate text-base font-semibold">{municipalitiesLabel}</p>
                                           </div>
                                         </div>
                                         {validation.realizedDescription ? (
-                                          <div className="rounded-md border bg-card px-3 py-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Descrição informada</p>
+                                          <div className="rounded-lg bg-muted/60 px-3 py-2.5">
+                                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Descrição informada</p>
                                             <p className="mt-1 text-sm leading-snug text-foreground">{validation.realizedDescription}</p>
                                           </div>
                                         ) : null}
@@ -1890,7 +1913,7 @@ export default function SeplanPage() {
           {activeSection === 'results' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
               <Card>
-                <CardHeader>
+                <CardHeader className="bg-transparent text-card-foreground [&_[data-slot=card-title]]:text-card-foreground [&_[data-slot=card-description]]:text-muted-foreground">
                   <CardTitle>Resultados finais dos Orçamentos Temáticos</CardTitle>
                   <CardDescription>
                     Programas classificados, com entregas registradas e validações aprovadas — encerramento do ciclo de curadoria, validação e revisão.
@@ -1932,20 +1955,22 @@ export default function SeplanPage() {
                 </CardHeader>
               </Card>
 
-              {approvedValidations.length === 0 ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon"><FileBarChart2Icon /></EmptyMedia>
-                    <EmptyTitle>Nenhum resultado consolidado ainda</EmptyTitle>
-                    <EmptyDescription>
-                      Aprove validações na seção Revisão para que apareçam aqui no relatório final.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                resultsByTheme.map((entry) => {
-                  const hasItems = entry.items.length > 0;
-                  return (
+              <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
+                <div className="order-2 flex min-w-0 flex-col gap-5 xl:order-1">
+                  {approvedValidations.length === 0 ? (
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon"><FileBarChart2Icon /></EmptyMedia>
+                        <EmptyTitle>Nenhum resultado consolidado ainda</EmptyTitle>
+                        <EmptyDescription>
+                          Aprove validações na seção Revisão para que apareçam aqui no relatório final.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : (
+                    resultsByTheme.map((entry) => {
+                      const hasItems = entry.items.length > 0;
+                      return (
                     <Card key={entry.theme}>
                       <CardHeader>
                         <div className="flex flex-wrap items-center gap-2">
@@ -2087,9 +2112,15 @@ export default function SeplanPage() {
                         ) : null}
                       </CardContent>
                     </Card>
-                  );
-                })
-              )}
+                      );
+                    })
+                  )}
+                </div>
+
+                <aside className="order-1 min-w-0 xl:sticky xl:top-4 xl:order-2" aria-label="Mapa de entregas por município">
+                  <AcreDeliveriesMap summaries={municipalityDeliverySummaries} />
+                </aside>
+              </div>
             </section>
           ) : null}
 

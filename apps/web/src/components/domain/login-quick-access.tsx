@@ -60,7 +60,7 @@ export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessPro
           Acesso rápido
         </span>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2">
           {entries.map((entry) => {
             const isSeplan = entry.role === 'SEPLAN_ADMIN';
             const isLoading = loadingIdentifier === entry.identifier;
@@ -72,43 +72,32 @@ export function LoginQuickAccess({ disabled, onQuickLogin }: LoginQuickAccessPro
                 disabled={disabled || loadingIdentifier !== null}
                 aria-busy={isLoading}
                 onClick={() => void handleQuickLogin(entry.identifier, entry.password)}
-                className={cn(
-                  'relative flex text-left transition-all disabled:opacity-50',
-                  isSeplan
-                    ? 'col-span-2 items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 hover:border-primary/40 hover:bg-primary/10'
-                    : 'flex-col rounded-lg border border-border bg-card p-2 hover:bg-muted',
-                )}
+                className="relative flex items-center justify-between gap-2 rounded-lg border bg-card px-3 py-1.5 text-left transition-all hover:border-black hover:bg-muted focus-visible:ring-2 focus-visible:ring-gray-300 disabled:opacity-50"
               >
                 {isLoading ? (
                   <span className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-card/70 backdrop-blur-[1px]">
-                    <LoaderCircleIcon
-                      className={cn('animate-spin', isSeplan ? 'size-4 text-primary' : 'size-3.5 text-foreground')}
-                    />
+                    <LoaderCircleIcon className="size-4 animate-spin text-foreground" />
                   </span>
                 ) : null}
                 <div className="flex min-w-0 flex-col">
-                  <span
-                    className={cn(
-                      'truncate font-bold',
-                      isSeplan ? 'text-[11px] text-primary' : 'text-[10px] text-foreground',
-                    )}
-                  >
+                  <span className="truncate text-[11px] font-bold text-foreground">
                     {entry.name}
                   </span>
                   <span className="truncate text-[8px] text-muted-foreground">{entry.identifier}</span>
-                  {entry.organizationCode ? (
-                    <span className="truncate text-[8px] text-muted-foreground">{entry.organizationCode}</span>
-                  ) : null}
                 </div>
-                <Badge
-                  variant={isSeplan ? 'default' : 'outline'}
-                  className={cn(
-                    'shrink-0 uppercase',
-                    isSeplan ? 'rounded px-1.5 py-0.5 text-[8px]' : 'mt-1 w-fit text-[8px]',
-                  )}
-                >
-                  {roleBadge(entry.role)}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {entry.organizationCode ? (
+                    <Badge variant="outline" className="rounded px-1.5 py-0.5 text-[8px] tabular-nums">
+                      {entry.organizationCode}
+                    </Badge>
+                  ) : null}
+                  <Badge
+                    variant={isSeplan ? 'default' : 'outline'}
+                    className="rounded px-1.5 py-0.5 text-[8px] uppercase"
+                  >
+                    {roleBadge(entry.role)}
+                  </Badge>
+                </div>
               </button>
             );
           })}

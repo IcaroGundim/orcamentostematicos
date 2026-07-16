@@ -434,18 +434,6 @@ export function SecretariaOnboardingSlides({ onFinish }: { onFinish: () => void 
         <div className="relative flex flex-col overflow-hidden bg-card">
           <div
             aria-hidden
-            className="pointer-events-none absolute -right-16 -top-20 size-72 rounded-full bg-neutral-400/20 blur-3xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -bottom-24 -left-12 size-64 rounded-full bg-black/8 blur-3xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.55_0_0_/_0.08),transparent_55%),radial-gradient(ellipse_at_bottom_left,oklch(0.2_0_0_/_0.06),transparent_50%)]"
-          />
-          <div
-            aria-hidden
             className="pointer-events-none absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle_at_1px_1px,oklch(0.25_0_0)_1px,transparent_0)] [background-size:18px_18px]"
           />
 

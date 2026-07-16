@@ -48,6 +48,7 @@ import { RemoveClassificationPopover } from '@/components/domain/remove-classifi
 import { ThematicCurationPanel } from '@/components/domain/thematic-curation-panel';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
+import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { SecretariaBulkActions } from '@/components/domain/secretaria-bulk-actions';
 import { SecretariaOnboardingSlides } from '@/components/domain/secretaria-onboarding-slides';
 import { ValidationForm } from '@/components/domain/validation-form';
@@ -96,6 +97,7 @@ const initialAssignment = {
 };
 
 const SECRETARIA_TAB_ITEMS = [
+  { value: 'overview', label: 'Visão geral' },
   { value: 'apresentacao', label: 'Como funciona' },
   { value: 'curation', label: 'Curadoria temática' },
   { value: 'validations', label: 'Validar Entregas' },
@@ -127,7 +129,7 @@ export default function SecretariaPage() {
   const [isSubmittingAll, setIsSubmittingAll] = useState(false);
   const [submitIssues, setSubmitIssues] = useState<ValidationSubmitIssue[]>([]);
   const [submitIssuesOpen, setSubmitIssuesOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('apresentacao');
+  const [activeTab, setActiveTab] = useState('overview');
   const [userRole, setUserRole] = useState<string>('');
   const [organizationName, setOrganizationName] = useState('');
   const [previewRole, setPreviewRole] = useState<string | null>(null);
@@ -568,8 +570,8 @@ export default function SecretariaPage() {
   }, [selectedActionId, assignment.theme, actions]);
 
   return (
-    <main className="min-h-screen bg-background">
-      <header className="border-b border-black bg-green-900 text-white shadow-sm">
+    <main className={cn('bg-background', activeTab === 'overview' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen')}>
+      <header className="shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />
@@ -633,7 +635,7 @@ export default function SecretariaPage() {
       </header>
 
       {isPreview ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-50 px-4 py-2.5 text-amber-900 lg:px-6 2xl:px-8 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-50 px-4 py-2.5 text-amber-900 lg:px-6 2xl:px-8 dark:bg-amber-950/40 dark:text-amber-200">
           <div className="flex items-center gap-2 text-sm">
             <EyeIcon className="size-4 shrink-0" />
             <span>
@@ -655,7 +657,14 @@ export default function SecretariaPage() {
         </div>
       ) : null}
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full px-6 py-5 lg:px-8 2xl:px-10">
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className={cn(
+          'w-full px-6 py-5 lg:px-8 2xl:px-10',
+          activeTab === 'overview' && 'flex min-h-0 flex-1 flex-col overflow-hidden',
+        )}
+      >
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <SecretariaTabList activeTab={activeTab} />
           <div className="flex flex-wrap items-center gap-2">
@@ -678,20 +687,28 @@ export default function SecretariaPage() {
           </div>
         </div>
 
+        <TabsContent value="overview" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+          <OverviewScheduledActionsPanel
+            actions={actions}
+            vigenteImport={metadata?.vigenteImport}
+            lockedScopeLabel={organizationName || 'Secretaria'}
+          />
+        </TabsContent>
+
         <TabsContent value="apresentacao" className="mt-0">
           <SecretariaOnboardingSlides onFinish={() => handleTabChange('curation')} />
         </TabsContent>
 
         <TabsContent value="validations" forceMount className="mt-0 data-[state=inactive]:hidden">
           <div className="grid w-full gap-5 xl:grid-cols-[320px_minmax(0,1fr)] 2xl:grid-cols-[360px_minmax(0,1fr)]">
-            <Card className="min-w-0">
-              <CardHeader>
+            <Card className="sticky top-5 h-[calc(100dvh-10rem)] min-h-0 min-w-0 self-start">
+              <CardHeader className="shrink-0">
                 <CardTitle>Ações recebidas</CardTitle>
                 <CardDescription>Selecione uma ação para preencher a validação.</CardDescription>
               </CardHeader>
-              <CardContent className="px-0">
+              <CardContent className="flex min-h-0 flex-1 flex-col px-0">
                 {validations.length ? (
-                  <ScrollArea className="h-[720px] w-full">
+                  <ScrollArea className="min-h-0 w-full flex-1">
                     <ul role="list" className="flex flex-col gap-2 p-3">
                       {validations.map((validation) => {
                         const isActive = current?.id === validation.id;

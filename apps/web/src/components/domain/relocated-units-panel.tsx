@@ -141,7 +141,7 @@ export function RelocatedUnitsPanel({ structure, onChanged }: Props) {
               placeholder="Buscar código, unidade ou órgão..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="!border-white !bg-white !text-foreground placeholder:!text-muted-foreground focus-visible:!border-white focus-visible:!ring-white/50 pl-9"
             />
           </div>
         ) : null}

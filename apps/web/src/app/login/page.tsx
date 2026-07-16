@@ -45,7 +45,7 @@ const BI_DASHBOARDS = [
     href: 'https://seplan.ac.gov.br/planejamento-governamental/orcamentos-tematicos/orcamento-crianca-e-adolescente-ocad/',
   },
   {
-    title: 'Relatório Orçamento Sensível ao Gênero',
+    title: 'Orçamento Sensível ao Gênero',
     shortTitle: 'Orçamento Sensível ao Gênero — OSG',
     image: '/bi-osg-placeholder.webp',
     imageAlt: 'Ilustração de mulheres de diferentes perfis e profissões',
@@ -559,7 +559,7 @@ export default function LoginPage() {
                 Orçamentos<br />Temáticos
               </h1>
               <p className="max-w-lg text-base leading-7 text-primary-foreground/70">
-                Os orçamentos temáticos são instrumentos estratégicos que organizam e apresentam a aplicação dos recursos públicos de forma segmentada, permitindo uma análise detalhada das políticas públicas voltadas a áreas prioritárias.
+                Os orçamentos temáticos são instrumentos estratégicos que organizam e apresentam, de forma segmentada, a aplicação dos recursos públicos, permitindo uma análise detalhada das políticas públicas voltadas às áreas prioritárias.
               </p>
             </div>
 

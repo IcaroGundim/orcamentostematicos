@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import {
   ArrowLeftIcon,
   BookOpenIcon,
@@ -528,10 +529,67 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
 }
 
 function HelpTocNav({ className }: { className?: string }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const elements = SECTIONS
+      .map((section) => document.getElementById(section.id))
+      .filter((section): section is HTMLElement => section !== null);
+    if (!elements.length) return;
+
+    const updateTimeline = () => {
+      const documentElement = document.documentElement;
+      const isAtPageEnd = window.scrollY + window.innerHeight >= documentElement.scrollHeight - 2;
+
+      if (isAtPageEnd) {
+        setActiveIndex(SECTIONS.length - 1);
+        setProgress(100);
+        return;
+      }
+
+      const readingPosition = window.scrollY + window.innerHeight * 0.28;
+      const sectionPositions = elements.map((element) => element.getBoundingClientRect().top + window.scrollY);
+      const nextSectionIndex = sectionPositions.findIndex((position) => position > readingPosition);
+      const currentIndex = Math.max(0, nextSectionIndex === -1 ? SECTIONS.length - 1 : nextSectionIndex - 1);
+      const followingIndex = Math.min(currentIndex + 1, SECTIONS.length - 1);
+      const currentPosition = sectionPositions[currentIndex];
+      const followingPosition = sectionPositions[followingIndex];
+      const sectionProgress =
+        followingIndex === currentIndex ? 0 : Math.min(1, Math.max(0, (readingPosition - currentPosition) / (followingPosition - currentPosition)));
+
+      setActiveIndex(currentIndex);
+      setProgress(((currentIndex + sectionProgress) / (SECTIONS.length - 1)) * 100);
+    };
+
+    let animationFrame: number | undefined;
+    const scheduleTimelineUpdate = () => {
+      if (animationFrame !== undefined) return;
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = undefined;
+        updateTimeline();
+      });
+    };
+
+    const observer = new IntersectionObserver(scheduleTimelineUpdate, { rootMargin: '-18% 0px -68% 0px', threshold: 0 });
+    elements.forEach((element) => observer.observe(element));
+
+    window.addEventListener('scroll', scheduleTimelineUpdate, { passive: true });
+    window.addEventListener('resize', scheduleTimelineUpdate);
+    scheduleTimelineUpdate();
+
+    return () => {
+      observer.disconnect();
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('scroll', scheduleTimelineUpdate);
+      window.removeEventListener('resize', scheduleTimelineUpdate);
+    };
+  }, []);
+
   return (
     <nav aria-label="Sumário" className={cn('sticky top-6 h-fit', className)}>
       <Card className="shadow-none">
-        <CardHeader className="pb-3">
+        <CardHeader className="bg-black pb-3">
           <CardTitle className="flex items-center gap-2 text-sm">
             <BookOpenIcon className="size-4" />
             Sumário
@@ -539,18 +597,44 @@ function HelpTocNav({ className }: { className?: string }) {
           <CardDescription className="text-xs">Navegue pelas seções</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
-          <ul className="flex flex-col gap-0.5 text-sm">
-            {SECTIONS.map((section) => (
-              <li key={section.id}>
+          <ul className="relative flex flex-col text-sm">
+            <span
+              aria-hidden
+              className="absolute bottom-4 left-3 top-4 w-px origin-top bg-black transition-transform duration-150 ease-linear"
+              style={{ transform: `scaleY(${progress / 100})` }}
+            />
+            {SECTIONS.map((section, index) => {
+              const active = index === activeIndex;
+              const completed = index < activeIndex;
+              return (
+                <li key={section.id} className="relative">
                 <a
                   href={`#${section.id}`}
-                  className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-current={active ? 'location' : undefined}
+                  onClick={() => {
+                    setActiveIndex(index);
+                    setProgress((index / (SECTIONS.length - 1)) * 100);
+                  }}
+                  className={cn(
+                    'group flex items-center gap-2 rounded-md py-2 pl-7 pr-2 transition-colors hover:bg-muted',
+                    active ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
+                  )}
                 >
-                  <ChevronRightIcon className="size-3.5 shrink-0 opacity-60" />
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute left-[0.4375rem] top-1/2 size-[0.6875rem] -translate-y-1/2 rounded-full border-2 transition-colors',
+                      completed && 'border-black bg-black',
+                      active && 'border-black bg-card ring-2 ring-black/25',
+                      !completed && !active && 'border-border bg-card',
+                    )}
+                  />
+                  <ChevronRightIcon className={cn('size-3.5 shrink-0 transition-transform', active && 'translate-x-0.5 text-black')} />
                   <span className="leading-snug">{section.title.replace(/^\d+\.\s*/, '')}</span>
                 </a>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </CardContent>
       </Card>

@@ -296,7 +296,11 @@ export function UsersPanel({ organizations }: Props) {
               histórico de ações.
             </CardDescription>
           </div>
-          <Button size="sm" onClick={openCreate}>
+          <Button
+            size="sm"
+            className="!border-white !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950"
+            onClick={openCreate}
+          >
             <PlusIcon className="size-4" />
             Novo usuário
           </Button>
@@ -309,7 +313,7 @@ export function UsersPanel({ organizations }: Props) {
               placeholder="Buscar por nome, e-mail, órgão ou unidade..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="!border-white !bg-white !text-foreground placeholder:!text-muted-foreground focus-visible:!border-white focus-visible:!ring-white/50 pl-9"
             />
           </div>
           <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as 'ALL' | UserRole)}>

@@ -58,11 +58,12 @@ type OrganizationOption = { code: string; name: string };
 
 type Props = {
   actions: BudgetAction[];
-  organizations: OrganizationOption[];
+  organizations?: OrganizationOption[];
   /** Chaves "organizationCode|unitCode" de unidades marcadas como realocadas. */
   relocatedUnitKeys?: Set<string>;
   /** Importação vigente, usada para exibir exercício e data de atualização dos dados. */
   vigenteImport?: BudgetImport | null;
+  lockedScopeLabel?: string;
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -222,9 +223,10 @@ const OverviewActionRow = memo(function OverviewActionRow({
 
 export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActionsPanel({
   actions,
-  organizations,
+  organizations = [],
   relocatedUnitKeys,
   vigenteImport,
+  lockedScopeLabel,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -236,6 +238,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     NO_WEIGHTING,
   );
   const weighted = weightedTheme !== NO_WEIGHTING;
+  const hasLockedScope = Boolean(lockedScopeLabel);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedLines, setSelectedLines] = useState<Map<string, Set<string>>>(() => new Map());
@@ -492,14 +495,20 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
 
   const scopeDescription = useMemo(() => {
     const count = displayedActions.length.toLocaleString('pt-BR');
+    if (hasLockedScope) {
+      const unitPart = showUnit ? ' · todas as unidades' : ` · ${selectedUnitLabel ?? '—'}`;
+      return `${count} ação(ões) · ${lockedScopeLabel}${unitPart}`;
+    }
     if (organizationCode === ALL) {
       const unitPart = selectedUnitLabel ? ` · ${selectedUnitLabel}` : '';
       return `${count} ação(ões) · todas as secretarias${unitPart}`;
     }
-    const unitPart = showUnit ? ' · todas as unidades' : selectedUnitLabel ?? '—';
+    const unitPart = showUnit ? ' · todas as unidades' : ` · ${selectedUnitLabel ?? '—'}`;
     return `${count} ação(ões) · ${selectedOrganization?.code ?? organizationCode} — ${selectedOrganization?.name ?? ''}${unitPart}`;
   }, [
     displayedActions.length,
+    hasLockedScope,
+    lockedScopeLabel,
     organizationCode,
     selectedOrganization,
     selectedUnitLabel,
@@ -551,7 +560,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, []);
 
   const hasActiveFilters =
-    organizationCode !== ALL ||
+    (!hasLockedScope && organizationCode !== ALL) ||
     unitCode !== ALL ||
     functionFilter !== ALL ||
     subfunctionFilter !== ALL ||
@@ -560,14 +569,14 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     search.trim() !== '';
 
   const clearFilters = useCallback(() => {
-    setOrganizationCode(ALL);
+    if (!hasLockedScope) setOrganizationCode(ALL);
     setUnitCode(ALL);
     setFunctionFilter(ALL);
     setSubfunctionFilter(ALL);
     setTheme(ALL);
     setOnlyEmendas(false);
     setSearch('');
-  }, []);
+  }, [hasLockedScope]);
 
   const orgComboboxItems = useMemo(
     () => [
@@ -610,11 +619,13 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" style={{ zoom: 0.85 }}>
       <CardHeader className="shrink-0">
         <CardTitle>
-          {organizationCode === ALL
-            ? 'Ações programadas'
-            : selectedOrganization
-              ? `${selectedOrganization.code} — ${selectedOrganization.name}`
-              : 'Ações programadas'}
+          {hasLockedScope
+            ? `Visão geral — ${lockedScopeLabel}`
+            : organizationCode === ALL
+              ? 'Ações programadas'
+              : selectedOrganization
+                ? `${selectedOrganization.code} — ${selectedOrganization.name}`
+                : 'Ações programadas'}
         </CardTitle>
         <CardDescription>
           <span className="block">{scopeDescription}</span>
@@ -731,17 +742,19 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       </CardHeader>
       <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
         <div className="flex shrink-0 flex-col gap-2 md:gap-3">
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 md:gap-3">
-            <Field className="min-w-0 gap-1.5">
-              <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
-              <SearchableCombobox
-                className="relative w-full min-w-0"
-                value={organizationCode}
-                onChange={handleOrganizationChange}
-                placeholder="Todos os órgãos"
-                items={orgComboboxItems}
-              />
-            </Field>
+          <div className={hasLockedScope ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 md:gap-3' : 'grid grid-cols-2 gap-2 lg:grid-cols-4 md:gap-3'}>
+            {!hasLockedScope ? (
+              <Field className="min-w-0 gap-1.5">
+                <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
+                <SearchableCombobox
+                  className="relative w-full min-w-0"
+                  value={organizationCode}
+                  onChange={handleOrganizationChange}
+                  placeholder="Todos os órgãos"
+                  items={orgComboboxItems}
+                />
+              </Field>
+            ) : null}
             <Field className="min-w-0 gap-1.5">
               <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
               <SearchableCombobox

@@ -10,10 +10,10 @@ const themeBadgeClasses: Record<ThemeBudget, string> = {
   CLIMATICO: 'border-[#065f46] bg-[#065f46] text-white',
 };
 
-export function ThemeBadge({ theme }: { theme: ThemeBudget }) {
+export function ThemeBadge({ theme, className }: { theme: ThemeBudget; className?: string }) {
   const Icon = theme === 'OCAD' ? GraduationCapIcon : theme === 'OSG' ? VenusIcon : CloudSunIcon;
   return (
-    <Badge className={cn(themeBadgeClasses[theme])} variant="outline">
+    <Badge className={cn(themeBadgeClasses[theme], className)} variant="outline">
       <Icon data-icon="inline-start" />
       {themeLabels[theme]}
     </Badge>

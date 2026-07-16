@@ -54,7 +54,7 @@ export function FunctionalProgramLine({
       ) : null}
       <Badge
         variant="secondary"
-        className="shrink-0 bg-green-900 font-mono text-xs text-white hover:bg-green-900"
+        className="shrink-0 bg-[#0D3B5A] font-mono text-xs text-white hover:bg-[#0D3B5A]"
       >
         {activity}
       </Badge>
