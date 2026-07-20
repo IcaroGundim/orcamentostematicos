@@ -1,5 +1,6 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   BarChart3Icon,
   BookOpenIcon,
@@ -17,6 +18,7 @@ import {
   FolderCogIcon,
   GaugeIcon,
   LogOutIcon,
+  PackageIcon,
   RefreshCwIcon,
   RotateCcwIcon,
   SearchIcon,
@@ -26,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Cell, Pie, PieChart } from 'recharts';
 import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
@@ -88,16 +91,25 @@ import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
+import { AdminDeliveryWorkspace } from '@/components/domain/admin-delivery-workspace';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import {
   buildVerifiedDeliveryExecutedMap,
   isWeightingFactorLocked,
   lockedWeightingFactorLabel,
+  resolveInformedExecutedValue,
   resolveWeightingFactor,
   shouldHideWeightingFactor,
   thematicBudgetContribution,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
+import {
+  emptyValidationFormValues,
+  toValidationFormInput,
+  validationFormSchema,
+  type ValidationFormInput,
+  type ValidationFormValues,
+} from '@/lib/validation-schema';
 import {
   appendActionAssignment,
   collectBulkRemoveTargets,
@@ -171,7 +183,7 @@ function formatPeriod(referenceMonth: number, year: number, periodType: QddPerio
     : `${month}/${year}`;
 }
 
-type SectionId = 'overview' | 'structure' | 'curation' | 'cycles' | 'review' | 'results' | 'reports';
+type SectionId = 'overview' | 'structure' | 'curation' | 'entregas' | 'cycles' | 'review' | 'results' | 'reports';
 
 type AdminSidebarNavItem = {
   id: SectionId;
@@ -391,6 +403,31 @@ export default function SeplanPage() {
   const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
   const [reportsViewTab, setReportsViewTab] = useState<'overview' | 'by-axis'>('overview');
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
+
+  // Inserir Entregas (perfil administrador)
+  const [adminDeliveryId, setAdminDeliveryId] = useState('');
+  const [isSavingAdminDelivery, setIsSavingAdminDelivery] = useState(false);
+  const [isFinalizingAdminDelivery, setIsFinalizingAdminDelivery] = useState(false);
+  const adminDeliveryPrevIdRef = useRef<string | null>(null);
+  const adminDeliveryForm = useForm<ValidationFormInput, unknown, ValidationFormValues>({
+    resolver: zodResolver(validationFormSchema),
+    defaultValues: emptyValidationFormValues(),
+  });
+  const adminDeliveries = useFieldArray({ control: adminDeliveryForm.control, name: 'deliveries' });
+  const adminDeliveryCurrent = useMemo(
+    () => validations.find((item) => item.id === adminDeliveryId) ?? null,
+    [validations, adminDeliveryId],
+  );
+  useEffect(() => {
+    if (!adminDeliveryCurrent) {
+      adminDeliveryPrevIdRef.current = null;
+      return;
+    }
+    if (adminDeliveryPrevIdRef.current !== adminDeliveryCurrent.id) {
+      adminDeliveryForm.reset(toValidationFormInput(adminDeliveryCurrent));
+      adminDeliveryPrevIdRef.current = adminDeliveryCurrent.id;
+    }
+  }, [adminDeliveryCurrent, adminDeliveryForm]);
 
   function toggleResultRow(id: string) {
     setExpandedResultRows((prev) => {
@@ -787,6 +824,93 @@ export default function SeplanPage() {
     await api(`/validations/${id}/revert`, { method: 'POST' });
     toast.success('Aprovação revertida. Validação voltou para análise.');
     await load();
+  }
+
+  async function saveAdminDelivery(values: ValidationFormValues): Promise<boolean> {
+    const current = adminDeliveryCurrent;
+    if (!current || isSavingAdminDelivery) return false;
+    const savedId = current.id;
+    const classification = current.assignment?.classification ?? '';
+    const payload = {
+      ...values,
+      informedExecutedValue: resolveInformedExecutedValue({
+        theme: current.theme,
+        classification,
+        deliveries: values.deliveries,
+        informedExecutedValue: values.informedExecutedValue,
+      }),
+    };
+    setIsSavingAdminDelivery(true);
+    try {
+      await api(`/validations/${savedId}/admin`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      setValidations((prev) =>
+        prev.map((item) =>
+          item.id === savedId
+            ? {
+                ...item,
+                realizedDescription: payload.realizedDescription,
+                informedExecutedValue: payload.informedExecutedValue,
+                observations: payload.observations ?? '',
+                deliveries: payload.deliveries.map((delivery) => ({
+                  id: delivery.id,
+                  name: delivery.name,
+                  description: delivery.description,
+                  quantity: delivery.quantity,
+                  municipality: delivery.municipality,
+                  beneficiaries: delivery.beneficiaries,
+                  executedValue: delivery.executedValue,
+                })),
+              }
+            : item,
+        ),
+      );
+      adminDeliveryForm.reset(payload);
+      toast.success(
+        current.status === 'APROVADO'
+          ? 'Entregas atualizadas.'
+          : 'Entregas salvas. Clique em Finalizar para publicar nos resultados.',
+      );
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar entregas.');
+      return false;
+    } finally {
+      setIsSavingAdminDelivery(false);
+    }
+  }
+
+  async function finalizeAdminDelivery(id: string) {
+    if (isFinalizingAdminDelivery) return;
+    setIsFinalizingAdminDelivery(true);
+    try {
+      await api(`/validations/${id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ reviewerComment: 'Entregas inseridas pela SEPLAN.' }),
+      });
+      toast.success('Entregas finalizadas. Já constam em Resultados e no mapa.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao finalizar entregas.');
+    } finally {
+      setIsFinalizingAdminDelivery(false);
+    }
+  }
+
+  async function reopenAdminDelivery(id: string) {
+    if (isFinalizingAdminDelivery) return;
+    setIsFinalizingAdminDelivery(true);
+    try {
+      await api(`/validations/${id}/revert`, { method: 'POST' });
+      toast.success('Registro reaberto para edição.');
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao reabrir registro.');
+    } finally {
+      setIsFinalizingAdminDelivery(false);
+    }
   }
 
   const columns = useMemo<ColumnDef<BudgetAction>[]>(
@@ -1231,6 +1355,7 @@ export default function SeplanPage() {
     { id: 'review', label: 'Revisão', icon: ClipboardCheckIcon, badge: validations.length },
     { id: 'results', label: 'Resultados', icon: FileBarChart2Icon, badge: approvedValidations.length },
     { id: 'reports', label: 'Informações Gerais', icon: BarChart3Icon },
+    { id: 'entregas', label: 'Inserir Entregas', icon: PackageIcon, badge: validations.length },
   ];
 
   return (
@@ -1249,7 +1374,7 @@ export default function SeplanPage() {
             groups={[
               { label: 'Painel', items: [navItems[0], navItems[6]] },
               { label: 'Dados e curadoria', items: [navItems[1], navItems[2]] },
-              { label: 'Valida\u00e7\u00e3o', items: [navItems[3], navItems[4], navItems[5]] },
+              { label: 'Valida\u00e7\u00e3o', items: [navItems[7], navItems[3], navItems[4], navItems[5]] },
             ]}
             activeSection={activeSection}
             onSelect={setActiveSection}
@@ -1697,6 +1822,29 @@ export default function SeplanPage() {
                 onConfirmBulkRemove={confirmBulkRemoveAssignments}
               />
             </div>
+          ) : null}
+
+          {activeSection === 'entregas' ? (
+            <AdminDeliveryWorkspace
+              validations={validations}
+              selectedId={adminDeliveryId}
+              current={adminDeliveryCurrent}
+              classificationLabel={
+                adminDeliveryCurrent
+                  ? metadata?.classifications[adminDeliveryCurrent.theme]?.find(
+                      (option) => option.value === adminDeliveryCurrent.assignment?.classification,
+                    )?.label
+                  : undefined
+              }
+              onSelect={setAdminDeliveryId}
+              form={adminDeliveryForm}
+              deliveries={adminDeliveries}
+              onSave={saveAdminDelivery}
+              onFinalize={finalizeAdminDelivery}
+              onReopen={reopenAdminDelivery}
+              isSaving={isSavingAdminDelivery}
+              isFinalizing={isFinalizingAdminDelivery}
+            />
           ) : null}
 
           {activeSection === 'cycles' ? (

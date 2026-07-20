@@ -280,7 +280,61 @@ export async function getSummary(user: ScopedUser) {
 
 // ── Validations ──────────────────────────────────────────────────────────────
 
+/**
+ * Classificações anteriores ao ciclo implícito podem não possuir a validação
+ * correspondente. Reconcilia apenas esses registros ausentes para que a visão
+ * administrativa contemple todos os orçamentos temáticos.
+ */
+async function ensureMissingAssignmentValidations() {
+  const missingAssignments = await prisma.thematicAssignment.findMany({
+    where: { validations: { none: {} } },
+    select: {
+      id: true,
+      actionId: true,
+      theme: true,
+      action: {
+        select: {
+          year: true,
+          organizationCode: true,
+          unitCode: true,
+        },
+      },
+    },
+  });
+  if (missingAssignments.length === 0) return;
+
+  const cycleIds = new Map<string, string>();
+  const validationsToCreate = [];
+  for (const assignment of missingAssignments) {
+    const cycleKey = `${assignment.theme}|${assignment.action.year}`;
+    let cycleId = cycleIds.get(cycleKey);
+    if (!cycleId) {
+      cycleId = (await getOrCreateImplicitCycle(assignment.theme, assignment.action.year)).id;
+      cycleIds.set(cycleKey, cycleId);
+    }
+
+    validationsToCreate.push({
+      cycleId,
+      actionId: assignment.actionId,
+      assignmentId: assignment.id,
+      organizationCode: assignment.action.organizationCode,
+      unitCode: assignment.action.unitCode,
+      theme: assignment.theme,
+      status: 'RASCUNHO' as const,
+      deliveries: [],
+      evidences: [],
+    });
+  }
+
+  if (validationsToCreate.length > 0) {
+    await prisma.actionValidation.createMany({ data: validationsToCreate });
+  }
+}
+
 export async function listValidations(user: ScopedUser) {
+  if (user.role === 'SEPLAN_ADMIN') {
+    await ensureMissingAssignmentValidations();
+  }
   const where: Record<string, unknown> = await scopeWhere(user);
   const rows = await prisma.actionValidation.findMany({
     where,

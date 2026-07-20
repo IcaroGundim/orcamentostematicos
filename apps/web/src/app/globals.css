@@ -134,3 +134,46 @@ textarea {
     @apply font-sans;
   }
 }
+
+@keyframes searchable-combobox-expand {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+  }
+}
+
+.searchable-combobox-expand {
+  transform-origin: top center;
+  animation: searchable-combobox-expand 220ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.searchable-combobox-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.searchable-combobox-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+.searchable-combobox-scrollbar::-webkit-scrollbar-track,
+.searchable-combobox-scrollbar::-webkit-scrollbar-thumb,
+.searchable-combobox-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchable-combobox-expand {
+    animation-duration: 1ms;
+  }
+}
