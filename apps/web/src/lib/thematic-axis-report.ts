@@ -58,7 +58,7 @@ function buildExecutionReport(
         theme: asgn.theme,
         classification: asgn.classification,
         weightingFactor: asgn.weightingFactor,
-        updatedBudget: action.totals.updatedBudget,
+        initialBudget: action.totals.initialBudget,
         liquidated: action.totals.liquidated,
         deliveryExecutedValue: executedByAssignment?.get(asgn.id),
       });

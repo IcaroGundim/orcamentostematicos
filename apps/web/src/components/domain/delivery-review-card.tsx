@@ -28,6 +28,9 @@ export function DeliveryReviewCard({ delivery, index, executedValue }: DeliveryR
   const hasDescription = Boolean(delivery.description?.trim());
   const displayValue = delivery.executedValue ?? executedValue;
   const valueLabel = formatExecutedValue(displayValue);
+  const hasQuantity = Number(delivery.quantity) > 0;
+  const hasMunicipality = Boolean(delivery.municipality?.trim());
+  const hasBeneficiaries = Boolean(delivery.beneficiaries?.trim());
 
   return (
     <li className="rounded-md border border-border/80 bg-card px-4 py-3">
@@ -36,12 +39,14 @@ export function DeliveryReviewCard({ delivery, index, executedValue }: DeliveryR
         {hasDescription ? delivery.description : 'Sem descrição informada.'}
       </p>
       <div className="mt-3 grid gap-3 border-t border-border/50 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-        <MetaItem label="Quantidade">{delivery.quantity}</MetaItem>
-        <MetaItem label="Município">{delivery.municipality}</MetaItem>
+        {hasQuantity ? <MetaItem label="Quantidade">{delivery.quantity}</MetaItem> : null}
+        {hasMunicipality ? <MetaItem label="Município">{delivery.municipality}</MetaItem> : null}
         {valueLabel ? <MetaItem label="Valor executado">{valueLabel}</MetaItem> : null}
-        <MetaItem label="Público beneficiado" className="sm:col-span-2 lg:col-span-3">
-          {delivery.beneficiaries}
-        </MetaItem>
+        {hasBeneficiaries ? (
+          <MetaItem label="Público beneficiado" className="sm:col-span-2 lg:col-span-3">
+            {delivery.beneficiaries}
+          </MetaItem>
+        ) : null}
       </div>
     </li>
   );

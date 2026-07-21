@@ -12,26 +12,50 @@ const optionalMoneyValueSchema = z.preprocess(
   z.coerce.number().optional(),
 );
 
-export const validationFormSchema = z.object({
+const deliveryBaseShape = {
+  id: z.string().optional(),
+  name: z.string().min(1, 'Informe o nome da entrega.'),
+  description: z.string().min(3, 'Descrição deve ter pelo menos 3 caracteres.'),
+  quantity: z.coerce.number().min(0, 'Informe uma quantidade válida.'),
+  executedValue: optionalMoneyValueSchema,
+};
+
+/** Entrega no fluxo da secretaria: município e público beneficiado obrigatórios. */
+const strictDeliverySchema = z.object({
+  ...deliveryBaseShape,
+  municipality: z
+    .string()
+    .min(1, 'Selecione ao menos um município.')
+    .refine(isValidMunicipalitySelection, 'Selecione apenas municípios válidos.'),
+  beneficiaries: z.string().min(1, 'Informe o público beneficiado.'),
+});
+
+/**
+ * Entrega no fluxo emergencial do admin (SEPLAN insere pelas secretarias): município e
+ * público beneficiado não são pedidos, então aceitam string vazia. Os tipos permanecem
+ * `string` (idênticos ao schema estrito), evitando divergência de tipos no formulário.
+ */
+const adminDeliverySchema = z.object({
+  ...deliveryBaseShape,
+  municipality: z.string(),
+  beneficiaries: z.string(),
+});
+
+const validationFormBaseShape = {
   realizedDescription: z.string().optional(),
   informedExecutedValue: z.coerce.number().min(0, 'Informe um valor válido.'),
   observations: z.string().optional(),
-  deliveries: z
-    .array(
-      z.object({
-        id: z.string().optional(),
-        name: z.string().min(1, 'Informe o nome da entrega.'),
-        description: z.string().min(3, 'Descrição deve ter pelo menos 3 caracteres.'),
-        quantity: z.coerce.number().min(0, 'Informe uma quantidade válida.'),
-        municipality: z
-          .string()
-          .min(1, 'Selecione ao menos um município.')
-          .refine(isValidMunicipalitySelection, 'Selecione apenas municípios válidos.'),
-        beneficiaries: z.string().min(1, 'Informe o público beneficiado.'),
-        executedValue: optionalMoneyValueSchema,
-      }),
-    )
-    .min(1, 'Cadastre ao menos uma entrega.'),
+};
+
+export const validationFormSchema = z.object({
+  ...validationFormBaseShape,
+  deliveries: z.array(strictDeliverySchema).min(1, 'Cadastre ao menos uma entrega.'),
+});
+
+/** Schema do painel do admin: mesmas regras, sem exigir município/público beneficiado. */
+export const adminValidationFormSchema = z.object({
+  ...validationFormBaseShape,
+  deliveries: z.array(adminDeliverySchema).min(1, 'Cadastre ao menos uma entrega.'),
 });
 
 export type ValidationFormInput = z.input<typeof validationFormSchema>;
@@ -50,6 +74,14 @@ export function blankDelivery(sequence = 1) {
     municipality: '',
     beneficiaries: '',
     executedValue: undefined as number | undefined,
+  };
+}
+
+/** Nova entrega do fluxo administrativo: o nome deve ser informado pelo usuário. */
+export function blankAdminDelivery() {
+  return {
+    ...blankDelivery(),
+    name: '',
   };
 }
 
@@ -80,6 +112,13 @@ export function emptyValidationFormValues(): ValidationFormInput {
     informedExecutedValue: 0,
     observations: '',
     deliveries: [blankDelivery(1)],
+  };
+}
+
+export function emptyAdminValidationFormValues(): ValidationFormInput {
+  return {
+    ...emptyValidationFormValues(),
+    deliveries: [blankAdminDelivery()],
   };
 }
 
@@ -122,6 +161,14 @@ export function toValidationFormInput(validation: ValidationItem): ValidationFor
     informedExecutedValue: validation.informedExecutedValue ?? 0,
     observations: validation.observations ?? '',
     deliveries: normalizeDeliveries(validation.deliveries),
+  };
+}
+
+export function toAdminValidationFormInput(validation: ValidationItem): ValidationFormInput {
+  const values = toValidationFormInput(validation);
+  return {
+    ...values,
+    deliveries: validation.deliveries.length ? values.deliveries : [blankAdminDelivery()],
   };
 }
 

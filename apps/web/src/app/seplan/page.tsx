@@ -104,9 +104,9 @@ import {
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
 import {
-  emptyValidationFormValues,
-  toValidationFormInput,
-  validationFormSchema,
+  adminValidationFormSchema,
+  emptyAdminValidationFormValues,
+  toAdminValidationFormInput,
   type ValidationFormInput,
   type ValidationFormValues,
 } from '@/lib/validation-schema';
@@ -410,8 +410,8 @@ export default function SeplanPage() {
   const [isFinalizingAdminDelivery, setIsFinalizingAdminDelivery] = useState(false);
   const adminDeliveryPrevIdRef = useRef<string | null>(null);
   const adminDeliveryForm = useForm<ValidationFormInput, unknown, ValidationFormValues>({
-    resolver: zodResolver(validationFormSchema),
-    defaultValues: emptyValidationFormValues(),
+    resolver: zodResolver(adminValidationFormSchema),
+    defaultValues: emptyAdminValidationFormValues(),
   });
   const adminDeliveries = useFieldArray({ control: adminDeliveryForm.control, name: 'deliveries' });
   const adminDeliveryCurrent = useMemo(
@@ -424,7 +424,7 @@ export default function SeplanPage() {
       return;
     }
     if (adminDeliveryPrevIdRef.current !== adminDeliveryCurrent.id) {
-      adminDeliveryForm.reset(toValidationFormInput(adminDeliveryCurrent));
+      adminDeliveryForm.reset(toAdminValidationFormInput(adminDeliveryCurrent));
       adminDeliveryPrevIdRef.current = adminDeliveryCurrent.id;
     }
   }, [adminDeliveryCurrent, adminDeliveryForm]);
@@ -838,6 +838,9 @@ export default function SeplanPage() {
         classification,
         deliveries: values.deliveries,
         informedExecutedValue: values.informedExecutedValue,
+        // Categorias por percentual: valor executado = dotação inicial × ponderador (regra fixa).
+        initialBudget: current.action?.totals?.initialBudget,
+        weightingFactor: current.assignment?.weightingFactor,
       }),
     };
     setIsSavingAdminDelivery(true);
@@ -890,7 +893,7 @@ export default function SeplanPage() {
         method: 'POST',
         body: JSON.stringify({ reviewerComment: 'Entregas inseridas pela SEPLAN.' }),
       });
-      toast.success('Entregas finalizadas. Já constam em Resultados e no mapa.');
+      toast.success('Entregas finalizadas. Já constam em Resultados.');
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao finalizar entregas.');
@@ -1129,7 +1132,7 @@ export default function SeplanPage() {
           theme: asgn.theme,
           classification: asgn.classification,
           weightingFactor: asgn.weightingFactor,
-          updatedBudget: action.totals.updatedBudget,
+          initialBudget: action.totals.initialBudget,
           liquidated: action.totals.liquidated,
           deliveryExecutedValue: executedByAssignment.get(asgn.id),
         });
@@ -2291,7 +2294,7 @@ export default function SeplanPage() {
                   <Card >
                     <CardHeader>
                       <CardTitle>Execução dos orçamentos temáticos</CardTitle>
-                      <CardDescription>Percentual de execução por tema — liquidado sobre a dotação atualizada.</CardDescription>
+                      <CardDescription>Percentual de execução por tema — liquidado sobre a dotação inicial.</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">

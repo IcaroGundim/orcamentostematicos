@@ -237,7 +237,7 @@ export async function getSummary(user: ScopedUser) {
           theme: a.theme,
           classification: a.classification ?? '',
           weightingFactor: a.weightingFactor,
-          updatedBudget: 0,
+          initialBudget: 0,
           liquidated: liquidatedByAction.get(a.actionId) ?? 0,
           deliveryExecutedValue: executedByAssignment.get(a.id),
         }).liquidated;
@@ -257,7 +257,7 @@ export async function getSummary(user: ScopedUser) {
             theme: a.theme,
             classification,
             weightingFactor: a.weightingFactor,
-            updatedBudget: 0,
+            initialBudget: 0,
             liquidated: liquidatedByAction.get(a.actionId) ?? 0,
             deliveryExecutedValue: executedByAssignment.get(a.id),
           }).liquidated;

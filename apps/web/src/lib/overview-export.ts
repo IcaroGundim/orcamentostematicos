@@ -96,15 +96,14 @@ export function buildOverviewRows(
       if (!selectedThemes.has(a.theme)) continue;
 
       const byDelivery = usesDeliveryValues(a.theme, a.classification);
-      // Planejado ponderado é sobre o orçamento inicial (planejado) — por isso passamos
-      // initialBudget como base do `planned`. A coluna de orçamento atualizado ponderado
-      // (abaixo) é que usa o updatedBudget. O `liquidated` independe da base orçamentária
-      // (é liquidado × ponderador), e o comportamento das categorias por entrega é mantido.
+      // Planejado ponderado é sobre a dotação inicial (planejado). A coluna de orçamento
+      // atualizado ponderado (abaixo) é que usa o updatedBudget. O `liquidated` independe da
+      // base orçamentária (é liquidado × ponderador), e as categorias por entrega são mantidas.
       const { planned, liquidated } = thematicBudgetContribution({
         theme: a.theme,
         classification: a.classification,
         weightingFactor: a.weightingFactor,
-        updatedBudget: action.totals.initialBudget,
+        initialBudget: action.totals.initialBudget,
         liquidated: action.totals.liquidated,
       });
 

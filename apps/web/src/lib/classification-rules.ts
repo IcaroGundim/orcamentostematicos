@@ -141,11 +141,24 @@ export function buildVerifiedDeliveryExecutedMap(
 }
 
 /**
+ * Planejado ponderado de uma categoria por percentual: dotação inicial × ponderador.
+ * Base é a dotação **inicial** (não a atualizada) — é o "planejado" canônico dos temáticos.
+ */
+export function weightedPlannedValue(
+  theme: ThemeBudget | string,
+  classification: string,
+  initialBudget: number,
+  weightingFactor?: number | null,
+): number {
+  return (Number(initialBudget) || 0) * effectiveWeightingFactor(theme, classification, weightingFactor);
+}
+
+/**
  * Contribuição de uma classificação às visões orçamentárias (planejado e liquidado),
  * já aplicando o ponderador.
  *
  * - Categorias por percentual (exclusivos, OCAD Não Exclusivo 36%, OSG Cat. 3 50%, etc.):
- *   planejado = dotação atualizada × ponderador; liquidado = liquidado da ação × ponderador.
+ *   planejado = dotação inicial × ponderador; liquidado = liquidado da ação × ponderador.
  * - Categorias por entrega (OSG Cat. 2, Climático Não Exclusivo): enquanto não validadas,
  *   contribuem com 0; após a validação das entregas, o valor executado nas entregas conta
  *   tanto para o planejado quanto para o liquidado.
@@ -154,7 +167,7 @@ export function thematicBudgetContribution(params: {
   theme: ThemeBudget | string;
   classification: string;
   weightingFactor?: number | null;
-  updatedBudget: number;
+  initialBudget: number;
   liquidated: number;
   /** Valor executado validado nas entregas; usado apenas nas categorias por entrega. */
   deliveryExecutedValue?: number | null;
@@ -165,7 +178,7 @@ export function thematicBudgetContribution(params: {
   }
   const factor = effectiveWeightingFactor(params.theme, params.classification, params.weightingFactor);
   return {
-    planned: params.updatedBudget * factor,
+    planned: (Number(params.initialBudget) || 0) * factor,
     liquidated: params.liquidated * factor,
   };
 }
@@ -175,9 +188,23 @@ export function resolveInformedExecutedValue(params: {
   classification: string;
   deliveries: Array<{ executedValue?: number | null | unknown }>;
   informedExecutedValue?: number | null;
+  /**
+   * Quando fornecido (fluxo do admin), as categorias por percentual têm o valor executado
+   * derivado pela regra (dotação inicial × ponderador) em vez do valor digitado.
+   */
+  initialBudget?: number | null;
+  weightingFactor?: number | null;
 }): number {
   if (usesDeliveryValues(params.theme, params.classification)) {
     return sumDeliveryExecutedValues(params.deliveries);
+  }
+  if (params.initialBudget != null) {
+    return weightedPlannedValue(
+      params.theme,
+      params.classification,
+      params.initialBudget,
+      params.weightingFactor,
+    );
   }
   const value = Number(params.informedExecutedValue);
   return Number.isFinite(value) ? value : 0;

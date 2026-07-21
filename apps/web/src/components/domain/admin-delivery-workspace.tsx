@@ -16,20 +16,18 @@ import {
 import { useMemo, useState } from 'react';
 import { Controller, useWatch, type UseFieldArrayReturn, type UseFormReturn } from 'react-hook-form';
 
-import { ACRE_MUNICIPALITY_OPTIONS, parseMunicipalitySelection } from '@/lib/acre-municipalities';
 import { formatMoney, themeLabels } from '@/lib/api';
-import { sumDeliveryExecutedValues, usesDeliveryValues } from '@/lib/classification-rules';
-import { blankDelivery, type ValidationFormInput, type ValidationFormValues } from '@/lib/validation-schema';
+import { organizationAcronym } from '@/lib/organization-acronym';
+import { sumDeliveryExecutedValues, usesDeliveryValues, weightedPlannedValue } from '@/lib/classification-rules';
+import { blankAdminDelivery, type ValidationFormInput, type ValidationFormValues } from '@/lib/validation-schema';
 import { cn } from '@/lib/utils';
 import type { ThemeBudget, ValidationItem } from '@/types/domain';
 import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { MoneyInput } from '@/components/ui/money-input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 
 type AdminDeliveryWorkspaceProps = {
@@ -93,6 +91,16 @@ export function AdminDeliveryWorkspace({
   const perDeliveryValues = current
     ? usesDeliveryValues(current.theme, current.assignment?.classification ?? '')
     : false;
+  // Categorias por percentual (exclusivo, não exclusivo 36%, OSG Cat. 3 50%): o valor
+  // executado segue a regra (dotação inicial × ponderador) — não é digitado.
+  const plannedExecutedValue = current
+    ? weightedPlannedValue(
+        current.theme,
+        current.assignment?.classification ?? '',
+        current.action?.totals?.initialBudget ?? 0,
+        current.assignment?.weightingFactor,
+      )
+    : 0;
   const { errors, isDirty } = form.formState;
 
   const organizationOptions = useMemo(() => {
@@ -203,7 +211,7 @@ export function AdminDeliveryWorkspace({
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-white/25 overflow-hidden rounded-md border border-white/30 bg-white/5">
+          <div className="grid grid-cols-3 divide-x divide-green-900/20 overflow-hidden rounded-md border border-white bg-white shadow-sm">
             <PortfolioMetric label="Registros" value={validations.length} />
             <PortfolioMetric label="Em edição" value={draftCount} />
             <PortfolioMetric label="Publicadas" value={publishedCount} />
@@ -309,7 +317,9 @@ export function AdminDeliveryWorkspace({
                       <span className={cn('absolute inset-y-3 left-0 w-1 rounded-r-full', themeAccent[validation.theme])} />
                       <div className="flex items-center gap-2 pl-1.5">
                         <span className={cn('text-[10px] font-bold uppercase tracking-[0.13em]', selected ? 'text-green-900' : 'text-muted-foreground')}>
-                          {validation.action?.organizationCode || 'Sem órgão'}
+                          {validation.action
+                            ? `${validation.action.organizationCode}${validation.action.unitCode && validation.action.unitCode !== '001' ? `/${validation.action.unitCode}` : ''} · ${organizationAcronym(validation.action.organizationCode, validation.action.organizationName)}`
+                            : 'Sem órgão'}
                         </span>
                       </div>
                       <p className="mt-1.5 line-clamp-2 pl-1.5 text-sm font-semibold leading-snug">
@@ -357,6 +367,15 @@ export function AdminDeliveryWorkspace({
                   </div>
                   <div className="text-right">
                     <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-muted-foreground">
+                      Valor da ação
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+                      {formatMoney(current.action?.totals?.initialBudget ?? 0)}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">Dotação inicial</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-muted-foreground">
                       Classificação
                     </p>
                     <p className="mt-0.5 text-xs font-semibold text-foreground">
@@ -394,13 +413,21 @@ export function AdminDeliveryWorkspace({
                       type="button"
                       variant="outline"
                       className="border-black bg-background text-foreground hover:bg-muted"
-                      onClick={() => deliveries.append(blankDelivery(deliveries.fields.length + 1))}
+                      onClick={() => deliveries.append(blankAdminDelivery())}
                     >
                       <PlusIcon data-icon="inline-start" />
                       Nova entrega
                     </Button>
                   </div>
                   <FieldError errors={errors.deliveries?.message ? [errors.deliveries] : undefined} />
+
+                  {perDeliveryValues ? (
+                    <div className="mb-3 flex justify-end">
+                      <div className="rounded-md border border-black bg-card px-3 py-1.5 text-xs text-muted-foreground">
+                        Total executado: <strong className="ml-1 tabular-nums text-foreground">{formatMoney(deliveryTotal)}</strong>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="space-y-3">
                     {deliveries.fields.map((field, index) => (
@@ -409,73 +436,12 @@ export function AdminDeliveryWorkspace({
                         index={index}
                         form={form}
                         perDeliveryValues={perDeliveryValues}
+                        fixedExecutedValue={plannedExecutedValue}
                         canRemove={deliveries.fields.length > 1}
                         onClear={() => clearDelivery(index)}
                         onRemove={() => deliveries.remove(index)}
                       />
                     ))}
-                  </div>
-                </section>
-
-                <section className="overflow-hidden rounded-lg border border-black bg-card shadow-sm">
-                  <div className="flex items-center gap-2 border-b border-black bg-green-900 px-4 py-3 text-white">
-                    <span className="grid size-7 place-items-center rounded-md border border-black bg-background text-xs font-bold text-foreground">2</span>
-                    <div>
-                      <h3 className="text-base font-semibold">Consolidação do registro</h3>
-                      <p className="text-xs text-white/75">Síntese e informações financeiras para leitura nos resultados.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,.65fr)]">
-                    <Field data-invalid={!!errors.realizedDescription || undefined}>
-                      <FieldLabel htmlFor="admin-realized-description">Síntese da execução</FieldLabel>
-                      <Textarea
-                        id="admin-realized-description"
-                        rows={4}
-                        placeholder="Resuma os principais resultados alcançados pela ação…"
-                        className="border-black bg-background focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-                        {...form.register('realizedDescription')}
-                      />
-                      <FieldError errors={[errors.realizedDescription]} />
-                    </Field>
-                    <div className="space-y-4">
-                      {perDeliveryValues ? (
-                        <div className="rounded-lg border border-black bg-muted/40 px-4 py-3 text-foreground">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Total executado</p>
-                          <p className="mt-1 text-xl font-semibold tabular-nums">{formatMoney(deliveryTotal)}</p>
-                          <p className="mt-1 text-[11px] text-muted-foreground">Soma automática das entregas</p>
-                        </div>
-                      ) : (
-                        <Field data-invalid={!!errors.informedExecutedValue || undefined}>
-                          <FieldLabel htmlFor="admin-executed-value">Valor executado informado</FieldLabel>
-                          <Controller
-                            name="informedExecutedValue"
-                            control={form.control}
-                            render={({ field }) => (
-                              <MoneyInput
-                                id="admin-executed-value"
-                                value={typeof field.value === 'number' ? field.value : undefined}
-                                onValueChange={field.onChange}
-                                onBlur={field.onBlur}
-                                ref={field.ref}
-                                className="border-black bg-background focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-                              />
-                            )}
-                          />
-                          <FieldError errors={[errors.informedExecutedValue]} />
-                        </Field>
-                      )}
-                      <Field data-invalid={!!errors.observations || undefined}>
-                        <FieldLabel htmlFor="admin-observations">Observação interna</FieldLabel>
-                        <Textarea
-                          id="admin-observations"
-                          rows={2}
-                          placeholder="Opcional"
-                          className="min-h-16 border-black bg-background focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-                          {...form.register('observations')}
-                        />
-                        <FieldError errors={[errors.observations]} />
-                      </Field>
-                    </div>
                   </div>
                 </section>
               </div>
@@ -553,10 +519,10 @@ function CompactFilter({ label, children, className }: { label: string; children
 function PortfolioMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-16 px-2.5 py-1 text-center">
-      <p className="text-sm font-semibold leading-none tabular-nums text-white">
+      <p className="text-sm font-bold leading-none tabular-nums text-green-900">
         {value.toLocaleString('pt-BR')}
       </p>
-      <p className="mt-0.5 text-[7px] font-semibold uppercase leading-none tracking-[0.11em] text-white/65">{label}</p>
+      <p className="mt-0.5 text-[7px] font-bold uppercase leading-none tracking-[0.11em] text-green-900">{label}</p>
     </div>
   );
 }
@@ -565,6 +531,7 @@ function AdminDeliveryEditor({
   index,
   form,
   perDeliveryValues,
+  fixedExecutedValue,
   canRemove,
   onClear,
   onRemove,
@@ -572,13 +539,12 @@ function AdminDeliveryEditor({
   index: number;
   form: UseFormReturn<ValidationFormInput, unknown, ValidationFormValues>;
   perDeliveryValues: boolean;
+  fixedExecutedValue: number;
   canRemove: boolean;
   onClear: () => void;
   onRemove: () => void;
 }) {
   const rowErrors = form.formState.errors.deliveries?.[index];
-  const municipality = form.watch(`deliveries.${index}.municipality`);
-  const selectedMunicipalities = parseMunicipalitySelection(municipality);
 
   return (
     <article className="overflow-hidden rounded-lg border border-black bg-card shadow-sm">
@@ -589,7 +555,7 @@ function AdminDeliveryEditor({
           </span>
           <div>
             <p className="text-sm font-semibold">Ficha da entrega</p>
-            <p className="text-[11px] text-white/75">Identificação, alcance territorial e público</p>
+            <p className="text-[11px] text-white/75">Identificação da entrega realizada</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -605,7 +571,7 @@ function AdminDeliveryEditor({
       </header>
 
       <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-12">
-        <Field className="xl:col-span-5" data-invalid={!!rowErrors?.name || undefined}>
+        <Field className="xl:col-span-8" data-invalid={!!rowErrors?.name || undefined}>
           <FieldLabel htmlFor={`admin-delivery-name-${index}`}>Nome da entrega</FieldLabel>
           <Input
             id={`admin-delivery-name-${index}`}
@@ -616,77 +582,8 @@ function AdminDeliveryEditor({
           <FieldError errors={[rowErrors?.name]} />
         </Field>
 
-        <Field className="xl:col-span-2" data-invalid={!!rowErrors?.quantity || undefined}>
-          <FieldLabel htmlFor={`admin-delivery-quantity-${index}`}>Quantidade</FieldLabel>
-          <Input
-            id={`admin-delivery-quantity-${index}`}
-            type="number"
-            min={0}
-            step={1}
-            className="border-black bg-background focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-            {...form.register(`deliveries.${index}.quantity`)}
-          />
-          <FieldError errors={[rowErrors?.quantity]} />
-        </Field>
-
-        <Field className="xl:col-span-5" data-invalid={!!rowErrors?.beneficiaries || undefined}>
-          <FieldLabel htmlFor={`admin-delivery-beneficiaries-${index}`}>Público beneficiado</FieldLabel>
-          <Input
-            id={`admin-delivery-beneficiaries-${index}`}
-            placeholder="Ex.: Estudantes da rede estadual"
-            className="border-black bg-background focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-            {...form.register(`deliveries.${index}.beneficiaries`)}
-          />
-          <FieldError errors={[rowErrors?.beneficiaries]} />
-        </Field>
-
-        <Field className={cn(perDeliveryValues ? 'xl:col-span-7' : 'xl:col-span-12')} data-invalid={!!rowErrors?.municipality || undefined}>
-          <FieldLabel htmlFor={`admin-delivery-municipality-${index}`}>Municípios alcançados</FieldLabel>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                id={`admin-delivery-municipality-${index}`}
-                type="button"
-                variant="outline"
-                className="h-8 w-full justify-start overflow-hidden border-black bg-background px-2.5 text-left font-normal focus-visible:border-black focus-visible:ring-2 focus-visible:ring-gray-300"
-              >
-                <MapPinIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className={cn('truncate', !selectedMunicipalities.length && 'text-muted-foreground')}>
-                  {selectedMunicipalities.length ? selectedMunicipalities.join(', ') : 'Selecione um ou mais municípios'}
-                </span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1">
-              <div className="max-h-64 overflow-y-auto">
-                {ACRE_MUNICIPALITY_OPTIONS.map((name) => {
-                  const checked = selectedMunicipalities.includes(name);
-                  return (
-                    <label key={name} className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm hover:bg-gray-700 hover:text-white">
-                      <Checkbox
-                        checked={checked}
-                        className="border-black data-[state=checked]:border-gray-900 data-[state=checked]:bg-gray-900"
-                        onCheckedChange={(nextChecked) => {
-                          const next = nextChecked
-                            ? [...selectedMunicipalities, name]
-                            : selectedMunicipalities.filter((item) => item !== name);
-                          form.setValue(`deliveries.${index}.municipality`, next.join(', '), {
-                            shouldValidate: true,
-                            shouldDirty: true,
-                          });
-                        }}
-                      />
-                      <span>{name}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <FieldError errors={[rowErrors?.municipality]} />
-        </Field>
-
         {perDeliveryValues ? (
-          <Field className="xl:col-span-5" data-invalid={!!rowErrors?.executedValue || undefined}>
+          <Field className="xl:col-span-4" data-invalid={!!rowErrors?.executedValue || undefined}>
             <FieldLabel htmlFor={`admin-delivery-executed-${index}`}>Valor executado nesta entrega</FieldLabel>
             <Controller
               name={`deliveries.${index}.executedValue`}
@@ -704,7 +601,17 @@ function AdminDeliveryEditor({
             />
             <FieldError errors={[rowErrors?.executedValue]} />
           </Field>
-        ) : null}
+        ) : (
+          <Field className="xl:col-span-4">
+            <FieldLabel>Valor executado da ação</FieldLabel>
+            <div className="flex h-8 items-center rounded-lg border border-black bg-muted/40 px-2.5 text-sm font-semibold tabular-nums text-foreground">
+              {formatMoney(fixedExecutedValue)}
+            </div>
+            <p className="text-[10px] leading-tight text-muted-foreground">
+              Calculado pela dotação inicial e pelo ponderador.
+            </p>
+          </Field>
+        )}
 
         <Field className="md:col-span-2 xl:col-span-12" data-invalid={!!rowErrors?.description || undefined}>
           <FieldLabel htmlFor={`admin-delivery-description-${index}`}>Descrição do que foi realizado</FieldLabel>
