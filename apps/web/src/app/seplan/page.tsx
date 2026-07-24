@@ -7,7 +7,9 @@ import {
   CheckCircle2Icon,
   CheckIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ClipboardCheckIcon,
+  CoinsIcon,
   DatabaseIcon,
   ExternalLinkIcon,
   EyeIcon,
@@ -183,7 +185,7 @@ function formatPeriod(referenceMonth: number, year: number, periodType: QddPerio
     : `${month}/${year}`;
 }
 
-type SectionId = 'overview' | 'structure' | 'curation' | 'entregas' | 'cycles' | 'review' | 'results' | 'reports';
+type SectionId = 'overview' | 'structure' | 'curation' | 'entregas' | 'review' | 'results' | 'reports';
 
 type AdminSidebarNavItem = {
   id: SectionId;
@@ -341,6 +343,11 @@ type ActionColumnFilters = {
 
 const allValue = 'ALL';
 
+const REPORTS_VIEW_ITEMS: { value: 'overview' | 'by-axis'; label: string }[] = [
+  { value: 'overview', label: 'Visão geral' },
+  { value: 'by-axis', label: 'Execução por eixo' },
+];
+
 const initialAssignment = {
   actionId: '',
   theme: 'OSG' as ThemeBudget,
@@ -403,6 +410,26 @@ export default function SeplanPage() {
   const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
   const [reportsViewTab, setReportsViewTab] = useState<'overview' | 'by-axis'>('overview');
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
+
+  // Setas ← → alternam as subabas de "Informações Gerais". Fica no window (fase de
+  // bubble) para funcionar sem depender de qual elemento está com foco; ignora campos
+  // de formulário e as abas internas por tema (OCAD/OSG/CLIMATICO), que usam as setas
+  // para a própria navegação.
+  useEffect(() => {
+    if (activeSection !== 'reports') return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      if (target.closest('[data-slot="tabs-trigger"]')) return;
+      setReportsViewTab(e.key === 'ArrowLeft' ? 'overview' : 'by-axis');
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [activeSection]);
 
   // Inserir Entregas (perfil administrador)
   const [adminDeliveryId, setAdminDeliveryId] = useState('');
@@ -1164,55 +1191,44 @@ export default function SeplanPage() {
     [actions, metadata, executedByAssignment],
   );
 
-  const trackingByYear = useMemo(() => {
+  // Acompanhamento (progresso por exercício/órgão) e Revisão (ações sobre cada validação)
+  // são a mesma lista de validations agrupada em dois níveis — unificadas em uma única memo.
+  const validationsByYearOrg = useMemo(() => {
     const byYear = new Map<
       number,
       {
         year: number;
         total: number;
         byStatus: Record<string, number>;
-        orgs: Map<string, { code: string; name: string; total: number; sent: number }>;
+        orgs: Map<
+          string,
+          { code: string; name: string; total: number; sent: number; byStatus: Record<string, number>; items: ValidationItem[] }
+        >;
       }
     >();
     for (const v of validations) {
       const year = v.cycle?.year ?? v.action?.year ?? 0;
-      let entry = byYear.get(year);
-      if (!entry) {
-        entry = { year, total: 0, byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 }, orgs: new Map() };
-        byYear.set(year, entry);
+      let yearEntry = byYear.get(year);
+      if (!yearEntry) {
+        yearEntry = { year, total: 0, byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 }, orgs: new Map() };
+        byYear.set(year, yearEntry);
       }
-      entry.total += 1;
-      entry.byStatus[v.status] = (entry.byStatus[v.status] ?? 0) + 1;
+      yearEntry.total += 1;
+      yearEntry.byStatus[v.status] = (yearEntry.byStatus[v.status] ?? 0) + 1;
       const code = v.organizationCode || v.action?.organizationCode || '—';
-      let org = entry.orgs.get(code);
+      let org = yearEntry.orgs.get(code);
       if (!org) {
-        org = { code, name: v.action?.organizationName ?? code, total: 0, sent: 0 };
-        entry.orgs.set(code, org);
+        org = { code, name: v.action?.organizationName ?? code, total: 0, sent: 0, byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 }, items: [] };
+        yearEntry.orgs.set(code, org);
       }
       org.total += 1;
+      org.byStatus[v.status] = (org.byStatus[v.status] ?? 0) + 1;
+      org.items.push(v);
       if (v.status === 'ENVIADO' || v.status === 'APROVADO') org.sent += 1;
     }
     return [...byYear.values()]
       .map((e) => ({ ...e, orgs: [...e.orgs.values()].sort((a, b) => a.code.localeCompare(b.code)) }))
       .sort((a, b) => b.year - a.year);
-  }, [validations]);
-
-  const reviewByOrg = useMemo(() => {
-    const map = new Map<
-      string,
-      { code: string; name: string; items: ValidationItem[]; byStatus: Record<string, number> }
-    >();
-    for (const v of validations) {
-      const code = v.organizationCode || v.action?.organizationCode || '—';
-      let entry = map.get(code);
-      if (!entry) {
-        entry = { code, name: v.action?.organizationName ?? code, items: [], byStatus: { RASCUNHO: 0, ENVIADO: 0, DEVOLVIDO: 0, APROVADO: 0 } };
-        map.set(code, entry);
-      }
-      entry.items.push(v);
-      entry.byStatus[v.status] = (entry.byStatus[v.status] ?? 0) + 1;
-    }
-    return [...map.values()].sort((a, b) => a.code.localeCompare(b.code));
   }, [validations]);
 
   const approvedValidations = useMemo(
@@ -1354,12 +1370,12 @@ export default function SeplanPage() {
     { id: 'overview', label: 'Visão geral', icon: GaugeIcon },
     { id: 'structure', label: 'Estrutura vigente', icon: DatabaseIcon, badge: actions.length },
     { id: 'curation', label: 'Curadoria temática', icon: FolderCogIcon, badge: summary?.assignments ?? 0 },
-    { id: 'cycles', label: 'Acompanhamento', icon: SendIcon, badge: validations.filter((v) => v.status === 'ENVIADO').length },
-    { id: 'review', label: 'Revisão', icon: ClipboardCheckIcon, badge: validations.length },
+    { id: 'review', label: 'Acompanhamento e Revisão', icon: ClipboardCheckIcon, badge: validations.filter((v) => v.status === 'ENVIADO').length },
     { id: 'results', label: 'Resultados', icon: FileBarChart2Icon, badge: approvedValidations.length },
     { id: 'reports', label: 'Informações Gerais', icon: BarChart3Icon },
     { id: 'entregas', label: 'Inserir Entregas', icon: PackageIcon, badge: validations.length },
   ];
+  const navItemById = (id: SectionId) => navItems.find((item) => item.id === id)!;
 
   return (
     <SidebarProvider defaultOpen>
@@ -1375,9 +1391,9 @@ export default function SeplanPage() {
         <SidebarContent className="[--sidebar:oklch(0.97_0.005_165)] [--sidebar-foreground:oklch(0.25_0.04_165)] [--sidebar-accent:oklch(0.90_0.02_165)] [--sidebar-accent-foreground:oklch(0.18_0.05_165)] [--sidebar-border:oklch(0.85_0.03_165)]">
           <AdminSidebarNavigation
             groups={[
-              { label: 'Painel', items: [navItems[0], navItems[6]] },
-              { label: 'Dados e curadoria', items: [navItems[1], navItems[2]] },
-              { label: 'Valida\u00e7\u00e3o', items: [navItems[7], navItems[3], navItems[4], navItems[5]] },
+              { label: 'Painel', items: [navItemById('overview'), navItemById('reports')] },
+              { label: 'Dados e curadoria', items: [navItemById('structure'), navItemById('curation')] },
+              { label: 'Valida\u00e7\u00e3o', items: [navItemById('entregas'), navItemById('review'), navItemById('results')] },
             ]}
             activeSection={activeSection}
             onSelect={setActiveSection}
@@ -1386,6 +1402,15 @@ export default function SeplanPage() {
         <div className="mx-3 h-px shrink-0 bg-sidebar-border" aria-hidden="true" />
         <SidebarFooter className="[--sidebar:oklch(0.97_0.005_165)] [--sidebar-foreground:oklch(0.25_0.04_165)] [--sidebar-accent:oklch(0.90_0.02_165)] [--sidebar-accent-foreground:oklch(0.18_0.05_165)] [--sidebar-border:oklch(0.85_0.03_165)]">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Monitoramento da execução orçamentária"
+                onClick={() => router.push('/orcamento')}
+              >
+                <CoinsIcon />
+                <span>Execução orçamentária</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton tooltip="Atualizar" onClick={() => void load()}>
                 <RefreshCwIcon />
@@ -1850,19 +1875,22 @@ export default function SeplanPage() {
             />
           ) : null}
 
-          {activeSection === 'cycles' ? (
+          {activeSection === 'review' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-              {trackingByYear.length === 0 ? (
+              {validationsByYearOrg.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
                     <EmptyMedia variant="icon"><SendIcon /></EmptyMedia>
                     <EmptyTitle>Sem dados de validação</EmptyTitle>
-                    <EmptyDescription>Assim que as secretarias classificarem ações, o acompanhamento aparecerá aqui.</EmptyDescription>
+                    <EmptyDescription>Assim que as secretarias classificarem ações, o acompanhamento e a revisão aparecerão aqui.</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               ) : (
-                trackingByYear.map((year) => {
+                validationsByYearOrg.map((year) => {
                   const orgsSent = year.orgs.filter((o) => o.sent > 0).length;
+                  const defaultOpen = year.orgs
+                    .filter((o) => (o.byStatus['ENVIADO'] ?? 0) > 0)
+                    .map((o) => `${year.year}-${o.code}`);
                   return (
                     <Card key={year.year}>
                       <CardHeader>
@@ -1881,74 +1909,38 @@ export default function SeplanPage() {
                           ))}
                         </div>
                         <Separator />
-                        <div className="flex flex-col gap-2">
-                          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Progresso por secretaria</p>
-                          {year.orgs.map((org) => (
-                            <div key={org.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-2.5 text-sm">
-                              <span className="font-medium">{org.code} - {org.name}</span>
-                              <span className="text-muted-foreground">{org.sent} de {org.total} enviada{org.total !== 1 ? 's' : ''}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              )}
-            </section>
-          ) : null}
-
-          {activeSection === 'review' ? (
-            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-              {reviewByOrg.length === 0 ? (
-                <Empty>
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <SendIcon />
-                    </EmptyMedia>
-                    <EmptyTitle>Nenhuma validação enviada pelas secretarias ainda</EmptyTitle>
-                    <EmptyDescription>As entregas aparecerão aqui agrupadas por secretaria assim que forem enviadas.</EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                (() => {
-                  const defaultOpen = reviewByOrg
-                    .filter((o) => (o.byStatus['ENVIADO'] ?? 0) > 0)
-                    .map((o) => o.code);
-                  return (
-                    <Accordion type="multiple" defaultValue={defaultOpen} className="flex flex-col gap-3">
-                      {reviewByOrg.map((org) => {
-                        const pending = org.byStatus['ENVIADO'] ?? 0;
-                        const total = org.items.length;
-                        return (
-                          <AccordionItem key={org.code} value={org.code}>
-                            <AccordionTrigger>
-                              <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pr-2">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold leading-snug">{org.code} - {org.name}</p>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    {total} validaç{total !== 1 ? 'ões' : 'ão'}
-                                    {pending > 0 ? ` · ${pending} pendente${pending !== 1 ? 's' : ''} de revisão` : ''}
-                                  </p>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {pending > 0 ? (
-                                    <Badge className="bg-primary text-primary-foreground">{pending} a revisar</Badge>
-                                  ) : null}
-                                  {(['RASCUNHO', 'ENVIADO', 'APROVADO'] as const)
-                                    .filter((s) => displayStatusCount(org.byStatus, s) > 0)
-                                    .map((s) => (
-                                      <span key={s} className="flex items-center gap-1.5 text-xs">
-                                        <StatusBadge status={s} />
-                                        <span className="font-semibold tabular-nums">{displayStatusCount(org.byStatus, s)}</span>
-                                      </span>
-                                    ))}
-                                </div>
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                              <div className="grid gap-3">
-                                {org.items.map((validation) => {
+                        <Accordion type="multiple" defaultValue={defaultOpen} className="flex flex-col gap-3">
+                          {year.orgs.map((org) => {
+                            const pending = org.byStatus['ENVIADO'] ?? 0;
+                            return (
+                              <AccordionItem key={org.code} value={`${year.year}-${org.code}`}>
+                                <AccordionTrigger>
+                                  <div className="flex flex-1 flex-wrap items-center justify-between gap-3 pr-2">
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold leading-snug">{org.code} - {org.name}</p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        {org.sent} de {org.total} enviada{org.total !== 1 ? 's' : ''}
+                                        {pending > 0 ? ` · ${pending} pendente${pending !== 1 ? 's' : ''} de revisão` : ''}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {pending > 0 ? (
+                                        <Badge className="bg-primary text-primary-foreground">{pending} a revisar</Badge>
+                                      ) : null}
+                                      {(['RASCUNHO', 'ENVIADO', 'APROVADO'] as const)
+                                        .filter((s) => displayStatusCount(org.byStatus, s) > 0)
+                                        .map((s) => (
+                                          <span key={s} className="flex items-center gap-1.5 text-xs">
+                                            <StatusBadge status={s} />
+                                            <span className="font-semibold tabular-nums">{displayStatusCount(org.byStatus, s)}</span>
+                                          </span>
+                                        ))}
+                                    </div>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="grid gap-3">
+                                    {org.items.map((validation) => {
                                   const municipalities = Array.from(
                                     new Set(
                                       (validation.deliveries ?? [])
@@ -2054,9 +2046,11 @@ export default function SeplanPage() {
                           </AccordionItem>
                         );
                       })}
-                    </Accordion>
+                        </Accordion>
+                      </CardContent>
+                    </Card>
                   );
-                })()
+                })
               )}
             </section>
           ) : null}
@@ -2280,17 +2274,11 @@ export default function SeplanPage() {
               <Tabs
                 value={reportsViewTab}
                 onValueChange={(value) => setReportsViewTab(value as 'overview' | 'by-axis')}
+                className="min-h-0 flex-1 outline-none"
+                role="group"
+                aria-label="Informações Gerais — use as setas do teclado para alternar entre Visão geral e Execução por eixo"
               >
-                <HoverTabsList
-                  activeValue={reportsViewTab}
-                  className="w-fit"
-                  items={[
-                    { value: 'overview', content: 'Visão geral' },
-                    { value: 'by-axis', content: 'Execução por eixo' },
-                  ]}
-                />
-
-                <TabsContent value="overview" className="mt-5 flex flex-col gap-5">
+                <TabsContent value="overview" forceMount className="mt-5 flex flex-col gap-5">
                   <Card >
                     <CardHeader>
                       <CardTitle>Execução dos orçamentos temáticos</CardTitle>
@@ -2372,7 +2360,7 @@ export default function SeplanPage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="by-axis" className="mt-5">
+                <TabsContent value="by-axis" forceMount className="mt-5">
                   <Card>
                     <CardHeader>
                       <CardTitle>Execução por eixo</CardTitle>
@@ -2451,6 +2439,55 @@ export default function SeplanPage() {
                     </CardContent>
                   </Card>
                 </TabsContent>
+
+                <div className="sticky bottom-0 z-10 mt-2 flex items-center justify-between gap-4 border-t bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label="Seção anterior"
+                    aria-disabled={reportsViewTab === 'overview'}
+                    className={cn(reportsViewTab === 'overview' && 'pointer-events-none opacity-40')}
+                    onClick={() => setReportsViewTab('overview')}
+                  >
+                    <ChevronLeftIcon data-icon="inline-start" />
+                    Anterior
+                  </Button>
+
+                  <div className="flex items-center gap-2" role="tablist" aria-label="Seções de Informações Gerais">
+                    {REPORTS_VIEW_ITEMS.map((item) => {
+                      const active = reportsViewTab === item.value;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          aria-label={item.label}
+                          onClick={() => setReportsViewTab(item.value)}
+                          className={cn(
+                            'rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out',
+                            active
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    aria-label="Próxima seção"
+                    aria-disabled={reportsViewTab === 'by-axis'}
+                    className={cn(reportsViewTab === 'by-axis' && 'pointer-events-none opacity-40')}
+                    onClick={() => setReportsViewTab('by-axis')}
+                  >
+                    Próximo
+                    <ChevronRightIcon data-icon="inline-end" />
+                  </Button>
+                </div>
               </Tabs>
             </section>
           ) : null}
