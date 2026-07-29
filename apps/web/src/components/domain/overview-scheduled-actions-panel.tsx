@@ -64,6 +64,8 @@ type Props = {
   /** Importação vigente, usada para exibir exercício e data de atualização dos dados. */
   vigenteImport?: BudgetImport | null;
   lockedScopeLabel?: string;
+  /** Adapta o painel para receber órgão, função, subfunção e busca de filtros externos. */
+  variant?: 'thematic' | 'execution';
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -227,6 +229,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   relocatedUnitKeys,
   vigenteImport,
   lockedScopeLabel,
+  variant = 'thematic',
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -239,6 +242,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   );
   const weighted = weightedTheme !== NO_WEIGHTING;
   const hasLockedScope = Boolean(lockedScopeLabel);
+  const isExecutionVariant = variant === 'execution';
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectedLines, setSelectedLines] = useState<Map<string, Set<string>>>(() => new Map());
@@ -495,6 +499,10 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
 
   const scopeDescription = useMemo(() => {
     const count = displayedActions.length.toLocaleString('pt-BR');
+    if (isExecutionVariant) {
+      const unitPart = selectedUnitLabel ? ` · ${selectedUnitLabel}` : '';
+      return `${count} ação(ões) nos filtros do dashboard${unitPart}`;
+    }
     if (hasLockedScope) {
       const unitPart = showUnit ? ' · todas as unidades' : ` · ${selectedUnitLabel ?? '—'}`;
       return `${count} ação(ões) · ${lockedScopeLabel}${unitPart}`;
@@ -508,6 +516,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, [
     displayedActions.length,
     hasLockedScope,
+    isExecutionVariant,
     lockedScopeLabel,
     organizationCode,
     selectedOrganization,
@@ -616,8 +625,15 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, [displayedActions, exportThemes, exportFormat]);
 
   return (
-    <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" style={{ zoom: 0.85 }}>
-      <CardHeader className="shrink-0">
+    <Card
+      className={
+        isExecutionVariant
+          ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden border-0 py-0 shadow-none'
+          : 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+      }
+      style={{ zoom: isExecutionVariant ? 1 : 0.85 }}
+    >
+      {!isExecutionVariant ? <CardHeader className="shrink-0">
         <CardTitle>
           {hasLockedScope
             ? `Visão geral — ${lockedScopeLabel}`
@@ -739,9 +755,16 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             </Button>
           </div>
         </CardAction>
-      </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4">
-        <div className="flex shrink-0 flex-col gap-2 md:gap-3">
+      </CardHeader> : null}
+      <CardContent
+        className={
+          isExecutionVariant
+            ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-0'
+            : 'flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden md:gap-4'
+        }
+      >
+        {!isExecutionVariant ? (
+          <div className="flex shrink-0 flex-col gap-2 md:gap-3">
           <div className={hasLockedScope ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 md:gap-3' : 'grid grid-cols-2 gap-2 lg:grid-cols-4 md:gap-3'}>
             {!hasLockedScope ? (
               <Field className="min-w-0 gap-1.5">
@@ -800,9 +823,10 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               />
             </div>
           </div>
-        </div>
+          </div>
+        ) : null}
 
-        <div className="grid min-w-0 shrink-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5 md:gap-3">
+        {!isExecutionVariant ? <div className="grid min-w-0 shrink-0 grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-5 md:gap-3">
           {[
             { label: 'Ações', value: displayedActions.length.toLocaleString('pt-BR') },
             {
@@ -827,7 +851,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               <p className="truncate text-sm font-semibold tabular-nums md:mt-0.5 md:text-lg">{stat.value}</p>
             </div>
           ))}
-        </div>
+        </div> : null}
 
         {displayedActions.length === 0 ? (
           <Empty>
@@ -840,12 +864,18 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
             <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
           </Empty>
         ) : (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <Separator className="shrink-0" />
-            <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-auto">
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {!isExecutionVariant ? <Separator className="shrink-0" /> : null}
+            <div ref={scrollRef} className="h-0 min-h-0 min-w-0 flex-1 overflow-auto">
               <Table className={`table-fixed w-full ${tableMinWidth}`}>
                 <TableHeader className="sticky top-0 z-10 bg-background">
-                  <TableRow>
+                  <TableRow
+                    style={
+                      isExecutionVariant
+                        ? { borderBottomColor: '#000', borderBottomWidth: '1px' }
+                        : undefined
+                    }
+                  >
                     {calculatorMode ? (
                       <TableHead className="h-9 w-5 px-0 bg-background text-center align-middle">
                         <Checkbox

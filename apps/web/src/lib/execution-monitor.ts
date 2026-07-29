@@ -10,7 +10,13 @@
  */
 
 import { cleanExpenseDescription } from './expense-breakdown';
-import { EXPENSE_GROUPS, expenseElementName, parseExpenseAccount } from './expense-nature';
+import {
+  EXPENSE_CATEGORIES,
+  EXPENSE_GROUPS,
+  EXPENSE_MODALITIES,
+  expenseElementName,
+  parseExpenseAccount,
+} from './expense-nature';
 import { actionIsAmendment } from './functional-classification';
 import { getFonteLabel } from './fontes-recursos';
 import type { BudgetAction, ExpenseLine } from '@/types/domain';
@@ -44,6 +50,30 @@ const EMPTY: ExecutionTotals = {
   liquidated: 0,
   paid: 0,
   available: 0,
+};
+
+/**
+ * Estágio da despesa exibido nos gráficos. Toda `ExecutionRow` já carrega os cinco
+ * valores, então trocar a ótica é escolher qual campo ler — as agregações não
+ * precisam ser recalculadas.
+ */
+export type ExecutionMetric = 'initialBudget' | 'updatedBudget' | 'committed' | 'liquidated' | 'paid';
+
+/** Ordem que segue o ciclo da despesa: dotação → empenho → liquidação → pagamento. */
+export const EXECUTION_METRICS: ExecutionMetric[] = [
+  'initialBudget',
+  'updatedBudget',
+  'committed',
+  'liquidated',
+  'paid',
+];
+
+export const EXECUTION_METRIC_LABELS: Record<ExecutionMetric, string> = {
+  initialBudget: 'Dotação inicial',
+  updatedBudget: 'Dotação atualizada',
+  committed: 'Empenhado',
+  liquidated: 'Liquidado',
+  paid: 'Pago',
 };
 
 /**
@@ -121,18 +151,42 @@ export function aggregateByElement(actions: BudgetAction[]): ExecutionRow[] {
   return finish(map);
 }
 
-/** Agrega por grupo de natureza da despesa (pessoal, investimentos, etc.). */
-export function aggregateByGroup(actions: BudgetAction[]): ExecutionRow[] {
+/**
+ * Molde comum das agregações por uma posição da natureza da despesa cujo rótulo
+ * sai de um catálogo fixo (categoria, grupo, modalidade). O elemento não usa este
+ * molde porque tem um fallback próprio pela descrição do QDD.
+ */
+function aggregateByNaturePart(
+  actions: BudgetAction[],
+  pick: (nature: NonNullable<ReturnType<typeof parseExpenseAccount>>) => string,
+  catalog: Record<string, string>,
+  fallbackPrefix: string,
+): ExecutionRow[] {
   const map = new Map<string, Bucket>();
   for (const line of linesOf(actions)) {
     const nature = parseExpenseAccount(line.expenseAccount);
-    const code = nature?.groupCode ?? 'SEM_CLASSIFICACAO';
-    const name = nature ? EXPENSE_GROUPS[code] ?? `Grupo ${code}` : 'Sem classificação';
+    const code = nature ? pick(nature) : 'SEM_CLASSIFICACAO';
+    const name = nature ? catalog[code] ?? `${fallbackPrefix} ${code}` : 'Sem classificação';
     const bucket = bucketOf(map, code, nature ? `${code} — ${name}` : name, name);
     bucket.count += 1;
     addTotals(bucket, line);
   }
   return finish(map);
+}
+
+/** Agrega por grupo de natureza da despesa (pessoal, investimentos, etc.). */
+export function aggregateByGroup(actions: BudgetAction[]): ExecutionRow[] {
+  return aggregateByNaturePart(actions, (n) => n.groupCode, EXPENSE_GROUPS, 'Grupo');
+}
+
+/** Agrega por categoria econômica (correntes, capital, reserva de contingência). */
+export function aggregateByCategory(actions: BudgetAction[]): ExecutionRow[] {
+  return aggregateByNaturePart(actions, (n) => n.categoryCode, EXPENSE_CATEGORIES, 'Categoria');
+}
+
+/** Agrega por modalidade de aplicação (aplicação direta, transferências, etc.). */
+export function aggregateByModality(actions: BudgetAction[]): ExecutionRow[] {
+  return aggregateByNaturePart(actions, (n) => n.modalityCode, EXPENSE_MODALITIES, 'Modalidade');
 }
 
 // ── Por ação orçamentária ────────────────────────────────────────────────────
