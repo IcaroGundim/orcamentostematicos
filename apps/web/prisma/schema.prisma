@@ -247,6 +247,55 @@ model ImportPreview {
   createdAt DateTime @default(now())
 }
 
+/// Folha de pagamento do Estado, coletada do Portal da Transparência.
+/// Guarda SOMENTE agregados — nenhum nome, matrícula ou dado pessoal é persistido.
+/// Um registro por mês de referência; a coleta substitui o mês inteiro.
+model PayrollSnapshot {
+  id          String   @id @default(cuid())
+  year        Int
+  month       Int
+  collectedAt DateTime @default(now())
+
+  headcount       Int
+  /// Total informado pelo portal sem filtro — permite auditar a diferença em relação
+  /// a `headcount`, já que vínculos sem tipo de contrato não podem ser isolados.
+  portalHeadcount Int
+  grossTotal      Float @default(0)
+  deductionsTotal Float @default(0)
+  netTotal        Float @default(0)
+
+  groups PayrollGroup[]
+
+  @@unique([year, month])
+}
+
+enum PayrollDimension {
+  CONTRACT_TYPE
+  ORGANIZATION
+  CAREER
+  ORGANIZATION_CONTRACT
+}
+
+/// Uma linha agregada da folha. `dimension` diz por qual recorte ela foi somada;
+/// `key` é o valor do recorte (ex.: "EFETIVO", "SECRETARIA DE ESTADO DE SAUDE") e
+/// `secondaryKey` só é usado no cruzamento órgão × tipo de contrato.
+model PayrollGroup {
+  id           String           @id @default(cuid())
+  snapshotId   String
+  dimension    PayrollDimension
+  key          String
+  secondaryKey String?
+
+  headcount       Int
+  grossTotal      Float @default(0)
+  deductionsTotal Float @default(0)
+  netTotal        Float @default(0)
+
+  snapshot PayrollSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@index([snapshotId, dimension])
+}
+
 model ActionValidation {
   id                   String           @id @default(cuid())
   cycleId              String

@@ -4,10 +4,8 @@ import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { BarChart3Icon } from 'lucide-react';
 import { formatMoney } from '@/lib/api';
 import {
   EXECUTION_METRIC_LABELS,
@@ -21,11 +19,8 @@ function sortByMetric(rows: ExecutionRow[], metric: ExecutionMetric): ExecutionR
   return [...rows].sort((a, b) => b[metric] - a[metric]);
 }
 
-/**
- * Quantas barras cabem numa célula da grade 3×2 sem virar ruído. Menor que o
- * antigo painel de largura total justamente porque a célula tem ~1/3 da largura.
- */
-const CHART_TOP_N = 8;
+/** Limite de segurança para não renderizar milhares de barras num único SVG. */
+const CHART_MAX_ROWS = 100;
 const TABLE_INITIAL_ROWS = 15;
 
 function truncate(value: string, max = 34): string {
@@ -51,9 +46,13 @@ const AXIS_TICK_MAX_CHARS = 18;
  * simétrica de propósito: padding assimétrico faz o título colar numa das bordas
  * do fundo verde.
  */
-const CHART_HEADER_CLASS = 'py-2';
+const PANEL_CLASS =
+  '!gap-0 overflow-hidden rounded-none border-black/70 bg-white !py-0 shadow-none';
+const CHART_HEADER_CLASS =
+  '!mt-0 !rounded-none border-b border-black/70 bg-green-900 px-3 py-2 text-white';
 
 function chartTick(row: ExecutionRow): string {
+  if (row.chartLabel) return truncate(row.chartLabel, AXIS_TICK_MAX_CHARS);
   const prefix = row.key.length <= 8 && row.key !== row.shortLabel ? `${row.key} ` : '';
   return truncate(`${prefix}${row.shortLabel}`, AXIS_TICK_MAX_CHARS);
 }
@@ -69,21 +68,18 @@ function compactMoney(value: number): string {
 
 function EmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <Card size="sm" className="flex h-full min-h-0 flex-col overflow-hidden">
+    <Card size="sm" className={cn('flex h-full min-h-0 flex-col', PANEL_CLASS)}>
       <CardHeader className={CHART_HEADER_CLASS}>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="font-semibold uppercase tracking-wide">{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 overflow-hidden">
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <BarChart3Icon />
-            </EmptyMedia>
-            <EmptyTitle>Nada a exibir</EmptyTitle>
-            <EmptyDescription>Nenhum registro corresponde aos filtros.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+      <CardContent className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
+        <div>
+          <p className="text-sm font-semibold">Nenhum dado para exibir</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Não há registros correspondentes aos filtros aplicados.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
@@ -98,6 +94,8 @@ export type ExecutionChartCardProps = {
   metric: ExecutionMetric;
   /** Texto curto sob o título; omitido quando o título já basta. */
   description?: string;
+  /** Cor das barras; mantém a cor padrão do sistema quando não informada. */
+  color?: string;
   className?: string;
 };
 
@@ -110,21 +108,29 @@ export function ExecutionChartCard({
   rows,
   metric,
   description,
+  color = 'var(--chart-1)',
   className,
 }: ExecutionChartCardProps) {
   const chartData = useMemo(
     () =>
       sortByMetric(rows, metric)
         .filter((row) => row[metric] > 0)
-        .slice(0, CHART_TOP_N)
+        .slice(0, CHART_MAX_ROWS)
         .map((row) => ({ ...row, tick: chartTick(row) })),
     [rows, metric],
   );
+  const axisWidth = useMemo(() => {
+    const longestTick = chartData.reduce(
+      (longest, row) => Math.max(longest, row.tick.length),
+      0,
+    );
+    return Math.min(AXIS_WIDTH, Math.max(52, Math.ceil(longestTick * 5.4 + 10)));
+  }, [chartData]);
 
   // A chave do config precisa casar com o dataKey para o tooltip resolver o rótulo.
   const chartConfig = useMemo(
-    () => ({ [metric]: { label: EXECUTION_METRIC_LABELS[metric], color: 'var(--chart-1)' } }),
-    [metric],
+    () => ({ [metric]: { label: EXECUTION_METRIC_LABELS[metric], color } }),
+    [metric, color],
   );
 
   if (chartData.length === 0) return <EmptyState title={title} description={description} />;
@@ -133,15 +139,19 @@ export function ExecutionChartCard({
     // `size="sm"` é a variante compacta do design system: reduz o padding do header
     // (que tem fundo verde por padrão) e o tamanho do título. Sem ela, o header fica
     // desproporcional numa célula da grade.
-    <Card size="sm" className={cn('flex h-full min-h-0 min-w-0 flex-col overflow-hidden', className)}>
+    <Card
+      size="sm"
+      className={cn('flex h-full min-h-0 min-w-0 flex-col', PANEL_CLASS, className)}
+    >
       <CardHeader className={CHART_HEADER_CLASS}>
-        <CardTitle className="leading-snug">{title}</CardTitle>
+        <CardTitle className="font-semibold uppercase leading-snug tracking-wide">{title}</CardTitle>
         {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 flex-1">
+      <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
         <ChartContainer
           config={chartConfig}
-          className="h-full min-h-0 w-full flex-1 aspect-auto"
+          className="min-h-full w-full shrink-0 aspect-auto"
+          style={{ height: `${Math.max(170, chartData.length * 26 + 34)}px` }}
         >
           <BarChart
             accessibilityLayer
@@ -161,7 +171,7 @@ export function ExecutionChartCard({
             <YAxis
               type="category"
               dataKey="tick"
-              width={AXIS_WIDTH}
+              width={axisWidth}
               tickLine={false}
               axisLine={false}
               tick={{ fontSize: 10 }}
@@ -178,7 +188,12 @@ export function ExecutionChartCard({
                 />
               }
             />
-            <Bar dataKey={metric} fill="var(--chart-1)" radius={3} />
+            <Bar
+              dataKey={metric}
+              fill={color}
+              stroke="none"
+              radius={0}
+            />
           </BarChart>
         </ChartContainer>
       </CardContent>
@@ -198,11 +213,21 @@ export type ExecutionTablePanelProps = {
   entityLabel: string;
   /** Cabeçalho da coluna de contagem, ex.: "Linhas" ou "Ações". */
   countLabel: string;
+  /**
+   * Colunas de valor. O padrão são os estágios da despesa orçamentária; outros
+   * domínios (a folha de pagamento, por exemplo) passam as suas para os cabeçalhos
+   * não mentirem sobre o que a coluna contém.
+   */
+  moneyColumns?: MoneyColumn[];
+  /** Oculta a coluna de percentual, que só faz sentido na execução orçamentária. */
+  hideRate?: boolean;
   className?: string;
 };
 
-/** Colunas de valor, na ordem do ciclo da despesa. */
-const MONEY_COLUMNS: { metric: ExecutionMetric; header: string }[] = [
+export type MoneyColumn = { metric: ExecutionMetric; header: string };
+
+/** Colunas de valor padrão, na ordem do ciclo da despesa orçamentária. */
+const MONEY_COLUMNS: MoneyColumn[] = [
   { metric: 'initialBudget', header: 'Dotação inicial' },
   { metric: 'updatedBudget', header: 'Atualizada' },
   { metric: 'committed', header: 'Empenhado' },
@@ -217,6 +242,8 @@ export function ExecutionTablePanel({
   metric,
   entityLabel,
   countLabel,
+  moneyColumns = MONEY_COLUMNS,
+  hideRate = false,
   className,
 }: ExecutionTablePanelProps) {
   const [showAll, setShowAll] = useState(false);
@@ -226,19 +253,19 @@ export function ExecutionTablePanel({
   if (rows.length === 0) return <EmptyState title={title} description={description} />;
 
   return (
-    <Card size="sm" className={cn('flex min-h-0 flex-col', className)}>
-      <CardHeader className="shrink-0 py-2">
-        <CardTitle>{title}</CardTitle>
+    <Card size="sm" className={cn('flex min-h-0 flex-col', PANEL_CLASS, className)}>
+      <CardHeader className={cn('shrink-0', CHART_HEADER_CLASS)}>
+        <CardTitle className="font-semibold uppercase tracking-wide">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-0 px-0">
         <div className="min-h-0 min-w-0 flex-1 overflow-auto">
           <Table>
-            <TableHeader>
-              <TableRow>
+            <TableHeader className="sticky top-0 z-10 bg-stone-50">
+              <TableRow className="border-b border-black/70">
                 <TableHead className="min-w-[16rem]">{entityLabel}</TableHead>
                 <TableHead className="text-right">{countLabel}</TableHead>
-                {MONEY_COLUMNS.map((column) => (
+                {moneyColumns.map((column) => (
                   <TableHead
                     key={column.metric}
                     className={cn('text-right', column.metric === metric && 'text-foreground font-semibold')}
@@ -246,17 +273,17 @@ export function ExecutionTablePanel({
                     {column.header}
                   </TableHead>
                 ))}
-                <TableHead className="text-right">Execução</TableHead>
+                {hideRate ? null : <TableHead className="text-right">Execução</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows.map((row) => (
-                <TableRow key={row.key}>
+                <TableRow key={row.key} className="odd:bg-stone-50/60">
                   <TableCell className="font-medium">{row.label}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.count.toLocaleString('pt-BR')}
                   </TableCell>
-                  {MONEY_COLUMNS.map((column) => (
+                  {moneyColumns.map((column) => (
                     <TableCell
                       key={column.metric}
                       className={cn(
@@ -284,7 +311,7 @@ export function ExecutionTablePanel({
           <Button
             variant="outline"
             size="sm"
-            className="self-center"
+            className="my-2 self-center rounded-sm border-black/50 shadow-none"
             onClick={() => setShowAll((value) => !value)}
           >
             {showAll

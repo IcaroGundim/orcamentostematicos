@@ -6,24 +6,26 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CoinsIcon,
-  LandmarkIcon,
   LogOutIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   RefreshCwIcon,
   ScrollTextIcon,
   SearchIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   ExecutionChartCard,
   ExecutionTablePanel,
 } from '@/components/domain/execution-breakdown-panel';
+import { PayrollPanel, type PayrollDto } from '@/components/domain/payroll-panel';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
+import { FiscalSecretariatView } from '@/components/domain/fiscal-secretariat-view';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -49,12 +51,16 @@ import {
   aggregateByOrganization,
   aggregateBySource,
   amendmentActions,
+  centralPayrollActionsForTargets,
   executionRate,
   totalsOf,
 } from '@/lib/execution-monitor';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
+import { getFonteLabel } from '@/lib/fontes-recursos';
+import { organizationAcronym } from '@/lib/organization-acronym';
+import { payrollHeadcountForQddScope } from '@/lib/payroll-scope';
 import { cn } from '@/lib/utils';
-import type { BudgetAction, Organization } from '@/types/domain';
+import type { BudgetAction, Metadata, Organization } from '@/types/domain';
 
 const allValue = 'ALL';
 const PAGE_ZOOM = 0.95;
@@ -65,110 +71,62 @@ const PAGE_ZOOM = 0.95;
  * fica ilegível em menos de ~330px.
  */
 const gridClass =
-  'grid h-full min-h-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:grid-rows-2';
+  'grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 xl:grid-rows-2';
 
-type ViewId = 'element' | 'action' | 'amendments' | 'source';
-type ContentView = 'overview' | 'actions' | 'table';
+const chartColors = {
+  element: '#5f8f70',
+  group: '#8fa873',
+  category: '#b8b477',
+  modality: '#110f24',
+  organization: '#c8c89f',
+  source: '#5f8f70',
+  amendmentOrganization: '#c8c89f',
+  amendmentAction: '#110f24',
+  amendmentElement: '#5f8f70',
+  amendmentSource: '#8fa873',
+  amendmentGroup: '#b8b477',
+  amendmentCategory: '#110f24',
+} as const;
+
+/**
+ * Dimensões de análise. Antes havia uma por recorte (elemento, ação, fonte), mas as
+ * três exibiam o mesmo conjunto de gráficos em ordens diferentes — só mudavam de
+ * posição. Foram fundidas em `geral`; as emendas continuam separadas porque ali os
+ * recortes são calculados apenas sobre as ações de emenda, e não sobre o total.
+ */
+type ViewId = 'geral' | 'amendments';
+type ContentView = 'overview' | 'fiscal' | 'actions' | 'table' | 'payroll';
 
 const VIEWS: { id: ViewId; label: string; icon: typeof BarChart3Icon }[] = [
-  { id: 'element', label: 'Elemento de despesa', icon: CoinsIcon },
-  { id: 'action', label: 'Ação orçamentária', icon: BarChart3Icon },
+  { id: 'geral', label: 'Geral', icon: CoinsIcon },
   { id: 'amendments', label: 'Emendas parlamentares', icon: ScrollTextIcon },
-  { id: 'source', label: 'Fonte de recurso', icon: LandmarkIcon },
 ];
 
 const CONTENT_VIEWS: { id: ContentView; label: string }[] = [
   { id: 'overview', label: 'Visão geral' },
+  { id: 'fiscal', label: 'Órgão' },
   { id: 'actions', label: 'Ações' },
   { id: 'table', label: 'Tabela' },
+  { id: 'payroll', label: 'Folha de pagamento' },
 ];
 
 function ExecutionViewNavigation({
   activeView,
   onSelect,
+  collapsed,
 }: {
   activeView: ViewId;
   onSelect: (view: ViewId) => void;
+  collapsed: boolean;
 }) {
-  const navigationRef = useRef<HTMLDivElement>(null);
-  const activeViewRef = useRef(activeView);
-  const highlightedViewRef = useRef(activeView);
-  const [highlightedView, setHighlightedView] = useState(activeView);
-  const [highlight, setHighlight] = useState({
-    top: 0,
-    left: 0,
-    width: 0,
-    height: 0,
-    ready: false,
-  });
-
-  const updateHighlight = useCallback((view: ViewId) => {
-    const navigation = navigationRef.current;
-    const target = navigation?.querySelector<HTMLElement>(`[data-execution-view="${view}"]`);
-    if (!navigation || !target) return;
-    setHighlight({
-      top: target.offsetTop,
-      left: target.offsetLeft,
-      width: target.offsetWidth,
-      height: target.offsetHeight,
-      ready: true,
-    });
-  }, []);
-
-  const highlightView = useCallback(
-    (view: ViewId) => {
-      highlightedViewRef.current = view;
-      setHighlightedView(view);
-      updateHighlight(view);
-    },
-    [updateHighlight],
-  );
-
-  useLayoutEffect(() => {
-    activeViewRef.current = activeView;
-    highlightedViewRef.current = activeView;
-    setHighlightedView(activeView);
-    updateHighlight(activeView);
-  }, [activeView, updateHighlight]);
-
-  useEffect(() => {
-    const navigation = navigationRef.current;
-    if (!navigation) return;
-    const onResize = () => updateHighlight(highlightedViewRef.current);
-    const resizeObserver = new ResizeObserver(onResize);
-    resizeObserver.observe(navigation);
-    window.addEventListener('resize', onResize);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', onResize);
-    };
-  }, [updateHighlight]);
-
   return (
     <div
-      ref={navigationRef}
-      className="relative flex flex-wrap gap-2 xl:flex-col"
+      className="flex flex-wrap border border-black/70 bg-white xl:flex-col xl:border-0"
       role="tablist"
-      onMouseLeave={() => highlightView(activeViewRef.current)}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute z-0 rounded-lg bg-primary shadow-sm',
-          'transition-[top,left,width,height] duration-300 ease-out',
-          highlight.ready ? 'opacity-100' : 'opacity-0',
-        )}
-        style={{
-          top: highlight.top,
-          left: highlight.left,
-          width: highlight.width,
-          height: highlight.height,
-        }}
-      />
-
       {VIEWS.map((item) => {
         const Icon = item.icon;
-        const highlighted = highlightedView === item.id;
+        const active = activeView === item.id;
         return (
           <button
             key={item.id}
@@ -177,18 +135,20 @@ function ExecutionViewNavigation({
             aria-selected={activeView === item.id}
             data-execution-view={item.id}
             onClick={() => onSelect(item.id)}
-            onFocus={() => highlightView(item.id)}
-            onMouseEnter={() => highlightView(item.id)}
             className={cn(
-              'relative z-10 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-none',
-              'xl:w-full xl:justify-start',
-              highlighted
-                ? 'border-transparent bg-transparent text-primary-foreground'
-                : 'border-border bg-background text-muted-foreground hover:text-foreground',
+              'relative inline-flex min-h-10 items-center gap-2 border-b border-black/20 px-3 py-2 text-xs font-semibold transition-colors',
+              'xl:w-full xl:border-l-4',
+              collapsed ? 'xl:justify-center xl:px-2' : 'xl:justify-start',
+              active
+                ? 'border-l-green-900 bg-green-50 text-green-950'
+                : 'border-l-transparent bg-white text-muted-foreground hover:bg-stone-50 hover:text-foreground',
             )}
+            title={collapsed ? item.label : undefined}
           >
             <Icon className="size-4 shrink-0" />
-            <span className="text-left leading-tight">{item.label}</span>
+            <span className={cn('text-left leading-tight', collapsed && 'xl:sr-only')}>
+              {item.label}
+            </span>
           </button>
         );
       })}
@@ -203,18 +163,28 @@ function normalize(value: string) {
     .toLowerCase();
 }
 
+function normalizeSourceCode(value: string) {
+  const trimmed = value.trim();
+  return trimmed.replace(/\D/g, '') || trimmed;
+}
+
 export default function OrcamentoPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [actions, setActions] = useState<BudgetAction[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [view, setView] = useState<ViewId>('element');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [view, setView] = useState<ViewId>('geral');
   const [contentView, setContentView] = useState<ContentView>('overview');
-  const [metric, setMetric] = useState<ExecutionMetric>('liquidated');
+  const [metric, setMetric] = useState<ExecutionMetric>('updatedBudget');
+  const [payroll, setPayroll] = useState<PayrollDto | null>(null);
 
   const [organizationCode, setOrganizationCode] = useState(allValue);
+  const [unitFilter, setUnitFilter] = useState(allValue);
+  const [sourceFilter, setSourceFilter] = useState(allValue);
   const [functionFilter, setFunctionFilter] = useState(allValue);
   const [subfunctionFilter, setSubfunctionFilter] = useState(allValue);
   const [search, setSearch] = useState('');
@@ -222,12 +192,20 @@ export default function OrcamentoPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [loadedActions, loadedOrganizations] = await Promise.all([
+      const [loadedActions, loadedOrganizations, loadedMetadata] = await Promise.all([
         api<BudgetAction[]>('/budget-actions'),
         api<Organization[]>('/organizations'),
+        api<Metadata>('/metadata'),
       ]);
       setActions(loadedActions);
       setOrganizations(loadedOrganizations);
+      setMetadata(loadedMetadata);
+
+      // A folha vem de fonte externa e é opcional: se a coleta ainda não rodou ou o
+      // portal estiver fora do ar, o resto do painel não pode deixar de carregar.
+      api<PayrollDto>('/payroll')
+        .then(setPayroll)
+        .catch(() => setPayroll(null));
     } finally {
       setIsLoading(false);
     }
@@ -300,11 +278,80 @@ export default function OrcamentoPage() {
     ],
     [organizations],
   );
+  const fiscalOrganizationOptions = useMemo(
+    () => [
+      { value: allValue, label: 'Selecione uma secretaria' },
+      ...organizations.map((organization) => ({
+        value: organization.code,
+        label: `${organization.code} — ${organization.name}`,
+      })),
+    ],
+    [organizations],
+  );
+
+  const unitOptions = useMemo(() => {
+    const units = new Map<string, { value: string; label: string }>();
+    for (const action of actions) {
+      if (organizationCode !== allValue && action.organizationCode !== organizationCode) continue;
+      const value = `${action.organizationCode}|${action.unitCode}`;
+      if (units.has(value)) continue;
+      units.set(value, {
+        value,
+        label:
+          organizationCode === allValue
+            ? `${action.organizationCode}/${action.unitCode} — ${action.unitName}`
+            : `${action.unitCode} — ${action.unitName}`,
+      });
+    }
+    return [
+      { value: allValue, label: 'Todas as unidades' },
+      ...[...units.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
+    ];
+  }, [actions, organizationCode]);
+
+  const sourceOptions = useMemo(() => {
+    const sources = new Map<string, { value: string; label: string }>();
+    for (const action of actions) {
+      if (organizationCode !== allValue && action.organizationCode !== organizationCode) continue;
+      if (
+        unitFilter !== allValue &&
+        `${action.organizationCode}|${action.unitCode}` !== unitFilter
+      ) {
+        continue;
+      }
+      for (const line of action.expenseLines ?? []) {
+        const code = normalizeSourceCode(line.source ?? '');
+        if (!code || sources.has(code)) continue;
+        sources.set(code, {
+          value: code,
+          label: `${code} — ${getFonteLabel(code) ?? 'Fonte não catalogada'}`,
+        });
+      }
+    }
+    return [
+      { value: allValue, label: 'Todas as fontes' },
+      ...[...sources.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
+    ];
+  }, [actions, organizationCode, unitFilter]);
 
   const filteredActions = useMemo(() => {
     const term = normalize(search.trim());
     return actions.filter((action) => {
       if (organizationCode !== allValue && action.organizationCode !== organizationCode) return false;
+      if (
+        unitFilter !== allValue &&
+        `${action.organizationCode}|${action.unitCode}` !== unitFilter
+      ) {
+        return false;
+      }
+      if (
+        sourceFilter !== allValue &&
+        !(action.expenseLines ?? []).some(
+          (line) => normalizeSourceCode(line.source ?? '') === sourceFilter,
+        )
+      ) {
+        return false;
+      }
       if (!actionMatchesFunctionalFilters(action, functionFilter, subfunctionFilter, allValue)) return false;
       if (!term) return true;
       return (
@@ -314,10 +361,120 @@ export default function OrcamentoPage() {
         normalize(action.organizationName).includes(term)
       );
     });
-  }, [actions, organizationCode, functionFilter, subfunctionFilter, search]);
+  }, [
+    actions,
+    organizationCode,
+    unitFilter,
+    sourceFilter,
+    functionFilter,
+    subfunctionFilter,
+    search,
+  ]);
 
   const totals = useMemo(() => totalsOf(filteredActions), [filteredActions]);
+  const fiscalActions = useMemo(
+    () =>
+      actions.filter((action) => {
+        if (organizationCode === allValue || action.organizationCode !== organizationCode) {
+          return false;
+        }
+        if (
+          unitFilter !== allValue &&
+          `${action.organizationCode}|${action.unitCode}` !== unitFilter
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [actions, organizationCode, unitFilter],
+  );
+  const selectedOrganization = useMemo(
+    () => organizations.find((organization) => organization.code === organizationCode),
+    [organizations, organizationCode],
+  );
+  const fiscalPayrollHeadcount = useMemo(
+    () =>
+      payrollHeadcountForQddScope(
+        payroll,
+        organizationCode,
+        unitFilter,
+        allValue,
+      ),
+    [organizationCode, payroll, unitFilter],
+  );
+  const personnelScope = useMemo(
+    () => {
+      if (!selectedOrganization) {
+        return {
+          localActions: [] as BudgetAction[],
+          centralActions: [] as BudgetAction[],
+          label: '',
+          note: '',
+        };
+      }
+      const organizationTarget = {
+        organizationCode: selectedOrganization.code,
+        name: selectedOrganization.name,
+        acronym: organizationAcronym(
+          selectedOrganization.code,
+          selectedOrganization.name,
+        ),
+      };
+      const unitsByCode = new Map<
+        string,
+        { organizationCode: string; unitCode: string; name: string }
+      >();
+      const organizationActions: BudgetAction[] = [];
+      for (const action of actions) {
+        if (action.organizationCode !== selectedOrganization.code) continue;
+        organizationActions.push(action);
+        if (!unitsByCode.has(action.unitCode)) {
+          unitsByCode.set(action.unitCode, {
+            organizationCode: action.organizationCode,
+            unitCode: action.unitCode,
+            name: action.unitName,
+          });
+        }
+      }
+      const organizationTargets = [organizationTarget, ...unitsByCode.values()];
+      const organizationCentralActions = centralPayrollActionsForTargets(
+        actions,
+        organizationTargets,
+      );
 
+      if (unitFilter === allValue) {
+        return {
+          localActions: organizationActions,
+          centralActions: organizationCentralActions,
+          label: 'Secretaria e unidades vinculadas',
+          note: 'Consolidação no nível da secretaria.',
+        };
+      }
+
+      const selectedUnitCode = unitFilter.split('|')[1] ?? '';
+      const selectedUnit = unitsByCode.get(selectedUnitCode);
+      const unitMatches = selectedUnit
+        ? centralPayrollActionsForTargets(actions, [selectedUnit])
+        : [];
+      if (unitMatches.length) {
+        return {
+          localActions: fiscalActions,
+          centralActions: unitMatches,
+          label: selectedUnit?.name ?? 'Unidade selecionada',
+          note: 'A unidade possui ação própria identificada na folha centralizada.',
+        };
+      }
+
+      return {
+        localActions: organizationActions,
+        centralActions: organizationCentralActions,
+        label: 'Secretaria consolidada',
+        note:
+          'A unidade não possui ação própria na folha; por isso, pessoal é apresentado no nível da secretaria, sem rateio.',
+      };
+    },
+    [actions, fiscalActions, selectedOrganization, unitFilter],
+  );
   // Recortes sobre todas as ações filtradas.
   const elementRows = useMemo(() => aggregateByElement(filteredActions), [filteredActions]);
   const groupRows = useMemo(() => aggregateByGroup(filteredActions), [filteredActions]);
@@ -341,12 +498,16 @@ export default function OrcamentoPage() {
 
   const hasFilters =
     organizationCode !== allValue ||
+    unitFilter !== allValue ||
+    sourceFilter !== allValue ||
     functionFilter !== allValue ||
     subfunctionFilter !== allValue ||
     search.trim() !== '';
 
   function clearFilters() {
     setOrganizationCode(allValue);
+    setUnitFilter(allValue);
+    setSourceFilter(allValue);
     setFunctionFilter(allValue);
     setSubfunctionFilter(allValue);
     setSearch('');
@@ -359,6 +520,7 @@ export default function OrcamentoPage() {
   const previousContentView = CONTENT_VIEWS[Math.max(0, contentViewIndex - 1)]?.id ?? 'overview';
   const nextContentView =
     CONTENT_VIEWS[Math.min(CONTENT_VIEWS.length - 1, contentViewIndex + 1)]?.id ?? 'table';
+  const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll';
 
   const kpis = [
     { label: 'Dotação inicial', value: formatMoney(totals.initialBudget) },
@@ -373,9 +535,9 @@ export default function OrcamentoPage() {
   ];
 
   return (
-    <div className="h-svh w-full overflow-hidden bg-background">
+    <div className="orcamento-page-root h-svh w-full overflow-hidden bg-background">
       <div
-        className="flex flex-col overflow-hidden bg-background"
+        className="orcamento-zoom-shell flex flex-col overflow-hidden bg-background"
         style={{
           width: `${100 / PAGE_ZOOM}%`,
           height: `${100 / PAGE_ZOOM}%`,
@@ -383,7 +545,7 @@ export default function OrcamentoPage() {
           transformOrigin: 'top left',
         }}
       >
-      <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
+      <header className="orcamento-app-header sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto shrink-0" />
@@ -397,7 +559,7 @@ export default function OrcamentoPage() {
           <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="secondary"
-              className="hidden border-border/60 bg-white text-foreground hover:bg-white/90 lg:inline-flex"
+              className="hidden rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100 lg:inline-flex"
               onClick={() => router.push('/seplan')}
             >
               <BanknoteIcon data-icon="inline-start" />
@@ -405,7 +567,7 @@ export default function OrcamentoPage() {
             </Button>
             <Button
               variant="secondary"
-              className="border-border/60 bg-white text-foreground hover:bg-white/90"
+              className="rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100"
               onClick={() => void load()}
               disabled={isLoading}
             >
@@ -414,7 +576,7 @@ export default function OrcamentoPage() {
             </Button>
             <Button
               variant="secondary"
-              className="border-border/60 bg-white text-foreground hover:bg-white/90"
+              className="rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100"
               onClick={signOut}
               disabled={isSigningOut}
             >
@@ -431,17 +593,33 @@ export default function OrcamentoPage() {
         fixas ao rolar para ficarem sempre alcançáveis sem cobrir o conteúdo. Abaixo de
         `xl` elas voltam a ser faixas horizontais acima do conteúdo.
       */}
-      <main className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto p-4 xl:flex-row xl:items-stretch xl:gap-4 xl:overflow-hidden xl:p-4">
+      <main className="orcamento-main flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto p-3 xl:flex-row xl:items-stretch xl:gap-3 xl:overflow-hidden xl:p-3">
         {/* Trilha esquerda — ótica dos dados, filtros e visões */}
+        {!isExecutiveView ? (
         <div
           className={cn(
-            'flex shrink-0 flex-col gap-3 xl:w-64',
+            'orcamento-sidebar',
+            'flex shrink-0 flex-col overflow-hidden border border-black/70 bg-white transition-[width] duration-300 ease-out',
+            sidebarCollapsed ? 'xl:w-16' : 'xl:w-64',
             // No desktop, a trilha ocupa a altura disponível e rola internamente,
             // sem provocar scroll no documento.
             'xl:h-full xl:min-h-0 xl:overflow-hidden',
           )}
         >
-          <div className="flex flex-col gap-1.5 rounded-lg border bg-card p-3">
+          <div
+            className={cn(
+              'shrink-0 bg-green-900 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white',
+              sidebarCollapsed && 'xl:hidden',
+            )}
+          >
+            Filtros da execução
+          </div>
+          <div
+            className={cn(
+              'flex shrink-0 flex-col gap-1.5 border-b border-black/30 bg-white p-3',
+              sidebarCollapsed && 'xl:hidden',
+            )}
+          >
             <label htmlFor="execution-metric" className="text-xs font-medium text-muted-foreground">
               Exibir valores de
             </label>
@@ -464,7 +642,12 @@ export default function OrcamentoPage() {
           </div>
 
           {/* Filtros */}
-          <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+          <div
+            className={cn(
+              'flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-b border-black/30 bg-white p-3',
+              sidebarCollapsed && 'xl:hidden',
+            )}
+          >
             <Field className="min-w-0 gap-1.5">
               <FieldLabel className={filterFieldLabelClass}>Buscar</FieldLabel>
               <div className="relative">
@@ -482,9 +665,36 @@ export default function OrcamentoPage() {
               <SearchableCombobox
                 className="relative w-full min-w-0"
                 value={organizationCode}
-                onChange={setOrganizationCode}
+                onChange={(value) => {
+                  setOrganizationCode(value);
+                  setUnitFilter(allValue);
+                  setSourceFilter(allValue);
+                }}
                 placeholder="Todos os órgãos"
                 items={organizationOptions}
+              />
+            </Field>
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
+              <SearchableCombobox
+                className="relative w-full min-w-0"
+                value={unitFilter}
+                onChange={(value) => {
+                  setUnitFilter(value);
+                  setSourceFilter(allValue);
+                }}
+                placeholder="Todas as unidades"
+                items={unitOptions}
+              />
+            </Field>
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Fonte de recurso</FieldLabel>
+              <SearchableCombobox
+                className="relative w-full min-w-0"
+                value={sourceFilter}
+                onChange={setSourceFilter}
+                placeholder="Todas as fontes"
+                items={sourceOptions}
               />
             </Field>
             <FunctionalClassificationFilters
@@ -511,9 +721,21 @@ export default function OrcamentoPage() {
 
           {/* Visões — abaixo dos filtros e do seletor */}
           {contentView !== 'actions' ? (
-            <nav aria-label="Visões da execução orçamentária">
+            <nav
+              className="shrink-0 bg-white"
+              aria-label="Visões da execução orçamentária"
+            >
+              <div
+                className={cn(
+                  'border-b border-black/30 px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+                  sidebarCollapsed && 'xl:sr-only',
+                )}
+              >
+                Dimensão de análise
+              </div>
               <ExecutionViewNavigation
                 activeView={view}
+                collapsed={sidebarCollapsed}
                 onSelect={(selectedView) => {
                   setView(selectedView);
                   setContentView('overview');
@@ -522,17 +744,30 @@ export default function OrcamentoPage() {
             </nav>
           ) : null}
         </div>
+        ) : null}
 
         {/* Coluna central — conteúdo */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 xl:h-full xl:overflow-hidden">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="font-heading text-xl font-semibold">Monitoramento da execução orçamentária</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="orcamento-content-column flex min-h-0 min-w-0 flex-1 flex-col gap-2 xl:h-full xl:overflow-hidden">
+        {!isExecutiveView ? (
+        <div className="orcamento-page-heading flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b border-black/70 pb-2">
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden shrink-0 self-center rounded-sm border-black/60 shadow-none xl:inline-flex"
+            aria-label={sidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
+            title={sidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
+          </Button>
+          <h1 className="font-heading text-xl font-bold tracking-tight">Monitoramento da execução orçamentária</h1>
+          <p className="border-l border-black/40 pl-3 text-sm text-muted-foreground">
             {isLoading
               ? 'Carregando dados do QDD vigente…'
               : `${filteredActions.length.toLocaleString('pt-BR')} ação(ões)`}
           </p>
         </div>
+        ) : null}
 
         {/* Totais */}
         {/*
@@ -540,22 +775,27 @@ export default function OrcamentoPage() {
           1440px cada célula ficaria com ~147px e os valores (que precisam de ~170px)
           apareceriam cortados.
         */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+        {!isExecutiveView ? (
+        <dl className="orcamento-global-kpis grid grid-cols-2 overflow-hidden border border-black/70 bg-white lg:grid-cols-3 2xl:grid-cols-6">
           {kpis.map((kpi) => (
-            <Card key={kpi.label} size="sm">
-              <CardContent className="flex flex-col gap-1 py-1">
-                <span className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+            <div
+              key={kpi.label}
+              className="min-w-0 border-b border-r border-black/20 px-3 py-2.5 last:border-r-0 2xl:border-b-0"
+            >
+                <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   {kpi.label}
-                </span>
+                </dt>
                 {isLoading ? (
                   <Skeleton className="h-6 w-24" />
                 ) : (
-                  <span className="truncate text-base font-semibold tabular-nums">{kpi.value}</span>
+                  <dd className="mt-1 truncate text-base font-bold tabular-nums" title={kpi.value}>
+                    {kpi.value}
+                  </dd>
                 )}
-              </CardContent>
-            </Card>
+            </div>
           ))}
-        </div>
+        </dl>
+        ) : null}
 
         {isLoading ? (
           <Skeleton className="h-96" />
@@ -565,54 +805,60 @@ export default function OrcamentoPage() {
             onValueChange={(value) => setContentView(value as ContentView)}
             className="min-h-0 flex-1 overflow-hidden"
             role="group"
-            aria-label="Visualização da execução — use as setas do teclado para alternar entre Visão geral, Ações e Tabela"
+            aria-label="Visualização da execução — use as setas do teclado para alternar entre Visão geral, Órgão, Ações, Tabela e Folha de pagamento"
           >
             <TabsContent value="overview" forceMount className="min-h-0 overflow-hidden">
               <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
-                <TabsContent value="element" forceMount className="min-h-0 overflow-hidden">
+                <TabsContent value="geral" forceMount className="min-h-0 overflow-hidden">
                   <div className={gridClass}>
-                    <ExecutionChartCard title="Por elemento de despesa" rows={elementRows} metric={metric} />
-                    <ExecutionChartCard title="Por grupo de natureza" rows={groupRows} metric={metric} />
-                    <ExecutionChartCard title="Por categoria econômica" rows={categoryRows} metric={metric} />
-                    <ExecutionChartCard title="Por modalidade de aplicação" rows={modalityRows} metric={metric} />
-                    <ExecutionChartCard title="Por órgão" rows={organizationRows} metric={metric} />
-                    <ExecutionChartCard title="Por fonte de recurso" rows={sourceRows} metric={metric} />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="action" forceMount className="min-h-0 overflow-hidden">
-                  <div className={gridClass}>
-                    <ExecutionChartCard title="Por ação orçamentária" rows={actionRows} metric={metric} />
-                    <ExecutionChartCard title="Por órgão" rows={organizationRows} metric={metric} />
-                    <ExecutionChartCard title="Por elemento de despesa" rows={elementRows} metric={metric} />
-                    <ExecutionChartCard title="Por fonte de recurso" rows={sourceRows} metric={metric} />
-                    <ExecutionChartCard title="Por grupo de natureza" rows={groupRows} metric={metric} />
-                    <ExecutionChartCard title="Por modalidade de aplicação" rows={modalityRows} metric={metric} />
+                    <ExecutionChartCard title="Por elemento de despesa" rows={elementRows} metric={metric} color={chartColors.element} />
+                    <ExecutionChartCard title="Por grupo de natureza" rows={groupRows} metric={metric} color={chartColors.group} />
+                    <ExecutionChartCard title="Por categoria econômica" rows={categoryRows} metric={metric} color={chartColors.category} />
+                    <ExecutionChartCard title="Por modalidade de aplicação" rows={modalityRows} metric={metric} color={chartColors.modality} />
+                    <ExecutionChartCard title="Por órgão" rows={organizationRows} metric={metric} color={chartColors.organization} />
+                    <ExecutionChartCard title="Por fonte de recurso" rows={sourceRows} metric={metric} color={chartColors.source} />
                   </div>
                 </TabsContent>
 
                 <TabsContent value="amendments" forceMount className="min-h-0 overflow-hidden">
                   <div className={gridClass}>
-                    <ExecutionChartCard title="Emendas por órgão" rows={amendmentOrganizationRows} metric={metric} />
-                    <ExecutionChartCard title="Emendas por ação" rows={amendmentRows} metric={metric} />
-                    <ExecutionChartCard title="Emendas por elemento" rows={amendmentElementRows} metric={metric} />
-                    <ExecutionChartCard title="Emendas por fonte" rows={amendmentSourceRows} metric={metric} />
-                    <ExecutionChartCard title="Emendas por grupo de natureza" rows={amendmentGroupRows} metric={metric} />
-                    <ExecutionChartCard title="Emendas por categoria econômica" rows={amendmentCategoryRows} metric={metric} />
+                    <ExecutionChartCard title="Emendas por órgão" rows={amendmentOrganizationRows} metric={metric} color={chartColors.amendmentOrganization} />
+                    <ExecutionChartCard title="Emendas por ação" rows={amendmentRows} metric={metric} color={chartColors.amendmentAction} />
+                    <ExecutionChartCard title="Emendas por elemento" rows={amendmentElementRows} metric={metric} color={chartColors.amendmentElement} />
+                    <ExecutionChartCard title="Emendas por fonte" rows={amendmentSourceRows} metric={metric} color={chartColors.amendmentSource} />
+                    <ExecutionChartCard title="Emendas por grupo de natureza" rows={amendmentGroupRows} metric={metric} color={chartColors.amendmentGroup} />
+                    <ExecutionChartCard title="Emendas por categoria econômica" rows={amendmentCategoryRows} metric={metric} color={chartColors.amendmentCategory} />
                   </div>
                 </TabsContent>
 
-                <TabsContent value="source" forceMount className="min-h-0 overflow-hidden">
-                  <div className={gridClass}>
-                    <ExecutionChartCard title="Por fonte de recurso" rows={sourceRows} metric={metric} />
-                    <ExecutionChartCard title="Por órgão" rows={organizationRows} metric={metric} />
-                    <ExecutionChartCard title="Por elemento de despesa" rows={elementRows} metric={metric} />
-                    <ExecutionChartCard title="Por grupo de natureza" rows={groupRows} metric={metric} />
-                    <ExecutionChartCard title="Por categoria econômica" rows={categoryRows} metric={metric} />
-                    <ExecutionChartCard title="Por modalidade de aplicação" rows={modalityRows} metric={metric} />
-                  </div>
-                </TabsContent>
               </Tabs>
+            </TabsContent>
+
+            <TabsContent value="fiscal" forceMount className="h-full min-h-0 overflow-hidden">
+              <FiscalSecretariatView
+                actions={fiscalActions}
+                personnelActions={personnelScope.localActions}
+                centralPayrollActions={personnelScope.centralActions}
+                personnelScopeLabel={personnelScope.label}
+                personnelScopeNote={personnelScope.note}
+                organization={selectedOrganization}
+                organizationCode={organizationCode}
+                organizationOptions={fiscalOrganizationOptions}
+                unitFilter={unitFilter}
+                unitOptions={unitOptions}
+                payrollHeadcount={fiscalPayrollHeadcount}
+                allValue={allValue}
+                onOrganizationChange={(value) => {
+                  setOrganizationCode(value);
+                  setUnitFilter(allValue);
+                  setSourceFilter(allValue);
+                }}
+                onUnitChange={(value) => {
+                  setUnitFilter(value);
+                  setSourceFilter(allValue);
+                }}
+                vigenteImport={metadata?.vigenteImport}
+              />
             </TabsContent>
 
             <TabsContent value="actions" forceMount className="h-full min-h-0 overflow-hidden">
@@ -625,7 +871,16 @@ export default function OrcamentoPage() {
 
             <TabsContent value="table" forceMount className="min-h-0 overflow-hidden">
               <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
-                <TabsContent value="element" forceMount className="grid min-h-0 grid-rows-2 gap-3 overflow-hidden">
+                {/*
+                  As tabelas, diferente dos gráficos, não eram redundantes entre as
+                  antigas dimensões — cada uma trazia um recorte próprio. Ao fundir as
+                  dimensões, todas passam a conviver aqui, empilhadas com rolagem.
+                */}
+                <TabsContent
+                  value="geral"
+                  forceMount
+                  className="flex min-h-0 flex-col gap-2 overflow-y-auto"
+                >
                   <ExecutionTablePanel
                     title="Execução por elemento de despesa"
                     description="Elemento é a 4ª posição do código da natureza da despesa (ex.: 3 1 90 13 → elemento 13). Valores somados das linhas de despesa do QDD vigente."
@@ -633,7 +888,6 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Elemento de despesa"
                     countLabel="Linhas"
-                    className="min-h-0 overflow-hidden"
                   />
                   <ExecutionTablePanel
                     title="Execução por grupo de natureza"
@@ -642,11 +896,7 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Grupo de natureza"
                     countLabel="Linhas"
-                    className="min-h-0 overflow-hidden"
                   />
-                </TabsContent>
-
-                <TabsContent value="action" forceMount className="min-h-0 overflow-hidden">
                   <ExecutionTablePanel
                     title="Execução por ação orçamentária"
                     description="Cada ação do QDD (projeto/atividade + aplicação programada), ordenada pelo valor selecionado."
@@ -654,11 +904,18 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Ação orçamentária"
                     countLabel="Ações"
-                    className="h-full min-h-0 overflow-hidden"
+                  />
+                  <ExecutionTablePanel
+                    title="Execução por fonte de recurso"
+                    description="Fonte/destinação de recursos conforme o anexo da SEPLAN para o exercício vigente."
+                    rows={sourceRows}
+                    metric={metric}
+                    entityLabel="Fonte de recurso"
+                    countLabel="Linhas"
                   />
                 </TabsContent>
 
-                <TabsContent value="amendments" forceMount className="grid min-h-0 grid-rows-2 gap-3 overflow-hidden">
+                <TabsContent value="amendments" forceMount className="grid min-h-0 grid-rows-2 gap-2 overflow-hidden">
                   <ExecutionTablePanel
                     title="Emendas por órgão"
                     description={`${amendmentCount.toLocaleString('pt-BR')} ação(ões) identificadas como emenda — projeto/atividade iniciado em 8, exceto os códigos de controle da dívida.`}
@@ -679,27 +936,32 @@ export default function OrcamentoPage() {
                   />
                 </TabsContent>
 
-                <TabsContent value="source" forceMount className="min-h-0 overflow-hidden">
-                  <ExecutionTablePanel
-                    title="Execução por fonte de recurso"
-                    description="Fonte/destinação de recursos conforme o anexo da SEPLAN para o exercício vigente."
-                    rows={sourceRows}
-                    metric={metric}
-                    entityLabel="Fonte de recurso"
-                    countLabel="Linhas"
-                    className="h-full min-h-0 overflow-hidden"
-                  />
-                </TabsContent>
               </Tabs>
             </TabsContent>
 
-            <div className="z-10 mt-1 flex shrink-0 items-center justify-between gap-2 border-t bg-background/95 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:gap-4">
+            {/*
+              Folha de pagamento: dado externo (Portal da Transparência), coletado por
+              job diário e lido do banco — não depende dos filtros do QDD, que são de
+              orçamento e não se aplicam a servidores.
+            */}
+            <TabsContent value="payroll" forceMount className="h-full min-h-0 overflow-hidden">
+              {payroll ? (
+                <PayrollPanel data={payroll} />
+              ) : (
+                <Skeleton className="h-96 w-full" />
+              )}
+            </TabsContent>
+
+            <div className="orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between border-t border-black/70 bg-white">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 aria-label="Visualização anterior"
                 aria-disabled={contentViewIndex === 0}
-                className={cn(contentViewIndex === 0 && 'pointer-events-none opacity-40')}
+                className={cn(
+                  'h-auto rounded-none border-r border-black/20 px-3 shadow-none',
+                  contentViewIndex === 0 && 'pointer-events-none opacity-40',
+                )}
                 onClick={() => setContentView(previousContentView)}
               >
                 <ChevronLeftIcon data-icon="inline-start" />
@@ -707,7 +969,7 @@ export default function OrcamentoPage() {
               </Button>
 
               <div
-                className="flex min-w-0 items-center gap-1 overflow-x-auto sm:gap-2"
+                className="flex min-w-0 items-stretch overflow-x-auto"
                 role="tablist"
                 aria-label="Visualizações da execução"
               >
@@ -722,10 +984,10 @@ export default function OrcamentoPage() {
                       aria-label={item.label}
                       onClick={() => setContentView(item.id)}
                       className={cn(
-                        'shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out',
+                        'relative shrink-0 border-b-[3px] px-4 py-2 text-xs font-semibold transition-colors',
                         active
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
+                          ? 'border-green-900 bg-green-50 text-green-950'
+                          : 'border-transparent text-muted-foreground hover:bg-stone-50 hover:text-foreground',
                       )}
                     >
                       {item.label}
@@ -735,10 +997,12 @@ export default function OrcamentoPage() {
               </div>
 
               <Button
+                variant="ghost"
                 size="sm"
                 aria-label="Próxima visualização"
                 aria-disabled={contentViewIndex === CONTENT_VIEWS.length - 1}
                 className={cn(
+                  'h-auto rounded-none border-l border-black/20 px-3 shadow-none',
                   contentViewIndex === CONTENT_VIEWS.length - 1 && 'pointer-events-none opacity-40',
                 )}
                 onClick={() => setContentView(nextContentView)}

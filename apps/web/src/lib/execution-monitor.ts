@@ -19,7 +19,102 @@ import {
 } from './expense-nature';
 import { actionIsAmendment } from './functional-classification';
 import { getFonteLabel } from './fontes-recursos';
+import { organizationAcronym } from './organization-acronym';
 import type { BudgetAction, ExpenseLine } from '@/types/domain';
+
+export const CENTRAL_PAYROLL_ORGANIZATION = '714';
+export const CENTRAL_PAYROLL_UNIT = '002';
+export const HEALTH_PAYROLL_UNIT = '607';
+
+type CentralPayrollScope = {
+  organizationCode: string;
+  unitCode: string;
+} | null;
+
+type CentralPayrollTarget = {
+  organizationCode: string;
+  unitCode?: string;
+  name: string;
+  acronym?: string;
+};
+
+/**
+ * Destinos auditados das ações da folha centralizada.
+ *
+ * O código da ação é usado como chave porque nomes e vinculações administrativas
+ * mudam ao longo do exercício e algumas unidades permanecem duplicadas no QDD após
+ * uma realocação. `null` indica despesa que não integra o gasto de pessoal de uma
+ * secretaria específica.
+ */
+const CENTRAL_PAYROLL_SCOPES: Record<string, CentralPayrollScope> = {
+  '20260000': { organizationCode: '445', unitCode: '001' }, // SEGOV
+  '20270000': { organizationCode: '713', unitCode: '001' }, // SEPLAN
+  '20280000': { organizationCode: '714', unitCode: '001' }, // SEAD
+  '20290000': { organizationCode: '711', unitCode: '001' }, // SECOM
+  '20300000': { organizationCode: '711', unitCode: '308' }, // FUNDAC
+  '20310000': { organizationCode: '450', unitCode: '001' }, // GABVICE
+  '20320000': { organizationCode: '444', unitCode: '001' }, // REPAC
+  '20330000': { organizationCode: '760', unitCode: '304' }, // FUNBESA
+  '20340000': { organizationCode: '510', unitCode: '001' }, // PGE
+  '20350000': { organizationCode: '720', unitCode: '206' }, // ITERACRE
+  '20360000': { organizationCode: '753', unitCode: '207' }, // IDAF
+  '20370000': { organizationCode: '719', unitCode: '209' }, // IAPEN
+  '20380000': { organizationCode: '715', unitCode: '210' }, // AGEAC
+  '20390000': { organizationCode: '753', unitCode: '001' }, // SEAGRI
+  '20400000': { organizationCode: '754', unitCode: '001' }, // SEOP
+  '20410000': { organizationCode: '719', unitCode: '001' }, // SEJUSP
+  '20420000': { organizationCode: '447', unitCode: '001' }, // CASMIL
+  '20430000': { organizationCode: '608', unitCode: '001' }, // PMAC
+  '20440000': { organizationCode: '609', unitCode: '001' }, // CBMAC
+  '20450000': { organizationCode: '720', unitCode: '001' }, // SEMA
+  '20460000': { organizationCode: '761', unitCode: '301' }, // FUNTAC
+  '20470000': { organizationCode: '720', unitCode: '202' }, // IMAC
+  '20480000': { organizationCode: '720', unitCode: '215' }, // IMC
+  '20490000': { organizationCode: '721', unitCode: '302' }, // FUNDHACRE
+  '20500000': { organizationCode: '744', unitCode: '201' }, // DERACRE
+  '20510000': { organizationCode: '759', unitCode: '001' }, // SETE
+  '20520000': { organizationCode: '715', unitCode: '404' }, // COLONACRE
+  '20530000': null, // Pensões especiais dos hansenianos: GND 3, não pessoal.
+  '20540000': { organizationCode: '760', unitCode: '307' }, // FADES
+  '20550000': { organizationCode: '715', unitCode: '502' }, // SANACRE
+  '20560000': { organizationCode: '715', unitCode: '001' }, // SEFAZ
+  '20570000': { organizationCode: '760', unitCode: '001' }, // SEASDH
+  '20580000': { organizationCode: '762', unitCode: '001' }, // SEMULHER
+  '20590000': { organizationCode: '761', unitCode: '309' }, // FAPAC
+  '20600000': { organizationCode: '717', unitCode: '303' }, // FEM
+  '20610000': { organizationCode: '446', unitCode: '001' }, // SECC
+  '20620000': { organizationCode: '448', unitCode: '001' }, // CGE
+  '20630000': { organizationCode: '714', unitCode: '306' }, // FDRHCD
+  '20640000': { organizationCode: '719', unitCode: '213' }, // ISE
+  '20650000': { organizationCode: '451', unitCode: '001' }, // PCAC
+  '20660000': { organizationCode: '761', unitCode: '214' }, // IPEM
+  '20670000': { organizationCode: '761', unitCode: '001' }, // SEICT
+  '20680000': { organizationCode: '719', unitCode: '216' }, // PROCON
+  '20690000': { organizationCode: '744', unitCode: '001' }, // SEHURB
+  '20700000': { organizationCode: '721', unitCode: '607' }, // SESACRE / FUNDES
+  '23070000': { organizationCode: '718', unitCode: '001' }, // SEEL
+  '23080000': { organizationCode: '452', unitCode: '001' }, // CEPDEC
+  '23090000': { organizationCode: '722', unitCode: '001' }, // SEPI
+  '80000000': null, // Inativos e pensionistas: sem rateio por secretaria.
+};
+
+/**
+ * Elementos de GND 3 que integram o custo da folha quando lançados em uma ação
+ * nominal de folha de pagamento. A restrição pela ação evita classificar auxílios
+ * e indenizações de políticas finalísticas como despesa de pessoal.
+ */
+const PAYROLL_RELATED_CURRENT_EXPENSE_ELEMENTS = new Set([
+  '08', // Outros benefícios assistenciais do servidor ou militar
+  '13', // Obrigações patronais
+  '36', // Outros serviços de terceiros — pessoa física
+  '46', // Auxílio-alimentação
+  '47', // Obrigações tributárias e contributivas
+  '48', // Outros auxílios financeiros a pessoas físicas
+  '49', // Auxílio-transporte
+  '92', // Despesas de exercícios anteriores
+  '93', // Indenizações e restituições
+  '94', // Indenizações e restituições trabalhistas
+]);
 
 export interface ExecutionTotals {
   initialBudget: number;
@@ -37,6 +132,8 @@ export interface ExecutionRow extends ExecutionTotals {
   label: string;
   /** Rótulo curto, para eixos de gráfico. */
   shortLabel: string;
+  /** Rótulo do eixo quando ele não deve receber o prefixo automático da chave. */
+  chartLabel?: string;
   /** Quantas linhas/ações compõem a linha agregada. */
   count: number;
   /** Liquidado ÷ dotação atualizada, em %. */
@@ -98,12 +195,24 @@ function addTotals(target: ExecutionTotals, source: Partial<ExecutionTotals>): v
   target.available += source.available ?? 0;
 }
 
-type Bucket = ExecutionTotals & { key: string; label: string; shortLabel: string; count: number };
+type Bucket = ExecutionTotals & {
+  key: string;
+  label: string;
+  shortLabel: string;
+  chartLabel?: string;
+  count: number;
+};
 
-function bucketOf(map: Map<string, Bucket>, key: string, label: string, shortLabel: string): Bucket {
+function bucketOf(
+  map: Map<string, Bucket>,
+  key: string,
+  label: string,
+  shortLabel: string,
+  chartLabel?: string,
+): Bucket {
   let bucket = map.get(key);
   if (!bucket) {
-    bucket = { key, label, shortLabel, count: 0, ...EMPTY };
+    bucket = { key, label, shortLabel, chartLabel, count: 0, ...EMPTY };
     map.set(key, bucket);
   }
   return bucket;
@@ -120,10 +229,114 @@ function linesOf(actions: BudgetAction[]): ExpenseLine[] {
   return actions.flatMap((action) => action.expenseLines ?? []);
 }
 
+function normalizedIdentity(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** Identifica ações executadas nas unidades centralizadas de folha da SEAD. */
+export function isCentralPayrollAction(
+  action: Pick<BudgetAction, 'organizationCode' | 'unitCode'>,
+): boolean {
+  const unitCode = action.unitCode.padStart(3, '0');
+  return (
+    action.organizationCode.padStart(3, '0') === CENTRAL_PAYROLL_ORGANIZATION &&
+    (unitCode === CENTRAL_PAYROLL_UNIT || unitCode === HEALTH_PAYROLL_UNIT)
+  );
+}
+
+/**
+ * Localiza, nas unidades 714/002 e 714/607, as ações de folha que atendem os alvos.
+ *
+ * O QDD não possui uma coluna própria de órgão beneficiário, mas a aplicação programada
+ * identifica nominalmente a secretaria, autarquia ou fundação e, normalmente, sua sigla.
+ * O nome completo é a chave principal; a sigla, delimitada como palavra, é fallback.
+ */
+export function centralPayrollActionsForTargets(
+  actions: BudgetAction[],
+  targets: CentralPayrollTarget[],
+): BudgetAction[] {
+  const identities = targets.map((target) => {
+    const name = normalizedIdentity(target.name);
+    const inferredAcronym =
+      target.acronym ??
+      target.name.match(/(?:\s[-–—]\s*|\()([A-Z][A-Z0-9]{2,11})\)?\.?\s*$/)?.[1] ??
+      '';
+    const acronym = normalizedIdentity(inferredAcronym);
+    return {
+      organizationCode: target.organizationCode.padStart(3, '0'),
+      unitCode: target.unitCode?.padStart(3, '0'),
+      name,
+      acronymPattern:
+        acronym && !/^\d+$/.test(acronym)
+          ? new RegExp(
+              `(?:^|\\s)${acronym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|\\s)`,
+            )
+          : null,
+    };
+  });
+
+  return actions.filter((action) => {
+    if (!isCentralPayrollAction(action)) return false;
+    const application = normalizedIdentity(action.application);
+    if (!application.includes('folha de pagamento')) return false;
+
+    const projectActivity = action.projectActivity.trim();
+    if (Object.prototype.hasOwnProperty.call(CENTRAL_PAYROLL_SCOPES, projectActivity)) {
+      const scope = CENTRAL_PAYROLL_SCOPES[projectActivity];
+      if (!scope) return false;
+      return identities.some(
+        (identity) =>
+          identity.organizationCode === scope.organizationCode &&
+          (!identity.unitCode || identity.unitCode === scope.unitCode),
+      );
+    }
+
+    return identities.some(
+      (identity) =>
+        (identity.name.length >= 6 && application.includes(identity.name)) ||
+        (identity.acronymPattern?.test(application) ?? false),
+    );
+  });
+}
+
 /** Soma geral — usada nos cartões de totais e para conferir se as visões fecham. */
 export function totalsOf(actions: BudgetAction[]): ExecutionTotals {
   const totals = { ...EMPTY };
   for (const action of actions) addTotals(totals, action.totals);
+  return totals;
+}
+
+/**
+ * Soma o custo ampliado de pessoal:
+ * - todas as linhas de GND 1; e
+ * - auxílios, benefícios e verbas indenizatórias de GND 3 quando pertencem a uma
+ *   ação explicitamente identificada como folha de pagamento.
+ */
+export function personnelTotalsOf(actions: BudgetAction[]): ExecutionTotals {
+  const totals = { ...EMPTY };
+  for (const action of actions) {
+    const isPayrollApplication = normalizedIdentity(action.application).includes(
+      'folha de pagamento',
+    );
+    for (const line of action.expenseLines ?? []) {
+      const nature = parseExpenseAccount(line.expenseAccount);
+      if (!nature) continue;
+      const isPersonnelGroup = nature.groupCode === '1';
+      const isPayrollRelatedCurrentExpense =
+        isPayrollApplication &&
+        nature.categoryCode === '3' &&
+        nature.groupCode === '3' &&
+        PAYROLL_RELATED_CURRENT_EXPENSE_ELEMENTS.has(nature.elementCode);
+      if (isPersonnelGroup || isPayrollRelatedCurrentExpense) {
+        addTotals(totals, line);
+      }
+    }
+  }
   return totals;
 }
 
@@ -213,7 +426,14 @@ export function aggregateByOrganization(actions: BudgetAction[]): ExecutionRow[]
   const map = new Map<string, Bucket>();
   for (const action of actions) {
     const name = action.organizationName?.trim() || action.organizationCode;
-    const bucket = bucketOf(map, action.organizationCode, `${action.organizationCode} — ${name}`, name);
+    const acronym = organizationAcronym(action.organizationCode, name);
+    const bucket = bucketOf(
+      map,
+      action.organizationCode,
+      `${action.organizationCode} — ${name}`,
+      acronym,
+      acronym,
+    );
     bucket.count += 1;
     addTotals(bucket, action.totals);
   }

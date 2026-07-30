@@ -41,6 +41,7 @@ import { effectiveWeightingFactor } from '@/lib/classification-rules';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { organizationAcronym } from '@/lib/organization-acronym';
+import { cn } from '@/lib/utils';
 import type { BudgetAction, BudgetImport, ThemeBudget } from '@/types/domain';
 import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
 
@@ -85,6 +86,7 @@ type OverviewActionRowProps = {
   selectionState: 'none' | 'partial' | 'full';
   selectedLineKeys: ReadonlySet<string>;
   relocated: boolean;
+  institutional: boolean;
   expanded: boolean;
   onToggle: (id: string) => void;
   onToggleExpand: (id: string) => void;
@@ -100,6 +102,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
   selectionState,
   selectedLineKeys,
   relocated,
+  institutional,
   expanded,
   onToggle,
   onToggleExpand,
@@ -116,7 +119,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
           <TableRow
             data-state={selectable && selected ? 'selected' : undefined}
             onClick={selectable ? () => onToggle(action.id) : undefined}
-            className={`data-[state=selected]:bg-muted/40 ${selectable ? 'cursor-pointer' : ''}`}
+            className={`data-[state=selected]:bg-muted/40 ${institutional ? 'border-b border-black/15 hover:bg-stone-50' : ''} ${selectable ? 'cursor-pointer' : ''}`}
           >
             {selectable ? (
               <TableCell
@@ -138,7 +141,10 @@ const OverviewActionRow = memo(function OverviewActionRow({
                   aria-expanded={expanded}
                   aria-label={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
                   title={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
-                  className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className={cn(
+                    'mt-0.5 inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    institutional ? 'rounded-none' : 'rounded-md',
+                  )}
                   onClick={(event) => {
                     event.stopPropagation();
                     onToggleExpand(action.id);
@@ -480,6 +486,9 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
 
   const showUnit = unitCode === ALL;
   const tableMinWidth = calculatorMode ? 'min-w-[50rem]' : 'min-w-[48rem]';
+  const tableHeadClass = isExecutionVariant
+    ? 'bg-green-900 text-white'
+    : 'bg-background text-muted-foreground';
 
   const selectedOrganization = useMemo(() => {
     if (organizationCode === ALL) return null;
@@ -628,7 +637,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     <Card
       className={
         isExecutionVariant
-          ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden border-0 py-0 shadow-none'
+          ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-none border-black/70 bg-white py-0 shadow-none'
           : 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
       }
       style={{ zoom: isExecutionVariant ? 1 : 0.85 }}
@@ -854,21 +863,37 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         </div> : null}
 
         {displayedActions.length === 0 ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia>
-                <DatabaseIcon />
-              </EmptyMedia>
-            </EmptyHeader>
-            <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
-            <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
-          </Empty>
+          isExecutionVariant ? (
+            <div className="flex h-full min-h-40 items-center justify-center p-6 text-center">
+              <div>
+                <p className="text-sm font-semibold">Nenhuma ação encontrada</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Não há ações orçamentárias para os filtros aplicados.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Empty>
+              <EmptyHeader>
+                <EmptyMedia>
+                  <DatabaseIcon />
+                </EmptyMedia>
+              </EmptyHeader>
+              <EmptyTitle>Nenhuma ação encontrada</EmptyTitle>
+              <EmptyDescription>Não há ações programadas para a seleção atual.</EmptyDescription>
+            </Empty>
+          )
         ) : (
           <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!isExecutionVariant ? <Separator className="shrink-0" /> : null}
             <div ref={scrollRef} className="h-0 min-h-0 min-w-0 flex-1 overflow-auto">
               <Table className={`table-fixed w-full ${tableMinWidth}`}>
-                <TableHeader className="sticky top-0 z-10 bg-background">
+                <TableHeader
+                  className={cn(
+                    'sticky top-0 z-10',
+                    isExecutionVariant ? 'bg-green-900' : 'bg-background',
+                  )}
+                >
                   <TableRow
                     style={
                       isExecutionVariant
@@ -892,27 +917,27 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         />
                       </TableHead>
                     ) : null}
-                    <TableHead className="h-9 w-[36%] min-w-[12rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[36%] min-w-[12rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Ação
                     </TableHead>
-                    <TableHead className="h-9 w-[6rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[6rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Órgão
                     </TableHead>
                     {showUnit ? (
-                      <TableHead className="h-9 w-[15%] max-w-[9rem] bg-background text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      <TableHead className={cn('h-9 w-[15%] max-w-[9rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                         Unidade
                       </TableHead>
                     ) : null}
-                    <TableHead className="h-9 w-[7.5rem] bg-background text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Inicial
                     </TableHead>
-                    <TableHead className="h-9 w-[7.5rem] bg-background text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Atualizado
                     </TableHead>
-                    <TableHead className="h-9 w-[7.5rem] bg-background text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Liquidado
                     </TableHead>
-                    <TableHead className="h-9 w-[7.5rem] bg-background text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                       Disponível
                     </TableHead>
                   </TableRow>
@@ -946,6 +971,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         }
                         selectedLineKeys={selectedLines.get(action.id) ?? EMPTY_LINE_KEYS}
                         relocated={relocatedUnitKeys?.has(`${action.organizationCode}|${action.unitCode}`) ?? false}
+                        institutional={isExecutionVariant}
                         expanded={expandedIds.has(action.id)}
                         onToggle={toggleSelection}
                         onToggleExpand={toggleExpand}

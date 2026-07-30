@@ -88,8 +88,38 @@ export const fonteRecursosLabels: Readonly<Record<string, string>> = Object.free
   '18032211': 'Benefícios Previdenciários - Militares SPSM',
 });
 
+/**
+ * Sufixo por grupo de fonte — o primeiro dígito do código (Portaria STN).
+ *
+ * A destinação do recurso é dada pelos 7 dígitos seguintes; o primeiro diz apenas de
+ * qual exercício o dinheiro vem. Por isso `27130700` é a mesma destinação de
+ * `17130700` (FSP), só que custeada por superávit de exercícios anteriores.
+ */
+const GRUPO_FONTE_SUFIXO: Readonly<Record<string, string>> = Object.freeze({
+  '2': 'superávit de exercícios anteriores',
+  '3': 'recursos condicionados',
+});
+
+/**
+ * Rótulo da fonte de recurso.
+ *
+ * Além da consulta direta, deriva os grupos 2 e 3 a partir da fonte equivalente do
+ * exercício corrente (grupo 1). Sem isso, 33 das 40 fontes não catalogadas do QDD
+ * vigente apareciam como "Fonte não catalogada" mesmo tendo destinação conhecida —
+ * e cada nova fonte de superávit exigiria uma entrada manual no catálogo.
+ */
 export function getFonteLabel(code: string | null | undefined): string | undefined {
   if (!code) return undefined;
   const key = code.replace(/\D/g, '');
-  return fonteRecursosLabels[key];
+
+  const direct = fonteRecursosLabels[key];
+  if (direct) return direct;
+
+  const sufixo = GRUPO_FONTE_SUFIXO[key[0] ?? ''];
+  if (sufixo && key.length === 8) {
+    const base = fonteRecursosLabels[`1${key.slice(1)}`];
+    if (base) return `${base} — ${sufixo}`;
+  }
+
+  return undefined;
 }

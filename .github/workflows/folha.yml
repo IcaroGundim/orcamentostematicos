@@ -1,0 +1,55 @@
+name: Coleta da folha de pagamento
+
+# Puxa a folha do Portal da Transparência do Acre e grava os AGREGADOS no banco.
+# Nenhum dado pessoal é persistido — apenas somas por carreira, tipo de contrato e
+# órgão.
+#
+# A folha é publicada uma vez por mês e com atraso, então roda diariamente de
+# madrugada: o script detecta sozinho o mês mais recente publicado e é idempotente
+# (recoletar o mesmo mês apenas substitui os agregados daquele mês).
+
+on:
+  schedule:
+    - cron: '30 7 * * *' # todo dia 07:30 UTC (04:30 America/Rio_Branco)
+  workflow_dispatch:
+    inputs:
+      ano:
+        description: 'Ano de referência (deixe vazio para o mais recente publicado)'
+        required: false
+      mes:
+        description: 'Mês de referência (1-12)'
+        required: false
+
+concurrency:
+  group: coleta-folha
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    # A coleta varre ~16 requisições ao portal com pausa entre elas; sobra folga.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+        working-directory: apps/web
+
+      - name: Coletar folha
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.ano }}" ] && [ -n "${{ github.event.inputs.mes }}" ]; then
+            ARGS="--ano=${{ github.event.inputs.ano }} --mes=${{ github.event.inputs.mes }}"
+          fi
+          node apps/web/scripts/collect-payroll.mjs $ARGS
