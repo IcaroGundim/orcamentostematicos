@@ -73,6 +73,16 @@ const PAGE_ZOOM = 0.95;
 const gridClass =
   'grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 xl:grid-rows-2';
 
+/**
+ * Tabelas empilhadas na aba "Tabela".
+ *
+ * `shrink-0` é essencial: os cards são itens flex com `min-h-0` e, sem isso, eram
+ * espremidos até sobrar uma única linha visível em cada. O teto de altura evita que
+ * uma tabela expandida (a de ação tem 74 registros) empurre as demais para fora da
+ * vista — ela passa a rolar por dentro.
+ */
+const STACKED_TABLE_CLASS = 'shrink-0 max-h-[34rem]';
+
 const chartColors = {
   element: '#5f8f70',
   group: '#8fa873',
@@ -875,6 +885,9 @@ export default function OrcamentoPage() {
                   As tabelas, diferente dos gráficos, não eram redundantes entre as
                   antigas dimensões — cada uma trazia um recorte próprio. Ao fundir as
                   dimensões, todas passam a conviver aqui, empilhadas com rolagem.
+
+                  STACKED_TABLE_CLASS é essencial: sem shrink-0 os cards, sendo itens
+                  flex com min-h-0, encolhiam até sobrar só uma linha visível em cada.
                 */}
                 <TabsContent
                   value="geral"
@@ -888,6 +901,7 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Elemento de despesa"
                     countLabel="Linhas"
+                    className={STACKED_TABLE_CLASS}
                   />
                   <ExecutionTablePanel
                     title="Execução por grupo de natureza"
@@ -896,6 +910,7 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Grupo de natureza"
                     countLabel="Linhas"
+                    className={STACKED_TABLE_CLASS}
                   />
                   <ExecutionTablePanel
                     title="Execução por ação orçamentária"
@@ -904,6 +919,7 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Ação orçamentária"
                     countLabel="Ações"
+                    className={STACKED_TABLE_CLASS}
                   />
                   <ExecutionTablePanel
                     title="Execução por fonte de recurso"
@@ -912,6 +928,7 @@ export default function OrcamentoPage() {
                     metric={metric}
                     entityLabel="Fonte de recurso"
                     countLabel="Linhas"
+                    className={STACKED_TABLE_CLASS}
                   />
                 </TabsContent>
 

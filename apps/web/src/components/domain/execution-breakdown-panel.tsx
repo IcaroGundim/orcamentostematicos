@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { formatMoney } from '@/lib/api';
 import {
   EXECUTION_METRIC_LABELS,
@@ -21,7 +20,6 @@ function sortByMetric(rows: ExecutionRow[], metric: ExecutionMetric): ExecutionR
 
 /** Limite de segurança para não renderizar milhares de barras num único SVG. */
 const CHART_MAX_ROWS = 100;
-const TABLE_INITIAL_ROWS = 15;
 
 function truncate(value: string, max = 34): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
@@ -246,20 +244,29 @@ export function ExecutionTablePanel({
   hideRate = false,
   className,
 }: ExecutionTablePanelProps) {
-  const [showAll, setShowAll] = useState(false);
   const sortedRows = useMemo(() => sortByMetric(rows, metric), [rows, metric]);
-  const visibleRows = showAll ? sortedRows : sortedRows.slice(0, TABLE_INITIAL_ROWS);
 
   if (rows.length === 0) return <EmptyState title={title} description={description} />;
 
   return (
     <Card size="sm" className={cn('flex min-h-0 flex-col', PANEL_CLASS, className)}>
       <CardHeader className={cn('shrink-0', CHART_HEADER_CLASS)}>
-        <CardTitle className="font-semibold uppercase tracking-wide">{title}</CardTitle>
+        <CardTitle className="flex flex-wrap items-baseline justify-between gap-2 font-semibold uppercase tracking-wide">
+          <span>{title}</span>
+          {/* A contagem vinha do antigo botão "Mostrar todos os N"; com a rolagem
+              ela precisa aparecer em algum lugar, senão some do painel. */}
+          <span className="text-xs font-normal normal-case tabular-nums opacity-80">
+            {sortedRows.length.toLocaleString('pt-BR')} registro
+            {sortedRows.length === 1 ? '' : 's'}
+          </span>
+        </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col gap-0 px-0">
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+        {/* O teto próprio garante rolagem mesmo quando o contêiner pai não limita a
+            altura — sem ele, a tabela cresceria indefinidamente (é o caso dos painéis
+            da folha de pagamento). Onde o pai já limita, prevalece o menor. */}
+        <div className="min-h-0 min-w-0 max-h-[26rem] flex-1 overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 z-10 bg-stone-50">
               <TableRow className="border-b border-black/70">
@@ -277,7 +284,7 @@ export function ExecutionTablePanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleRows.map((row) => (
+              {sortedRows.map((row) => (
                 <TableRow key={row.key} className="odd:bg-stone-50/60">
                   <TableCell className="font-medium">{row.label}</TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -294,31 +301,21 @@ export function ExecutionTablePanel({
                       {formatMoney(row[column.metric])}
                     </TableCell>
                   ))}
-                  <TableCell className="text-right tabular-nums">
-                    {row.executionRate.toLocaleString('pt-BR', {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1,
-                    })}
-                    %
-                  </TableCell>
+                  {hideRate ? null : (
+                    <TableCell className="text-right tabular-nums">
+                      {row.executionRate.toLocaleString('pt-BR', {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })}
+                      %
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
 
-        {rows.length > TABLE_INITIAL_ROWS ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="my-2 self-center rounded-sm border-black/50 shadow-none"
-            onClick={() => setShowAll((value) => !value)}
-          >
-            {showAll
-              ? 'Mostrar menos'
-              : `Mostrar todos os ${rows.length.toLocaleString('pt-BR')} registros`}
-          </Button>
-        ) : null}
       </CardContent>
     </Card>
   );
