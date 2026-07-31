@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -100,8 +100,14 @@ export type ExecutionChartCardProps = {
 /**
  * Card só com o gráfico, dimensionado para uma célula da grade 3×2. A tabela
  * detalhada correspondente fica em {@link ExecutionTablePanel}, abaixo da grade.
+ *
+ * Memoizado porque o dashboard mantém todas as abas montadas (`forceMount`, que é o
+ * que evita o piscar ao alternar). Sem `memo`, qualquer mudança de estado da página
+ * — trocar de aba, de métrica ou de filtro — re-renderizaria os mais de 20 gráficos
+ * Recharts de todas as abas, inclusive as ocultas. As props são estáveis: `rows` sai
+ * de `useMemo`, `metric` é primitivo e os textos são literais.
  */
-export function ExecutionChartCard({
+export const ExecutionChartCard = memo(function ExecutionChartCard({
   title,
   rows,
   metric,
@@ -197,7 +203,7 @@ export function ExecutionChartCard({
       </CardContent>
     </Card>
   );
-}
+});
 
 // ── Tabela em largura total (abaixo da grade) ────────────────────────────────
 
@@ -233,7 +239,8 @@ const MONEY_COLUMNS: MoneyColumn[] = [
   { metric: 'paid', header: 'Pago' },
 ];
 
-export function ExecutionTablePanel({
+/** Memoizado pelo mesmo motivo do {@link ExecutionChartCard}. */
+export const ExecutionTablePanel = memo(function ExecutionTablePanel({
   title,
   description,
   rows,
@@ -319,4 +326,4 @@ export function ExecutionTablePanel({
       </CardContent>
     </Card>
   );
-}
+});

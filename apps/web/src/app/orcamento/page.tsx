@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, useHoverPill } from '@/components/ui/tabs';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
 import { api, clearStoredSession, formatMoney, getStoredSession, type Session } from '@/lib/api';
 import {
@@ -129,14 +129,50 @@ function ExecutionViewNavigation({
   onSelect: (view: ViewId) => void;
   collapsed: boolean;
 }) {
+  const pill = useHoverPill(activeView);
+
   return (
     <div
-      className="flex flex-wrap border border-black/70 bg-white xl:flex-col xl:border-0"
+      ref={pill.listRef}
+      className="relative flex flex-wrap border border-black/70 bg-white xl:flex-col xl:border-0"
       role="tablist"
+      onMouseLeave={pill.resetHighlight}
     >
+      {/*
+        Faixa que segue o mouse. Cobre a caixa inteira do item (e não só um eixo),
+        para funcionar tanto na coluna do desktop quanto na linha das telas menores.
+      */}
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute z-0 bg-green-900',
+          'transition-[left,top,width,height] duration-500 ease-out',
+          pill.pill.ready ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{
+          left: pill.pill.left,
+          top: pill.pill.top,
+          width: pill.pill.width,
+          height: pill.pill.height,
+        }}
+      />
+      {/* Marcador da seleção, na borda inicial do item — desliza junto. */}
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute z-20 w-[4px] bg-[#b8b477]',
+          'transition-[left,top,height] duration-300 ease-out',
+          pill.activePill.ready ? 'opacity-100' : 'opacity-0',
+        )}
+        style={{
+          left: pill.activePill.left,
+          top: pill.activePill.top,
+          height: pill.activePill.height,
+        }}
+      />
       {VIEWS.map((item) => {
         const Icon = item.icon;
-        const active = activeView === item.id;
+        const highlighted = pill.highlightValue === item.id;
         return (
           <button
             key={item.id}
@@ -144,14 +180,15 @@ function ExecutionViewNavigation({
             role="tab"
             aria-selected={activeView === item.id}
             data-execution-view={item.id}
+            data-hover-tab-value={item.id}
             onClick={() => onSelect(item.id)}
+            onFocus={() => pill.highlight(item.id)}
+            onMouseEnter={() => pill.highlight(item.id)}
             className={cn(
-              'relative inline-flex min-h-10 items-center gap-2 border-b border-black/20 px-3 py-2 text-xs font-semibold transition-colors',
-              'xl:w-full xl:border-l-4',
+              'relative z-10 inline-flex min-h-10 items-center gap-2 border-b border-black/20 px-3 py-2 text-xs font-semibold transition-colors',
+              'xl:w-full xl:border-l-4 xl:border-l-transparent',
               collapsed ? 'xl:justify-center xl:px-2' : 'xl:justify-start',
-              active
-                ? 'border-l-green-900 bg-green-50 text-green-950'
-                : 'border-l-transparent bg-white text-muted-foreground hover:bg-stone-50 hover:text-foreground',
+              highlighted ? 'text-white' : 'text-muted-foreground hover:text-foreground',
             )}
             title={collapsed ? item.label : undefined}
           >
@@ -189,6 +226,9 @@ export default function OrcamentoPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [view, setView] = useState<ViewId>('geral');
   const [contentView, setContentView] = useState<ContentView>('overview');
+  // Declarado junto dos demais hooks: precisa vir antes do `return null` de sessão
+  // ausente, senão a chamada passa a ser condicional.
+  const contentViewPill = useHoverPill(contentView);
   const [metric, setMetric] = useState<ExecutionMetric>('updatedBudget');
   const [payroll, setPayroll] = useState<PayrollDto | null>(null);
 
@@ -969,69 +1009,108 @@ export default function OrcamentoPage() {
               )}
             </TabsContent>
 
-            <div className="orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between border-t border-black/70 bg-white">
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Visualização anterior"
-                aria-disabled={contentViewIndex === 0}
-                className={cn(
-                  'h-auto rounded-none border-r border-black/20 px-3 shadow-none',
-                  contentViewIndex === 0 && 'pointer-events-none opacity-40',
-                )}
-                onClick={() => setContentView(previousContentView)}
-              >
-                <ChevronLeftIcon data-icon="inline-start" />
-                <span className="hidden sm:inline">Anterior</span>
-              </Button>
-
-              <div
-                className="flex min-w-0 items-stretch overflow-x-auto"
-                role="tablist"
-                aria-label="Visualizações da execução"
-              >
-                {CONTENT_VIEWS.map((item) => {
-                  const active = contentView === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      aria-label={item.label}
-                      onClick={() => setContentView(item.id)}
-                      className={cn(
-                        'relative shrink-0 border-b-[3px] px-4 py-2 text-xs font-semibold transition-colors',
-                        active
-                          ? 'border-green-900 bg-green-50 text-green-950'
-                          : 'border-transparent text-muted-foreground hover:bg-stone-50 hover:text-foreground',
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Próxima visualização"
-                aria-disabled={contentViewIndex === CONTENT_VIEWS.length - 1}
-                className={cn(
-                  'h-auto rounded-none border-l border-black/20 px-3 shadow-none',
-                  contentViewIndex === CONTENT_VIEWS.length - 1 && 'pointer-events-none opacity-40',
-                )}
-                onClick={() => setContentView(nextContentView)}
-              >
-                <span className="hidden sm:inline">Próximo</span>
-                <ChevronRightIcon data-icon="inline-end" />
-              </Button>
-            </div>
           </Tabs>
         )}
         </div>
         </main>
+        <div className="orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between border-t border-black/70 bg-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Visualização anterior"
+            aria-disabled={contentViewIndex === 0}
+            className={cn(
+              'h-auto rounded-none border-r border-black/20 px-3 shadow-none',
+              contentViewIndex === 0 && 'pointer-events-none opacity-40',
+            )}
+            onClick={() => setContentView(previousContentView)}
+          >
+            <ChevronLeftIcon data-icon="inline-start" />
+            <span className="hidden sm:inline">Anterior</span>
+          </Button>
+
+          {/*
+            Mesma animação das abas dos orçamentos temáticos: uma faixa verde desliza
+            até o item sob o mouse e volta para o ativo ao sair da lista. A cor do
+            item ativo vem da faixa, não de um fundo próprio — por isso aqui os
+            botões só controlam a borda e a cor do texto.
+          */}
+          <div
+            ref={contentViewPill.listRef}
+            className="relative flex min-w-0 items-stretch overflow-x-auto"
+            role="tablist"
+            aria-label="Visualizações da execução"
+            onMouseLeave={contentViewPill.resetHighlight}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute inset-y-0 z-0 bg-green-900',
+                'transition-[left,width] duration-500 ease-out',
+                contentViewPill.pill.ready ? 'opacity-100' : 'opacity-0',
+              )}
+              style={{ left: contentViewPill.pill.left, width: contentViewPill.pill.width }}
+            />
+            {/*
+              Marcador da aba selecionada, em creme. Fica acima da faixa (z-20) para
+              continuar visível quando ela estiver por cima — se fosse verde sobre
+              verde, sumiria justamente na aba ativa. O tom acompanha os bege da
+              paleta usada nos gráficos da folha de pagamento.
+            */}
+            <span
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute bottom-0 z-20 h-[3px] bg-[#b8b477]',
+                'transition-[left,width] duration-300 ease-out',
+                contentViewPill.activePill.ready ? 'opacity-100' : 'opacity-0',
+              )}
+              style={{
+                left: contentViewPill.activePill.left,
+                width: contentViewPill.activePill.width,
+              }}
+            />
+            {CONTENT_VIEWS.map((item) => {
+              const active = contentView === item.id;
+              const highlighted = contentViewPill.highlightValue === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-label={item.label}
+                  data-hover-tab-value={item.id}
+                  onClick={() => setContentView(item.id)}
+                  onFocus={() => contentViewPill.highlight(item.id)}
+                  onMouseEnter={() => contentViewPill.highlight(item.id)}
+                  className={cn(
+                    // A borda de baixo continua aqui só como reserva de espaço: o
+                    // marcador visível é o retângulo deslizante acima.
+                    'relative z-10 shrink-0 border-b-[3px] border-transparent px-4 py-2 text-xs font-semibold transition-colors',
+                    highlighted ? 'text-white' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Próxima visualização"
+            aria-disabled={contentViewIndex === CONTENT_VIEWS.length - 1}
+            className={cn(
+              'h-auto rounded-none border-l border-black/20 px-3 shadow-none',
+              contentViewIndex === CONTENT_VIEWS.length - 1 && 'pointer-events-none opacity-40',
+            )}
+            onClick={() => setContentView(nextContentView)}
+          >
+            <span className="hidden sm:inline">Próximo</span>
+            <ChevronRightIcon data-icon="inline-end" />
+          </Button>
+        </div>
       </div>
     </div>
   );

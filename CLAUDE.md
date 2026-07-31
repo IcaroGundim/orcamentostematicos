@@ -15,6 +15,21 @@ workspaces (`apps/web`), deploy na Vercel.
 - **Antes** de qualquer operação de risco no banco, rode `npm run db:backup` (ou dispare o
   workflow `.github/workflows/backup.yml`). Backups ficam versionados em `backups/<data>/`.
 
+## Frontend do `/orcamento` — LEIA ANTES DE EDITAR
+
+- O módulo de execução orçamentária tem um **contrato de design**:
+  `docs/design-orcamento.md`. **Leia-o antes** de qualquer edição em
+  `apps/web/src/app/orcamento/**`, `execution-monitor.ts`, `expense-nature.ts`,
+  `payroll-scope.ts`, `payroll-portal.ts`, `execution-breakdown-panel.tsx`,
+  `fiscal-secretariat-view.tsx`, `payroll-panel.tsx` ou
+  `overview-scheduled-actions-panel.tsx`.
+- Ele existe para **impedir AI slop**: fixa a paleta, proíbe gradientes/sombras/cantos
+  arredondados, registra na seção 9 as decisões que *parecem* bugs mas são deliberadas, e
+  traz um checklist obrigatório na seção 11. Ignorá-lo já custou retrabalho — uma sessão
+  inteira propondo âmbar e degradês que as seções 10.2 e 10.4 proíbem explicitamente.
+- Quando o documento e o código divergirem, **o código vence**: corrija o documento, não o
+  código.
+
 ## Dados de domínio
 
 - "Marcações"/curadoria = tabela `ThematicAssignment` (tema OCAD/OSG/CLIMATICO + eixo +

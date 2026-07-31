@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { CalendarDaysIcon, DatabaseIcon, UsersIcon } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import {
@@ -658,7 +658,12 @@ function OrganizationContractTable({ rows }: { rows: PayrollGroupDto[] }) {
   );
 }
 
-export function PayrollPanel({ data }: { data: PayrollDto }) {
+/**
+ * Memoizado porque a aba de folha fica montada junto com as demais (`forceMount`) —
+ * sem isso, ela re-renderizaria a cada troca de aba, métrica ou filtro do QDD, que
+ * nem sequer se aplicam a este painel.
+ */
+export const PayrollPanel = memo(function PayrollPanel({ data }: { data: PayrollDto }) {
   if (!data.snapshot) {
     return (
       <div className="flex h-full min-h-0 border bg-white">
@@ -782,4 +787,4 @@ export function PayrollPanel({ data }: { data: PayrollDto }) {
       </div>
     </div>
   );
-}
+});

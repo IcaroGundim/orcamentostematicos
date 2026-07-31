@@ -80,6 +80,97 @@ type HoverTabsListItem = {
   className?: string
 }
 
+/**
+ * Rastreia a "pílula" deslizante que segue o mouse/foco entre as abas e volta para
+ * a aba ativa quando o ponteiro sai da lista.
+ *
+ * Cada item precisa carregar `data-hover-tab-value` com o seu valor — é por esse
+ * atributo que a posição e a largura são medidas. O container precisa ser
+ * `relative`, já que a pílula é posicionada em absoluto dentro dele.
+ *
+ * Extraído para ser compartilhado entre a lista de abas dos orçamentos temáticos
+ * ({@link HoverTabsList}) e outras barras de navegação que não usam Radix Tabs,
+ * garantindo que a animação seja literalmente a mesma nas duas.
+ */
+const EMPTY_BOX = { left: 0, top: 0, width: 0, height: 0, ready: false }
+
+function useHoverPill(activeValue: string) {
+  const listRef = React.useRef<HTMLDivElement>(null)
+  const highlightRef = React.useRef(activeValue)
+  const [highlightValue, setHighlightValue] = React.useState(activeValue)
+  const [pill, setPill] = React.useState(EMPTY_BOX)
+  // Marcador do item realmente selecionado. Separado de `pill` porque aquele segue o
+  // mouse; este só se move quando a seleção muda — é o que faz o retângulo deslizar
+  // de um item para o outro em vez de saltar.
+  const [activePill, setActivePill] = React.useState(EMPTY_BOX)
+
+  // Mede a caixa inteira (e não só o eixo horizontal) para o mesmo hook servir tanto
+  // a listas em linha quanto em coluna: cada consumidor usa os lados que interessam.
+  const measure = React.useCallback((value: string) => {
+    const list = listRef.current
+    if (!list) return null
+    const target = list.querySelector<HTMLElement>(`[data-hover-tab-value="${value}"]`)
+    if (!target) return null
+    return {
+      left: target.offsetLeft,
+      top: target.offsetTop,
+      width: target.offsetWidth,
+      height: target.offsetHeight,
+      ready: true,
+    }
+  }, [])
+
+  const updatePill = React.useCallback(
+    (value: string) => {
+      const next = measure(value)
+      if (next) setPill(next)
+    },
+    [measure],
+  )
+
+  const updateActivePill = React.useCallback(
+    (value: string) => {
+      const next = measure(value)
+      if (next) setActivePill(next)
+    },
+    [measure],
+  )
+
+  const highlight = React.useCallback(
+    (value: string) => {
+      highlightRef.current = value
+      setHighlightValue(value)
+      updatePill(value)
+    },
+    [updatePill],
+  )
+
+  const resetHighlight = React.useCallback(() => highlight(activeValue), [activeValue, highlight])
+
+  React.useLayoutEffect(() => {
+    highlight(activeValue)
+    updateActivePill(activeValue)
+  }, [activeValue, highlight, updateActivePill])
+
+  React.useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const onResize = () => {
+      updatePill(highlightRef.current)
+      updateActivePill(activeValue)
+    }
+    const resizeObserver = new ResizeObserver(onResize)
+    resizeObserver.observe(list)
+    window.addEventListener('resize', onResize)
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', onResize)
+    }
+  }, [updatePill, updateActivePill, activeValue])
+
+  return { listRef, pill, activePill, highlightValue, highlight, resetHighlight }
+}
+
 function HoverTabsList({
   activeValue,
   items,
@@ -89,51 +180,13 @@ function HoverTabsList({
   items: readonly HoverTabsListItem[]
   className?: string
 }) {
-  const listRef = React.useRef<HTMLDivElement>(null)
-  const highlightRef = React.useRef(activeValue)
-  const [highlightTab, setHighlightTab] = React.useState(activeValue)
-  const [pill, setPill] = React.useState({ left: 0, width: 0, ready: false })
-
-  const updatePill = React.useCallback((tabValue: string) => {
-    const list = listRef.current
-    if (!list) return
-    const trigger = list.querySelector<HTMLElement>(`[data-hover-tab-value="${tabValue}"]`)
-    if (!trigger) return
-    setPill({
-      left: trigger.offsetLeft,
-      width: trigger.offsetWidth,
-      ready: true,
-    })
-  }, [])
-
-  React.useLayoutEffect(() => {
-    highlightRef.current = activeValue
-    setHighlightTab(activeValue)
-    updatePill(activeValue)
-  }, [activeValue, updatePill])
-
-  React.useEffect(() => {
-    const list = listRef.current
-    if (!list) return
-    const onResize = () => updatePill(highlightRef.current)
-    const resizeObserver = new ResizeObserver(onResize)
-    resizeObserver.observe(list)
-    window.addEventListener('resize', onResize)
-    return () => {
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', onResize)
-    }
-  }, [updatePill])
+  const { listRef, pill, highlightValue, highlight, resetHighlight } = useHoverPill(activeValue)
 
   return (
     <TabsList
       ref={listRef}
       className={cn('relative border border-primary bg-white', className)}
-      onMouseLeave={() => {
-        highlightRef.current = activeValue
-        setHighlightTab(activeValue)
-        updatePill(activeValue)
-      }}
+      onMouseLeave={resetHighlight}
     >
       <span
         aria-hidden
@@ -145,22 +198,14 @@ function HoverTabsList({
         style={{ left: pill.left, width: pill.width }}
       />
       {items.map((item) => {
-        const highlighted = highlightTab === item.value
+        const highlighted = highlightValue === item.value
         return (
           <TabsTrigger
             key={item.value}
             value={item.value}
             data-hover-tab-value={item.value}
-            onFocus={() => {
-              highlightRef.current = item.value
-              setHighlightTab(item.value)
-              updatePill(item.value)
-            }}
-            onMouseEnter={() => {
-              highlightRef.current = item.value
-              setHighlightTab(item.value)
-              updatePill(item.value)
-            }}
+            onFocus={() => highlight(item.value)}
+            onMouseEnter={() => highlight(item.value)}
             className={cn(
               'relative z-10 border-0 bg-transparent shadow-none transition-none',
               'data-active:bg-transparent data-active:shadow-none',
@@ -197,4 +242,12 @@ function TabsContent({
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, HoverTabsList, TabsContent, tabsListVariants }
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  HoverTabsList,
+  TabsContent,
+  tabsListVariants,
+  useHoverPill,
+}
