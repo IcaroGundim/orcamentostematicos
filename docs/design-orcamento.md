@@ -740,6 +740,17 @@ só `secondaryKey === 'ATIVO'`; toggle "Incluir inativos" (`role="switch"`,
 `inactiveHeadcount` ocultos. A média é `grossTotal ÷ headcount` da família; o
 `title` mostra o nº de denominações consolidadas quando > 1.
 
+Abaixo do cabeçalho há uma **busca por carreira** (`Input` + `SearchIcon`
+absoluto com `pl-8`, a mesma receita dos demais campos de busca do módulo; sem
+rótulo visível, com `aria-label`). O casamento é por `includes` sobre
+`careerFamilyKey(busca.toUpperCase())` contra a `key` da família — a mesma
+normalização dos dois lados, sem acento nem pontuação; o `toUpperCase()` é
+obrigatório porque `careerFamilyKey` descarta minúsculas. Sem resultado: "Nenhuma
+carreira corresponde à busca." **dentro** do retorno principal, com o campo ainda
+visível (o `return` antecipado de lista vazia é só para o caso de não haver
+carreira alguma). O contador do cabeçalho passa a "X de Y carreiras" enquanto a
+busca estiver preenchida.
+
 ### 7.6 Reuso externo ao módulo
 
 - `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/`EmptyDescription`
@@ -820,6 +831,14 @@ documentar aqui.
     código fora do padrão deve aparecer, não sumir.
 15. **Ordem das abas e das métricas é o ciclo da despesa** (dotação → empenho →
     liquidação → pagamento) — não reordenar alfabeticamente ou por tamanho.
+16. **A busca do ranking de carreiras não reescala as barras nem recolore a
+    lista.** A largura continua medida contra o maior rendimento médio do
+    ranking **inteiro** (`highestAverage` de `rankedRows[0]`, não do resultado
+    filtrado) e a cor vem do `rank` gravado na linha, não da posição no filtro.
+    Buscar uma carreira do fim da lista mostra, portanto, uma barra curta: é o
+    valor dela perto do topo do estado, e é o ponto de comparação. Reescalar
+    para o filtro faria a mesma carreira mudar de tamanho conforme o que se
+    digita, e recolorir por índice embaralharia a lista a cada tecla.
 
 ## 10. Proibições explícitas (anti-slop)
 

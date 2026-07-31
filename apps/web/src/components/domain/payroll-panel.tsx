@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useMemo, useState } from 'react';
-import { CalendarDaysIcon, DatabaseIcon, UsersIcon } from 'lucide-react';
+import { CalendarDaysIcon, DatabaseIcon, SearchIcon, UsersIcon } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import {
   Empty,
@@ -10,6 +10,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -266,6 +267,7 @@ function AverageEarningsByCareerList({
    * permite ver o quadro completo. A marca ATIVO/INATIVO vem de `secondaryKey`.
    */
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [search, setSearch] = useState('');
 
   // `secondaryKey` traz a situação crua do portal (ATIVO, INATIVO, PENSIONISTA,
   // EXONERADO/RESCISO). Ativo é só o primeiro; o resto entra apenas com o toggle.
@@ -321,10 +323,27 @@ function AverageEarningsByCareerList({
           (a, b) =>
             b.averageEarnings - a.averageEarnings ||
             b.headcount - a.headcount,
-        );
+        )
+        // A posição no ranking completo fica gravada na linha para a cor da barra
+        // não embaralhar a cada tecla digitada na busca.
+        .map((row, index) => ({ ...row, rank: index }));
     },
     [visibleRows],
   );
+
+  // `careerFamilyKey` já normaliza acentos e pontuação, mas descarta minúsculas
+  // (`[^A-Z0-9]`) — daí o `toUpperCase()` antes. `row.key` vem da mesma função,
+  // então os dois lados da comparação são normalizados do mesmo jeito.
+  const searchKey = careerFamilyKey(search.toUpperCase());
+  const filteredRows = useMemo(
+    () => (searchKey ? rankedRows.filter((row) => row.key.includes(searchKey)) : rankedRows),
+    [rankedRows, searchKey],
+  );
+
+  // Escala das barras presa ao ranking inteiro, não ao resultado da busca: assim
+  // a barra de uma carreira tem sempre a mesma largura, com ou sem filtro. Buscar
+  // uma carreira do fim da lista mostra uma barra curta — é o valor dela perto do
+  // maior rendimento médio do estado, não um erro de renderização.
   const highestAverage = rankedRows[0]?.averageEarnings ?? 0;
 
   const toggle = (
@@ -360,7 +379,10 @@ function AverageEarningsByCareerList({
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
           Rendimento bruto médio por vínculo, consolidando classes, níveis e jornadas ·{' '}
-          {rankedRows.length.toLocaleString('pt-BR')} carreiras ·{' '}
+          {searchKey
+            ? `${filteredRows.length.toLocaleString('pt-BR')} de ${rankedRows.length.toLocaleString('pt-BR')} carreiras`
+            : `${rankedRows.length.toLocaleString('pt-BR')} carreiras`}{' '}
+          ·{' '}
           {includeInactive
             ? `inativos incluídos (${inactiveHeadcount.toLocaleString('pt-BR')} vínculos)`
             : `${inactiveHeadcount.toLocaleString('pt-BR')} vínculos inativos ocultos`}
@@ -368,59 +390,79 @@ function AverageEarningsByCareerList({
         </p>
         {toggle}
       </div>
-      <div
-        className="max-h-[22rem] min-w-0 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
-        tabIndex={0}
-        aria-label="Todas as carreiras ordenadas por rendimento bruto médio"
-      >
-        <div className="grid min-w-0 gap-2.5">
-          {rankedRows.map((row, index) => {
-            const relativeWidth = highestAverage
-              ? (row.averageEarnings / highestAverage) * 100
-              : 0;
-            return (
-              <div key={row.key} className="grid min-w-0 gap-1">
-                <div className="flex min-w-0 items-baseline justify-between gap-3 text-sm">
-                  <span
-                    className="min-w-0 flex-1 truncate font-medium"
-                    title={
-                      row.variantCount > 1
-                        ? `${row.label} · ${row.variantCount} denominações consolidadas`
-                        : row.label
-                    }
-                  >
-                    {row.label}
-                  </span>
-                  <span className="shrink-0 font-semibold tabular-nums">
-                    {formatMoney(row.averageEarnings)}
-                  </span>
-                </div>
-                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                  <div
-                    className="h-1.5 overflow-hidden bg-stone-100"
-                    role="img"
-                    aria-label={`${row.label}: rendimento bruto médio de ${formatMoney(row.averageEarnings)}`}
-                  >
-                    <div
-                      className="h-full"
-                      style={{
-                        width: `${Math.max(
-                          relativeWidth > 0 ? 1 : 0,
-                          Math.min(100, relativeWidth),
-                        )}%`,
-                        backgroundColor: PAYROLL_COLORS[index % PAYROLL_COLORS.length],
-                      }}
-                    />
-                  </div>
-                  <span className="w-24 text-right text-xs tabular-nums text-muted-foreground">
-                    {row.headcount.toLocaleString('pt-BR')} vínc.
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <div className="relative min-w-0">
+        <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar carreira…"
+          aria-label="Buscar carreira no ranking por rendimento médio"
+          className="pl-8"
+        />
       </div>
+      {!filteredRows.length ? (
+        <div className="flex min-h-32 items-center justify-center text-center text-sm text-muted-foreground">
+          Nenhuma carreira corresponde à busca.
+        </div>
+      ) : (
+        <div
+          className="max-h-[22rem] min-w-0 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]"
+          tabIndex={0}
+          aria-label={
+            searchKey
+              ? 'Carreiras encontradas na busca, ordenadas por rendimento bruto médio'
+              : 'Todas as carreiras ordenadas por rendimento bruto médio'
+          }
+        >
+          <div className="grid min-w-0 gap-2.5">
+            {filteredRows.map((row) => {
+              const relativeWidth = highestAverage
+                ? (row.averageEarnings / highestAverage) * 100
+                : 0;
+              return (
+                <div key={row.key} className="grid min-w-0 gap-1">
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 text-sm">
+                    <span
+                      className="min-w-0 flex-1 truncate font-medium"
+                      title={
+                        row.variantCount > 1
+                          ? `${row.label} · ${row.variantCount} denominações consolidadas`
+                          : row.label
+                      }
+                    >
+                      {row.label}
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums">
+                      {formatMoney(row.averageEarnings)}
+                    </span>
+                  </div>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                    <div
+                      className="h-1.5 overflow-hidden bg-stone-100"
+                      role="img"
+                      aria-label={`${row.label}: rendimento bruto médio de ${formatMoney(row.averageEarnings)}`}
+                    >
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${Math.max(
+                            relativeWidth > 0 ? 1 : 0,
+                            Math.min(100, relativeWidth),
+                          )}%`,
+                          backgroundColor: PAYROLL_COLORS[row.rank % PAYROLL_COLORS.length],
+                        }}
+                      />
+                    </div>
+                    <span className="w-24 text-right text-xs tabular-nums text-muted-foreground">
+                      {row.headcount.toLocaleString('pt-BR')} vínc.
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
