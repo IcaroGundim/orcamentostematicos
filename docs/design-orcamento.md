@@ -734,7 +734,13 @@ GitHub). Com snapshot:
 **Ranking de carreiras**: agrupa `byCareer` (carreira + `secondaryKey` =
 situação crua do portal) em famílias via `careerFamilyLabel`
 (`payroll-panel.tsx:106-139` — remove CLASSE/NÍVEL/jornada/senioridade,
-normaliza "ESPEC."/abreviações, colapsa professores em "PROFESSOR"). Padrão:
+normaliza "ESPEC."/abreviações, colapsa professores em "PROFESSOR"). O portal
+grava a mesma carreira de apoio das duas formas — `APOIO ADMIN. NIVEL I 25H -
+CLASSE I` e `APOIO ADMINISTRATIVO NIVEL I 25H` —, então a regra casa os dois
+prefixos (`^APOIO\s+ADMIN(?:\.|ISTRATIVO)`) e rotula a família como **APOIO
+ADMINISTRATIVO EDUC.**: a quase totalidade desses vínculos vem do quadro da
+educação. As duas grafias já caíam na mesma família antes da renomeação; separá-
+las mudaria a média, não só o rótulo. Padrão:
 só `secondaryKey === 'ATIVO'`; toggle "Incluir inativos" (`role="switch"`,
 `aria-checked`) mostra o quadro completo com aviso de
 `inactiveHeadcount` ocultos. A média é `grossTotal ÷ headcount` da família; o
@@ -933,6 +939,7 @@ destes, nunca lógica nova de adivinhação:
 | Catálogos da natureza (STN/SOF) | `src/lib/expense-nature.ts` | atualização da tabela oficial |
 | Códigos de controle da dívida | `AMENDMENT_DEBT_CONTROL_CODES` (`functional-classification.ts:240-243`) | novos códigos de dívida iniciados em 8 |
 | Siglas de órgão | `ACRONYM_OVERRIDES` (`organization-acronym.ts:10-23`) | órgão sem sigla extraível do nome |
+| Renomeações de família de carreira | ramo `else` de `careerFamilyLabel` (`payroll-panel.tsx`) | denominação nova do portal que precisa de nome legível no ranking |
 
 ## 13. Limitações conhecidas (contexto, não tarefas)
 

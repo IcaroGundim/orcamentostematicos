@@ -130,7 +130,11 @@ function careerFamilyLabel(value: string) {
     label = label
       .replace(/^ESPEC\.\s+EM\s+EDUC\./, 'ESPECIALISTA EM EDUCAÇÃO')
       .replace(/^TECNICO\s+ADM\.\s+EDUC\./, 'TÉCNICO ADMINISTRATIVO EDUCACIONAL')
-      .replace(/^APOIO\s+ADMIN\./, 'APOIO ADMINISTRATIVO');
+      // O portal grava a mesma carreira das duas formas ("APOIO ADMIN. NIVEL I 25H
+      // - CLASSE I" e "APOIO ADMINISTRATIVO NIVEL I 25H"), então as duas entram na
+      // mesma família. O "EDUC." é do quadro da educação, de onde vem a quase
+      // totalidade desses vínculos.
+      .replace(/^APOIO\s+ADMIN(?:\.|ISTRATIVO)/, 'APOIO ADMINISTRATIVO EDUC.');
   }
 
   return label
