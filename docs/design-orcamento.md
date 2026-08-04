@@ -212,9 +212,11 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
 
   - `overview`: `Tabs` interno pela dimensão; `geral` renderiza a grade
     `gridClass` (`grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2
-    xl:grid-cols-3 xl:grid-rows-2`) com 6 `ExecutionChartCard` (elemento, grupo,
-    categoria, modalidade, órgão, fonte); `amendments` renderiza a mesma grade
-    com os 6 recortes de emenda.
+    xl:grid-cols-3 xl:grid-rows-2`) com **6 cards de tipos mistos** (seção 7.7):
+    `CycleStackedBarChart` (elemento, fonte), `CycleLineChart` (grupo),
+    `ExecutionChartCard` (categoria, modalidade) e `ExecutionScatterChart`
+    (órgão). `amendments` renderiza a mesma grade com os 6 recortes de emenda,
+    todos `ExecutionChartCard` (os tipos adicionais ficam na dimensão `geral`).
   - `fiscal`: `FiscalSecretariatView` (seção 7.4).
   - `actions`: `OverviewScheduledActionsPanel` com `variant="execution"`
     (seção 7.3).
@@ -288,6 +290,9 @@ telas pequenas que a justifique — não por preferência estética.
 | Fundo de cabeçalho de tabela | `bg-stone-50` |
 | Texto secundário | `text-muted-foreground` |
 | Base das barras de participação | `bg-muted` / `bg-stone-100` |
+
+Os três tipos de visualização novos (seção 7.7) usam exatamente as mesmas 5 cores
+da execução — nunca cores novas fora desta tabela.
 
 Regra: **nenhuma cor fora desta paleta** — em especial nada de azul/roxo/vermelho
 de frameworks, nada de `text-primary`/`bg-primary` do tema em elementos de
@@ -774,6 +779,44 @@ busca estiver preenchida.
   446 SECC, 447 CASMIL, 450 GABVICE, 452 CEPDEC, 720 SEMA) ou extração do trecho
   após " - " (CAIXA ALTA, ≤ 12 chars); sem derivação possível → código.
 
+### 7.7 Tipos de visualização adicionais da grade (Visão geral)
+
+A grade `geral`/`amendments` da Visão geral pode misturar **quatro** tipos de
+visualização, todos sobre as mesmas `ExecutionRow[]` das agregações (seção 6.3),
+todos no mesmo shell de card da seção 4.3 (`PANEL_CLASS`, `CHART_HEADER_CLASS`,
+`rounded-none`, `shadow-none`), todos `memo` (R4) e todos com as 5 cores da
+paleta da seção 4.1:
+
+1. **`ExecutionChartCard`** — barras horizontais de uma série (seção 7.1). O tipo
+   original; continua sendo o padrão para recortes com muitos itens.
+2. **`CycleStackedBarChart`** — **barras empilhadas do ciclo da despesa**: uma
+   barra por recorte (por `updatedBudget`) dividida em 4 segmentos derivados, sem
+   recalcular agregação:
+   - `Não empenhado` = `updatedBudget − committed`;
+   - `Empenhado não liquidado` = `committed − liquidated`;
+   - `Liquidado não pago` = `liquidated − paid`;
+   - `Pago` = `paid`.
+   Usa `BarChart layout="vertical"` com `stackId` e 4 `Bar` com as cores da
+   paleta. Responde "quanto do dinheiro já percorreu o ciclo".
+3. **`CycleLineChart`** — **curva do ciclo**: eixo X com os 5 estágios
+   (`EXECUTION_METRICS`, ordem do ciclo da despesa), eixo Y com o valor; uma
+   linha por item do top-N (padrão 8) por `updatedBudget`. Usa `LineChart` do
+   Recharts com `Line` (sem gradiente). Mostra o "atrito" da execução ao longo do
+   ciclo.
+4. **`ExecutionScatterChart`** — **dispersão dotação × execução**: X =
+   `updatedBudget`, Y = `executionRate` (%), tamanho da bolha = `paid`. Usa
+   `ScatterChart` + `Scatter` + `ZAxis` do Recharts. Localiza "orçamento grande
+   com execução baixa".
+
+**Regras dos tipos novos** (todas derivadas do contrato existente):
+
+- Nenhum deles introduz cor, raio, sombra, gradiente ou biblioteca fora da
+  seção 4/10.
+- `compactMoney` e `chartTick` (seção 7.1) são reutilizados para eixos e rótulos.
+- `EmptyState` é usado quando não há dados após os filtros.
+- A seleção de qual recorte usa qual tipo é uma decisão de layout da página
+  (seção 3.3), não um comportamento fixo de cada componente.
+
 ## 8. Coleta da folha — job
 
 `.github/workflows/folha.yml`:
@@ -845,6 +888,12 @@ documentar aqui.
     valor dela perto do topo do estado, e é o ponto de comparação. Reescalar
     para o filtro faria a mesma carreira mudar de tamanho conforme o que se
     digita, e recolorir por índice embaralharia a lista a cada tecla.
+17. **A grade da Visão geral mistura tipos de visualização** (seção 7.7):
+    barras de uma série, barras empilhadas do ciclo, curva do ciclo e dispersão
+    dotação × execução. A escolha de qual recorte usa qual tipo é deliberada e
+    fica registrada na seção 3.3 — não é um comportamento aleatório nem uma
+    troca por preferência estética. Nenhum tipo novo pode entrar sem passar por
+    esta seção.
 
 ## 10. Proibições explícitas (anti-slop)
 
@@ -881,9 +930,12 @@ Violação de qualquer item é motivo para rejeitar a mudança:
     leitura (R12).
 13. **Nenhuma tabela nova ad-hoc com markup próprio** onde `ExecutionTablePanel`
     serve (com `moneyColumns`/`hideRate`).
-14. **Nenhum gráfico novo fora do padrão**: sem pizza em visões de execução (a
-    pizza existe só na folha), sem `layout="horizontal"`, sem eixo categórico
-    com mais de 100 itens.
+14. **Nenhum gráfico novo fora do padrão da seção 7.7**: sem pizza em visões de
+    execução (a pizza existe só na folha), sem `layout="horizontal"` fora do
+    `CycleStackedBarChart`/`ExecutionChartCard`, sem eixo categórico com mais de
+    100 itens. Os tipos novos (empilhado do ciclo, linha do ciclo, dispersão)
+    são permitidos apenas na forma registrada na seção 7.7 — nunca uma variação
+    livre (ex.: área empilhada, pizza, radar) fora dela.
 15. **Nenhum "ajuste" de UI que ande na contramão das decisões da seção 9** —
     inclusive "melhorar o visual" dos painéis verdes/pretos, que é a identidade.
 16. **Nenhuma opção fora do contrato oferecida ao usuário.** Ao propor

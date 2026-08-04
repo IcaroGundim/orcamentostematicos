@@ -1239,18 +1239,15 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
               <FieldLabel htmlFor="weightingFactor">Ponderador</FieldLabel>
               <Input
                 id="weightingFactor"
-                type="number"
-                min="0"
-                max="1"
-                step="0.01"
-                value={weightingFactorFormValue(
-                  assignment.theme,
-                  assignment.classification,
-                  assignment.weightingFactor,
-                )}
+                type="text"
+                inputMode="decimal"
+                value={assignment.weightingFactor}
                 disabled={isWeightingFactorLocked(assignment.theme, assignment.classification)}
                 onChange={(event) =>
-                  onAssignmentChange({ ...assignment, weightingFactor: event.target.value })
+                  onAssignmentChange({
+                    ...assignment,
+                    weightingFactor: event.target.value.replace(",", "."),
+                  })
                 }
                 placeholder="Opcional"
               />

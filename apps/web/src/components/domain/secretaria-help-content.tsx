@@ -289,7 +289,12 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
             headers={['Tema', 'Classificação', 'Ponderador', 'Comportamento']}
             rows={[
               ['OCAD', 'Exclusivo', '1 (100%)', lockedWeightingFactorLabel('OCAD', 'EXCLUSIVO') ?? 'Fixo'],
-              ['OCAD', 'Não exclusivo', 'Informado', 'Valor entre 0 e 1'],
+              [
+                'OCAD',
+                'Não exclusivo',
+                '0,36 (36%)',
+                lockedWeightingFactorLabel('OCAD', 'NAO_EXCLUSIVO') ?? 'Fixo',
+              ],
               ['OSG', 'Categoria 1', '1 (100%)', lockedWeightingFactorLabel('OSG', 'CATEGORIA_1') ?? 'Fixo'],
               [
                 'OSG',

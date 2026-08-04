@@ -17,7 +17,10 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
+  CycleLineChart,
+  CycleStackedBarChart,
   ExecutionChartCard,
+  ExecutionScatterChart,
   ExecutionTablePanel,
 } from '@/components/domain/execution-breakdown-panel';
 import { PayrollPanel, type PayrollDto } from '@/components/domain/payroll-panel';
@@ -861,12 +864,38 @@ export default function OrcamentoPage() {
               <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
                 <TabsContent value="geral" forceMount className="min-h-0 overflow-hidden">
                   <div className={gridClass}>
-                    <ExecutionChartCard title="Por elemento de despesa" rows={elementRows} metric={metric} color={chartColors.element} />
-                    <ExecutionChartCard title="Por grupo de natureza" rows={groupRows} metric={metric} color={chartColors.group} />
-                    <ExecutionChartCard title="Por categoria econômica" rows={categoryRows} metric={metric} color={chartColors.category} />
-                    <ExecutionChartCard title="Por modalidade de aplicação" rows={modalityRows} metric={metric} color={chartColors.modality} />
-                    <ExecutionChartCard title="Por órgão" rows={organizationRows} metric={metric} color={chartColors.organization} />
-                    <ExecutionChartCard title="Por fonte de recurso" rows={sourceRows} metric={metric} color={chartColors.source} />
+                    <CycleStackedBarChart
+                      title="Ciclo da despesa por elemento"
+                      description="Dotação atualizada dividida em não empenhado, empenhado não liquidado, liquidado não pago e pago."
+                      rows={elementRows}
+                    />
+                    <CycleLineChart
+                      title="Curva do ciclo — grupos de natureza"
+                      description="Top 8 grupos de natureza pelo orçamento atualizado, ao longo dos 5 estágios da despesa."
+                      rows={groupRows}
+                    />
+                    <ExecutionChartCard
+                      title="Por categoria econômica"
+                      rows={categoryRows}
+                      metric={metric}
+                      color={chartColors.category}
+                    />
+                    <ExecutionChartCard
+                      title="Por modalidade de aplicação"
+                      rows={modalityRows}
+                      metric={metric}
+                      color={chartColors.modality}
+                    />
+                    <ExecutionScatterChart
+                      title="Dotação × execução por órgão"
+                      description="Cada bolha é um órgão: eixo X = dotação atualizada, eixo Y = % liquidado, tamanho = pago."
+                      rows={organizationRows}
+                    />
+                    <CycleStackedBarChart
+                      title="Ciclo da despesa por fonte"
+                      description="Top fontes de recurso pelo orçamento atualizado, com o percurso da execução."
+                      rows={sourceRows}
+                    />
                   </div>
                 </TabsContent>
 

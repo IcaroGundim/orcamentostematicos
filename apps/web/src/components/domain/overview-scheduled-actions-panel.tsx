@@ -409,6 +409,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     let initialBudget = 0;
     let updatedBudget = 0;
     let liquidated = 0;
+    let available = 0;
     for (const action of displayedActions) {
       for (const a of action.assignments) {
         if (a.theme !== weightedTheme) continue;
@@ -416,9 +417,10 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
         initialBudget += action.totals.initialBudget * factor;
         updatedBudget += action.totals.updatedBudget * factor;
         liquidated += action.totals.liquidated * factor;
+        available += (action.totals.updatedBudget - action.totals.liquidated) * factor;
       }
     }
-    return { initialBudget, updatedBudget, liquidated };
+    return { initialBudget, updatedBudget, liquidated, available };
   }, [displayedActions, weightedTheme]);
 
   const selectedCount = selectedIds.size + selectedLines.size;
@@ -851,8 +853,10 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               value: formatMoney((weighted ? weightedTotals : totals).liquidated),
             },
             {
-              label: 'Disponível',
-              value: formatMoney(totals.updatedBudget - totals.liquidated),
+              label: weighted ? 'Disponível ponderado' : 'Disponível',
+              value: formatMoney(
+                weighted ? weightedTotals.available : totals.updatedBudget - totals.liquidated,
+              ),
             },
           ].map((stat) => (
             <div key={stat.label} className="min-w-0 border-0 bg-transparent p-0 md:rounded-lg md:border md:bg-white md:p-3">

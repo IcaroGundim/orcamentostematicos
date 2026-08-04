@@ -1,13 +1,25 @@
 'use client';
 
 import { memo, useMemo } from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatMoney } from '@/lib/api';
 import {
   EXECUTION_METRIC_LABELS,
+  EXECUTION_METRICS,
   type ExecutionMetric,
   type ExecutionRow,
 } from '@/lib/execution-monitor';
@@ -80,6 +92,69 @@ function EmptyState({ title, description }: { title: string; description?: strin
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Formata um percentual com 1 casa decimal pt-BR (sem o símbolo de moeda). */
+function percentFormatter(value: number): string {
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+}
+
+/**
+ * Tooltip dos gráficos de ciclo/dispersão.
+ *
+ * Mantém **todas** as informações que o `ChartTooltipContent` padrão do projeto
+ * mostrava — cabeçalho com o recorte e uma linha por item (nome + valor) — mas
+ * corrige a forma de exibição:
+ *
+ * - valores monetários com `formatMoney` e a taxa de execução como percentual
+ *   (antes, o formatter genérico transformava o % em "R$ 70,50");
+ * - estilo dentro do contrato do módulo (`rounded-none`, `border-black/70`,
+ *   `shadow-none`) em vez do `rounded-lg`/`shadow-xl` do componente padrão;
+ * - os itens sem `name` definido (barras empilhadas) deixam de mostrar o valor
+ *   cru sem rótulo.
+ */
+function CycleTooltipContent({
+  active,
+  payload,
+  headerKey,
+  formatters,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{
+    name?: string | number;
+    value?: string | number;
+    dataKey?: string | number;
+    payload?: Record<string, unknown>;
+  }>;
+  /** Campo do item cujo valor vira o cabeçalho (padrão: `label`). */
+  headerKey?: string;
+  /** Formatadores por `dataKey`; o padrão é `formatMoney`. */
+  formatters?: Record<string, (value: number) => string>;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  const header =
+    headerKey && row ? String(row[headerKey] ?? '') : (row?.label as string | undefined);
+  const items = payload.filter((item) => item.value != null);
+  if (!items.length) return null;
+  return (
+    <div className="rounded-none border border-black/70 bg-white px-2.5 py-1.5 text-xs shadow-none">
+      {header ? (
+        <div className="mb-1 border-b border-black/20 pb-1 font-semibold tabular-nums">{header}</div>
+      ) : null}
+      <div className="grid gap-1">
+        {items.map((item, index) => {
+          const formatter = formatters?.[String(item.dataKey ?? item.name)] ?? formatMoney;
+          return (
+            <div key={index} className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">{String(item.name ?? '')}</span>
+              <span className="font-medium tabular-nums">{formatter(Number(item.value))}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -323,6 +398,327 @@ export const ExecutionTablePanel = memo(function ExecutionTablePanel({
           </Table>
         </div>
 
+      </CardContent>
+    </Card>
+  );
+});
+
+// ── Barras empilhadas do ciclo da despesa ────────────────────────────────────
+
+/**
+ * Uma barra por recorte (pela dotação atualizada), dividida nos 4 segmentos do
+ * ciclo da despesa. Os segmentos são derivados dos totais que toda `ExecutionRow`
+ * já carrega — não há agregação nova:
+ *
+ * - Não empenhado = dotação atualizada − empenhado
+ * - Empenhado não liquidado = empenhado − liquidado
+ * - Liquidado não pago = liquidado − pago
+ * - Pago = pago
+ *
+ * A soma dos 4 segmentos fecha com `updatedBudget` do recorte (nada some, nada
+ * duplica — mesma garantia das agregações da seção 6.3 do contrato).
+ */
+export const CycleStackedBarChart = memo(function CycleStackedBarChart({
+  title,
+  rows,
+  description,
+  className,
+}: {
+  title: string;
+  rows: ExecutionRow[];
+  description?: string;
+  className?: string;
+}) {
+  const chartData = useMemo(
+    () =>
+      sortByMetric(rows, 'updatedBudget')
+        .filter((row) => row.updatedBudget > 0)
+        .slice(0, CHART_MAX_ROWS)
+        .map((row) => {
+          const notCommitted = Math.max(0, row.updatedBudget - row.committed);
+          const committedNotLiquidated = Math.max(0, row.committed - row.liquidated);
+          const liquidatedNotPaid = Math.max(0, row.liquidated - row.paid);
+          return {
+            ...row,
+            tick: chartTick(row),
+            notCommitted,
+            committedNotLiquidated,
+            liquidatedNotPaid,
+          };
+        }),
+    [rows],
+  );
+
+  if (chartData.length === 0) return <EmptyState title={title} description={description} />;
+
+  const config = {
+    notCommitted: { label: 'Não empenhado', color: '#c8c89f' },
+    committedNotLiquidated: { label: 'Empenhado não liquidado', color: '#b8b477' },
+    liquidatedNotPaid: { label: 'Liquidado não pago', color: '#8fa873' },
+    paid: { label: 'Pago', color: '#5f8f70' },
+  } as const;
+
+  return (
+    <Card
+      size="sm"
+      className={cn('flex h-full min-h-0 min-w-0 flex-col', PANEL_CLASS, className)}
+    >
+      <CardHeader className={CHART_HEADER_CLASS}>
+        <CardTitle className="font-semibold uppercase leading-snug tracking-wide">{title}</CardTitle>
+        {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        <ChartContainer
+          config={config}
+          className="min-h-full w-full shrink-0 aspect-auto"
+          style={{ height: `${Math.max(170, chartData.length * 26 + 34)}px` }}
+        >
+          <BarChart
+            accessibilityLayer
+            layout="vertical"
+            data={chartData}
+            margin={{ top: 2, right: 12, left: 2, bottom: 2 }}
+            barCategoryGap="16%"
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              tickFormatter={(value) => compactMoney(Number(value))}
+            />
+            <YAxis
+              type="category"
+              dataKey="tick"
+              width={120}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              interval={0}
+            />
+            <ChartTooltip
+              content={
+                <CycleTooltipContent
+                  formatters={{
+                    notCommitted: formatMoney,
+                    committedNotLiquidated: formatMoney,
+                    liquidatedNotPaid: formatMoney,
+                    paid: formatMoney,
+                  }}
+                />
+              }
+            />
+            <Bar dataKey="paid" stackId="cycle" fill="#5f8f70" radius={0} />
+            <Bar dataKey="liquidatedNotPaid" stackId="cycle" fill="#8fa873" radius={0} />
+            <Bar dataKey="committedNotLiquidated" stackId="cycle" fill="#b8b477" radius={0} />
+            <Bar dataKey="notCommitted" stackId="cycle" fill="#c8c89f" radius={0} />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+});
+
+// ── Curva do ciclo (linha) ───────────────────────────────────────────────────
+
+/**
+ * Uma linha por item do top-N (por dotação atualizada), com o eixo X nos 5
+ * estágios do ciclo da despesa. Mostra o "atrito" da execução: onde a linha cai
+ * muito entre um estágio e outro, há dinheiro parado naquele trecho.
+ */
+export const CycleLineChart = memo(function CycleLineChart({
+  title,
+  rows,
+  topN = 8,
+  description,
+  className,
+}: {
+  title: string;
+  rows: ExecutionRow[];
+  topN?: number;
+  description?: string;
+  className?: string;
+}) {
+  const { lines, palette } = useMemo(() => {
+    const top = sortByMetric(rows, 'updatedBudget')
+      .filter((row) => row.updatedBudget > 0)
+      .slice(0, topN);
+    // Paleta fixa da seção 4.1 (5 cores), cíclica para até 8 linhas.
+    const palette = ['#5f8f70', '#8fa873', '#b8b477', '#110f24', '#c8c89f'];
+    return {
+      lines: top,
+      palette,
+    };
+  }, [rows, topN]);
+
+  const chartData = useMemo(
+    () =>
+      EXECUTION_METRICS.map((metric) => ({
+        stage: EXECUTION_METRIC_LABELS[metric],
+        ...Object.fromEntries(lines.map((line) => [line.key, line[metric]])),
+      })),
+    [lines],
+  );
+
+  if (lines.length === 0) return <EmptyState title={title} description={description} />;
+
+  return (
+    <Card
+      size="sm"
+      className={cn('flex h-full min-h-0 min-w-0 flex-col', PANEL_CLASS, className)}
+    >
+      <CardHeader className={CHART_HEADER_CLASS}>
+        <CardTitle className="font-semibold uppercase leading-snug tracking-wide">{title}</CardTitle>
+        {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        <ChartContainer
+          config={Object.fromEntries(
+            lines.map((line, index) => [
+              line.key,
+              { label: line.shortLabel, color: palette[index % palette.length] },
+            ]),
+          )}
+          className="min-h-full w-full shrink-0 aspect-auto"
+          style={{ height: `${Math.max(170, lines.length * 26 + 34)}px` }}
+        >
+          <LineChart
+            accessibilityLayer
+            data={chartData}
+            margin={{ top: 2, right: 12, left: 2, bottom: 2 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="stage"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              interval={0}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              tickFormatter={(value) => compactMoney(Number(value))}
+            />
+            <ChartTooltip content={<CycleTooltipContent headerKey="stage" />} />
+            {lines.map((line, index) => (
+              <Line
+                key={line.key}
+                type="linear"
+                dataKey={line.key}
+                name={line.label}
+                stroke={palette[index % palette.length]}
+                strokeWidth={2}
+                dot={{ r: 3, fill: palette[index % palette.length], strokeWidth: 0 }}
+                activeDot={{ r: 4 }}
+              />
+            ))}
+          </LineChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+});
+
+// ── Dispersão dotação × execução ─────────────────────────────────────────────
+
+/**
+ * Cada ponto é um recorte (por ação/órgão): X = dotação atualizada, Y = taxa de
+ * execução (%), tamanho da bolha = pago. Localiza "orçamento grande com execução
+ * baixa" — o quadrante inferior direito do gráfico.
+ */
+export const ExecutionScatterChart = memo(function ExecutionScatterChart({
+  title,
+  rows,
+  description,
+  className,
+}: {
+  title: string;
+  rows: ExecutionRow[];
+  description?: string;
+  className?: string;
+}) {
+  const chartData = useMemo(
+    () =>
+      rows
+        .filter((row) => row.updatedBudget > 0 && row.executionRate > 0)
+        .slice(0, CHART_MAX_ROWS)
+        .map((row) => ({
+          ...row,
+          budget: row.updatedBudget,
+          rate: row.executionRate,
+          paid: row.paid,
+        })),
+    [rows],
+  );
+
+  if (chartData.length === 0) return <EmptyState title={title} description={description} />;
+
+  const config = {
+    execution: { label: 'Execução (%)', color: '#5f8f70' },
+  } as const;
+
+  return (
+    <Card
+      size="sm"
+      className={cn('flex h-full min-h-0 min-w-0 flex-col', PANEL_CLASS, className)}
+    >
+      <CardHeader className={CHART_HEADER_CLASS}>
+        <CardTitle className="font-semibold uppercase leading-snug tracking-wide">{title}</CardTitle>
+        {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        <ChartContainer
+          config={config}
+          className="min-h-full w-full shrink-0 aspect-auto"
+          style={{ height: `${Math.max(170, Math.min(chartData.length, 8) * 26 + 34)}px` }}
+        >
+          <ScatterChart
+            accessibilityLayer
+            margin={{ top: 2, right: 12, left: 2, bottom: 2 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              type="number"
+              dataKey="budget"
+              name="Dotação atualizada"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              tickFormatter={(value) => compactMoney(Number(value))}
+            />
+            <YAxis
+              type="number"
+              dataKey="rate"
+              name="Execução"
+              domain={[0, 100]}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              tickFormatter={(value) => `${Number(value)}%`}
+            />
+            <ZAxis type="number" dataKey="paid" range={[40, 400]} name="Pago" />
+            <ChartTooltip
+              content={
+                <CycleTooltipContent
+                  formatters={{
+                    budget: formatMoney,
+                    rate: percentFormatter,
+                    paid: formatMoney,
+                  }}
+                />
+              }
+            />
+            <Scatter
+              data={chartData}
+              fill="#5f8f70"
+              stroke="none"
+              shape="circle"
+            />
+          </ScatterChart>
+        </ChartContainer>
       </CardContent>
     </Card>
   );

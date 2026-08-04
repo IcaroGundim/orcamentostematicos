@@ -44,7 +44,7 @@ export function resolveWeightingFactor(
   input?: number | null,
 ): number | null {
   if (isExclusiveAllocation(theme, classification)) return 1;
-  if (theme === 'OSG' && classification === 'CATEGORIA_2') return null;
+  if (usesDeliveryValues(theme, classification)) return null;
   if (theme === 'OSG' && classification === 'CATEGORIA_3') return 0.5;
   if (isOcadNaoExclusivo(theme, classification)) return 0.36;
   if (input == null || Number.isNaN(input)) return null;
