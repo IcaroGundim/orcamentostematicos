@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
-import { getAuthUser, ok, unauthorized, forbidden, notFound } from '@/lib/auth-server';
-import { prisma } from '@/lib/prisma';
-import { mapImport } from '@/lib/store';
+import { getAuthUser, ok, unauthorized, forbidden, notFound, conflict } from '@/lib/auth-server';
+import { deleteBudgetImportPreservingAssignments, mapImport } from '@/lib/store';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -13,42 +12,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const { importId } = await params;
 
-  const deleted = await prisma.$transaction(async (tx) => {
-    const target = await tx.budgetImport.findUnique({ where: { id: importId } });
-    if (!target) return null;
+  const result = await deleteBudgetImportPreservingAssignments(importId);
+  if (!result.target) return notFound('Importação não encontrada.');
+  if (result.unmatched.length > 0) {
+    return conflict(
+      `A importação não foi excluída para preservar ${result.unmatched.length} ` +
+      `classificaç${result.unmatched.length === 1 ? 'ão' : 'ões'} sem ação correspondente em outro QDD.`,
+    );
+  }
 
-    await tx.actionValidation.deleteMany({
-      where: { action: { importId } },
-    });
-
-    await tx.budgetImport.delete({ where: { id: importId } });
-
-    const vigente = await tx.budgetImport.findFirst({
-      where: { status: 'VIGENTE' },
-      orderBy: { importedAt: 'desc' },
-      select: { id: true },
-    });
-
-    if (!vigente) {
-      const nextImport = await tx.budgetImport.findFirst({
-        orderBy: { importedAt: 'desc' },
-      });
-
-      if (nextImport) {
-        await tx.budgetImport.update({
-          where: { id: nextImport.id },
-          data: { status: 'VIGENTE' },
-        });
-      }
-    }
-
-    return target;
-  }, {
-    maxWait: 10000,
-    timeout: 60000,
-  });
-
-  if (!deleted) return notFound('Importação não encontrada.');
-
-  return ok({ deleted: mapImport(deleted) });
+  return ok({ deleted: mapImport(result.target), reattachedAssignments: result.reattached });
 }

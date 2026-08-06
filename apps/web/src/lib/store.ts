@@ -555,6 +555,101 @@ async function remapAssignments(
   return { reattached, unmatched };
 }
 
+function findUnmatchedActions(
+  oldActions: ActionKeyInfo[],
+  newIdByKey: Map<string, string>,
+): OrphanAction[] {
+  return oldActions.flatMap((old) => {
+    if (newIdByKey.has(actionLogicalKey(old))) return [];
+    const { id: _id, year: _year, ...rest } = old;
+    return [rest];
+  });
+}
+
+/**
+ * Deletes a QDD while preserving its thematic assignments. Markers are moved to
+ * the equivalent action in another QDD before deletion. If even one marker has
+ * no equivalent action, the transaction makes no changes and cancels deletion.
+ */
+export async function deleteBudgetImportPreservingAssignments(importId: string) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.budgetImport.findUnique({ where: { id: importId } });
+    if (!target) return { target: null, reattached: 0, unmatched: [] as OrphanAction[] };
+
+    const markedActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
+      where: { importId, assignments: { some: {} } },
+      select: {
+        id: true, year: true, organizationCode: true, organizationName: true,
+        unitCode: true, unitName: true, projectActivity: true, application: true,
+      },
+    });
+
+    // For a historical import, prefer the current QDD. When the current QDD is
+    // deleted, this picks the newest historical QDD, which is promoted below.
+    const survivingActions = await tx.budgetAction.findMany({
+      where: { importId: { not: importId } },
+      select: {
+        id: true, year: true, organizationCode: true, unitCode: true,
+        projectActivity: true, application: true,
+        import: { select: { status: true, importedAt: true } },
+      },
+    });
+    const preferredActionByKey = new Map<string, (typeof survivingActions)[number]>();
+    for (const action of survivingActions) {
+      const key = actionLogicalKey(action);
+      const current = preferredActionByKey.get(key);
+      if (
+        !current ||
+        (action.import.status === 'VIGENTE' && current.import.status !== 'VIGENTE') ||
+        (action.import.status === current.import.status && action.import.importedAt > current.import.importedAt)
+      ) {
+        preferredActionByKey.set(key, action);
+      }
+    }
+    const replacementIdByKey = new Map(
+      [...preferredActionByKey].map(([key, action]) => [key, action.id]),
+    );
+
+    const unmatched = findUnmatchedActions(markedActions, replacementIdByKey);
+    if (unmatched.length > 0) {
+      return { target, reattached: 0, unmatched };
+    }
+
+    const { reattached } = await remapAssignments(tx, markedActions, replacementIdByKey);
+
+    // Validations that follow a marker were moved by remapAssignments. Any
+    // remaining validation belongs to data that is intentionally being deleted.
+    await tx.actionValidation.deleteMany({
+      where: { action: { importId } },
+    });
+    await tx.budgetImport.delete({ where: { id: importId } });
+
+    const vigente = await tx.budgetImport.findFirst({
+      where: { status: 'VIGENTE' },
+      orderBy: { importedAt: 'desc' },
+      select: { id: true },
+    });
+
+    if (!vigente) {
+      const nextImport = await tx.budgetImport.findFirst({
+        orderBy: { importedAt: 'desc' },
+      });
+
+      if (nextImport) {
+        await tx.budgetImport.update({
+          where: { id: nextImport.id },
+          data: { status: 'VIGENTE' },
+        });
+      }
+    }
+
+    return { target, reattached, unmatched };
+  }, {
+    maxWait: 10000,
+    timeout: 60000,
+  });
+}
+
 export async function addImportedBudget(importRecord: any, actions: any[]): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
   return prisma.$transaction(async (tx) => {
     // Captura TODAS as ações que ainda têm marcações (de qualquer import) para

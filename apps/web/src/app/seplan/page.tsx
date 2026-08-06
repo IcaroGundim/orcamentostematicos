@@ -173,6 +173,11 @@ type ReattachResult = {
   }>;
 };
 
+type DeleteImportResult = {
+  deleted: BudgetImport;
+  reattachedAssignments: number;
+};
+
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -616,14 +621,19 @@ export default function SeplanPage() {
     if (deletingImportId) return;
     const confirmed = window.confirm(
       `Excluir a importação ${formatPeriod(importRecord.referenceMonth, importRecord.year, importRecord.periodType)}?\n\n` +
-      'As ações, linhas de despesa, classificações e validações vinculadas a este QDD serão removidas.',
+      'As marcações e validações serão migradas para a ação equivalente em outro QDD. ' +
+      'Se alguma não tiver correspondente, a exclusão será cancelada para não perder dados.',
     );
     if (!confirmed) return;
 
     setDeletingImportId(importRecord.id);
     try {
-      await api(`/imports/qdd/${importRecord.id}`, { method: 'DELETE' });
-      toast.success('Importação excluída.');
+      const result = await api<DeleteImportResult>(`/imports/qdd/${importRecord.id}`, { method: 'DELETE' });
+      toast.success(
+        result.reattachedAssignments > 0
+          ? `Importação excluída e ${result.reattachedAssignments} classificaç${result.reattachedAssignments === 1 ? 'ão preservada' : 'ões preservadas'}.`
+          : 'Importação excluída.',
+      );
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao excluir a importação.');
