@@ -54,10 +54,14 @@ if (!DRY_RUN && (!APP_URL || !JOB_TOKEN)) {
   console.error('Defina APP_URL e SICAF_JOB_TOKEN (ou rode com --dry-run).');
   process.exit(1);
 }
-if (process.env.SICAF_INSECURE_TLS === '1') {
-  // Último recurso: só se o handshake TLS da SEFAZ falhar no runner do CI.
+// Último recurso, se o handshake TLS da SEFAZ falhar no runner. Fica LIGADO só durante a
+// fase de raspagem do SICAF e é RESTAURADO antes do POST ao app (que carrega o
+// SICAF_JOB_TOKEN) — ver restauração em main(). Desligar a verificação e deixar assim
+// vazaria a proteção para a chamada autenticada ao próprio app.
+const INSECURE_TLS = process.env.SICAF_INSECURE_TLS === '1';
+if (INSECURE_TLS) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  console.warn('⚠ TLS sem verificação de certificado (SICAF_INSECURE_TLS=1).');
+  console.warn('⚠ TLS sem verificação de certificado durante a raspagem do SICAF.');
 }
 
 // ── Cookie jar mínimo (o fetch do Node não persiste cookies) ─────────────────
@@ -261,6 +265,9 @@ async function main() {
     console.log(`\n✓ --dry-run: Excel salvo em ${destino}. Nada foi enviado ao app.`);
     return;
   }
+  // Restaura a verificação TLS antes de falar com o app: a chamada que leva o
+  // SICAF_JOB_TOKEN nunca deve sair sem validar o certificado.
+  if (INSECURE_TLS) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   await enviarAoApp(excel);
   console.log('\n✓ Coleta concluída.');
 }

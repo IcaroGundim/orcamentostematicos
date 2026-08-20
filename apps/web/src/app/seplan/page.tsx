@@ -1826,15 +1826,35 @@ function SeplanPageContent() {
                                   : ''}
                                 . Não precisa exportar nem enviar o arquivo — revise e confirme.
                               </span>
-                              <Button
-                                size="sm"
-                                className="mt-2"
-                                disabled={isOpeningSicaf || isPreviewingImport || isConfirmingImport}
-                                onClick={() => void openSicafPreview()}
-                              >
-                                {isOpeningSicaf ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : null}
-                                Revisar prévia do SICAF
-                              </Button>
+                              {/* Nunca abrir uma prévia num exercício diferente do que está na tela:
+                                  a conferência derivaria o ano da própria prévia e misturaria
+                                  cadastros de exercícios distintos (ver CLAUDE.md). Trocar primeiro. */}
+                              {loadedYear != null && sicafPending.year !== loadedYear ? (
+                                <>
+                                  <span className="mt-2 block text-muted-foreground">
+                                    A tela está no exercício {loadedYear}. Troque para o {sicafPending.year} para revisar.
+                                  </span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-2"
+                                    disabled={isPreviewingImport || isConfirmingImport}
+                                    onClick={() => setYear(sicafPending.year)}
+                                  >
+                                    Ir para o exercício {sicafPending.year}
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="mt-2"
+                                  disabled={isOpeningSicaf || isPreviewingImport || isConfirmingImport}
+                                  onClick={() => void openSicafPreview()}
+                                >
+                                  {isOpeningSicaf ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : null}
+                                  Revisar prévia do SICAF
+                                </Button>
+                              )}
                             </AlertDescription>
                           </Alert>
                         ) : null}
