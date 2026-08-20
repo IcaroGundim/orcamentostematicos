@@ -116,9 +116,14 @@ Confira no GitLab que os commits chegaram e que `backups/` está lá.
 
 ### 4.1 Token no GitLab
 
-GitLab → projeto → **Settings → Access tokens** → **Add new token**
-· Nome: `mirror-from-github` · Role: **Maintainer** · Scope: **`write_repository`**
+GitLab → foto do perfil → **Edit profile → Access tokens** → **Add new token**
+· Nome: `mirror-from-github` · Scope: **`write_repository`** e nada mais
 · Validade: anote a data — quando expirar, o espelho silenciosamente para.
+
+> **Tem de ser token PESSOAL.** Na gitlab.com o *project access token* exige Premium,
+> e *deploy token* não tem escopo de escrita — só `read_repository`. No plano free
+> sobra o pessoal. Como ele carrega sua identidade e vai morar no GitHub rodando
+> sozinho, crie um **dedicado** a este espelho: vazando, você revoga só ele.
 
 Copie o token (só aparece uma vez).
 
