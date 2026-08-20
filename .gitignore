@@ -8,3 +8,23 @@ coverage
 uploads
 .DS_Store
 .vercel
+
+# Artefatos de build
+*.tsbuildinfo
+
+# Ferramentas locais do editor/agente
+.claude/
+.commandcode/
+
+# Lixo de depuração e arquivos temporários do Office
+chk.html
+edge_dom.html
+orc_login_tmp.html
+r1.html
+r2.html
+h1.txt
+h2.txt
+jars.txt
+test_checkpoint.sh
+~$*
+*.zip
