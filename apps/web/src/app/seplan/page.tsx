@@ -623,6 +623,11 @@ function SeplanPageContent() {
       toast.success(
         `Coleta do SICAF disparada${exercicio != null ? ` (exercício ${exercicio})` : ''}. ` +
           'A prévia aparecerá aqui em alguns instantes — use "Verificar prévia" para atualizar.',
+        {
+          description:
+            'Se não aparecer, veja se a execução falhou em GitHub → Actions → "Coleta do QDD (SICAF)".',
+          duration: 10000,
+        },
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível disparar a coleta do SICAF.');
