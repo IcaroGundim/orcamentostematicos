@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
+import { resolveRequestYear } from '@/lib/exercise-request';
 import { reattachOrphanAssignmentsToVigente } from '@/lib/store';
 
 export const runtime = 'nodejs';
@@ -10,6 +11,9 @@ export async function POST(req: NextRequest) {
   if (!user) return unauthorized();
   if (user.role !== 'SEPLAN_ADMIN') return forbidden();
 
-  const result = await reattachOrphanAssignmentsToVigente();
+  const exercise = await resolveRequestYear(req, user, { mode: 'strict' });
+  if (exercise.response) return exercise.response;
+
+  const result = await reattachOrphanAssignmentsToVigente(exercise.year);
   return ok({ reattachedAssignments: result.reattached, unmatchedAssignments: result.unmatched });
 }

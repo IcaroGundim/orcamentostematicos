@@ -70,7 +70,7 @@ export function SourceBreakdownTable({ action }: SourceBreakdownTableProps) {
         </thead>
         <tbody>
           {rows.map((row) => {
-            const label = getFonteLabel(row.source);
+            const label = getFonteLabel(row.source, action?.year);
             return (
               <tr key={row.source} className="border-t border-neutral-200 dark:border-neutral-700">
                 <td className="px-3 py-1.5">

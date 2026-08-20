@@ -79,7 +79,7 @@ export function ExpenseBreakdownTable({
         </thead>
         <tbody>
           {rows.map((row) => {
-            const fonteLabel = getFonteLabel(row.source);
+            const fonteLabel = getFonteLabel(row.source, action?.year);
             const checked = allSelected || selectedLineKeys.has(row.key);
             return (
               <tr

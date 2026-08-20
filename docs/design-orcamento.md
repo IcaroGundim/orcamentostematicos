@@ -49,12 +49,16 @@ Regras de uso:
    Server Components, não migrar o carregamento de dados para RSC. Todo o estado
    é local (`useState`/`useMemo`/`useCallback`/`useEffect`); não há store global
    nem contexto.
-2. **R2 — Carga única de dados.** `load()` (`page.tsx:242-262`) dispara
-   `Promise.all` de `/budget-actions`, `/organizations` e `/metadata`, e busca
-   `/payroll` em paralelo com `catch` próprio que resulta em `null` — a folha é
-   fonte externa e opcional; se a coleta não rodou ou o portal caiu, o restante
-   do painel não pode deixar de carregar. Nenhuma rota nova pode ser consultada a
-   cada interação; nada é re-carregado por troca de aba, filtro ou métrica.
+2. **R2 — Carga única de dados.** `load()` dispara `Promise.all` de
+   `/budget-actions`, `/organizations` e `/metadata`, e busca `/payroll` em
+   paralelo com `catch` próprio que resulta em `null` — a folha é fonte externa e
+   opcional; se a coleta não rodou ou o portal caiu, o restante do painel não pode
+   deixar de carregar. Nenhuma rota nova pode ser consultada a cada interação;
+   nada é re-carregado por troca de aba, filtro ou métrica.
+   **A única exceção é a troca de exercício** (seção 3.1): ela recarrega tudo,
+   porque o QDD é outro. `load()` depende de `year`, e o efeito de sessão/redirect
+   é separado do de carga — juntá-los faria o redirecionamento ser reavaliado a
+   cada troca de ano.
 3. **R3 — Agregações são funções puras.** Toda agregação mora em
    `src/lib/execution-monitor.ts`, recebe `BudgetAction[]` (com `expenseLines`)
    e devolve `ExecutionRow[]`. Sem I/O, sem hooks, sem estado, sem importar de
@@ -142,6 +146,18 @@ orcamento-page-root (h-svh w-full overflow-hidden)
 - divisor `|` (`hidden lg:inline`, `text-primary-foreground/50`);
 - título `EXECUÇÃO ORÇAMENTÁRIA` — `font-semibold uppercase tracking-widest`,
   `fontSize: 22px`, `truncate`;
+- **seletor de exercício** (`ExerciseSelect`,
+  `src/components/domain/exercise-select.tsx`), primeiro item do grupo à direita.
+  É um `Select` de `components/ui/select` com a mesma receita visual dos botões
+  vizinhos (`rounded-sm border-black/50 bg-white text-foreground shadow-none
+  hover:bg-stone-100`) e ícone `CalendarRangeIcon`. Fica **visível mesmo com
+  um só exercício** (desabilitado nesse caso): quem opera precisa enxergar em que
+  exercício está, não só poder trocá-lo. Exercícios apenas comparativos ganham o
+  sufixo `Comparativo` na lista, e o corrente, `Corrente`. O estado vive na URL
+  (`?exercicio=2026`) via `useExercise` (`src/lib/use-exercise.ts`), e trocar o
+  exercício **limpa órgão, unidade, fonte, função, subfunção e busca**, porque a
+  estrutura do QDD difere entre anos. Não usa `useHoverPill`: a seção 4.4 vale
+  para abas/pílulas, não para `Select`.
 - três botões à direita, todos `variant="secondary"` com a receita visual
   `rounded-sm border-black/50 bg-white text-foreground shadow-none
   hover:bg-stone-100`:
@@ -359,11 +375,16 @@ mesma em todo o sistema.
 
 ### 5.1 Rotas e cargas
 
+Todas as rotas de leitura aceitam `?year=` (o seletor da seção 3.1 envia o
+exercício selecionado). Sem o parâmetro, o servidor resolve o **exercício
+corrente** — o ano mais recente com QDD `VIGENTE` —, de modo que URLs antigas se
+comportam exatamente como antes.
+
 | Dado | Rota | Origem |
 |---|---|---|
-| Ações | `GET /api/budget-actions` | `listActions` (`src/lib/store.ts:129-152`) — **somente** a importação `VIGENTE`; para admin, aceita filtros `year`, `organizationCode`, `unitCode`; inclui `expenseLines` (via `expenseLineSelect`) e `assignments`; ordena por órgão/unidade/projeto-atividade |
-| Órgãos | `GET /api/organizations` | estrutura governamental (`GovernmentOrganization`/`GovernmentUnit`), ordenada por código |
-| Metadados | `GET /api/metadata` | inclui `vigenteImport` (exercício e período de referência) |
+| Ações | `GET /api/budget-actions?year=` | `listActions` (`src/lib/store.ts`) — a importação `VIGENTE` **daquele exercício**; `year` SELECIONA o import, não filtra dentro dele; para admin, aceita ainda `organizationCode` e `unitCode`; inclui `expenseLines` (via `expenseLineSelect`) e `assignments`; ordena por órgão/unidade/projeto-atividade |
+| Órgãos | `GET /api/organizations?year=` | cadastro do exercício (`ExerciseOrganization`/`ExerciseUnit`), ordenado por código. **As opções do filtro de órgão não vêm daqui** — veja a seção 9.18 |
+| Metadados | `GET /api/metadata?year=` | inclui `exercises`, `currentYear`, `comparisonOnly` e o `vigenteImport` **do exercício selecionado** |
 | Folha | `GET /api/payroll` | `PayrollSnapshot` mais recente (`orderBy year desc, month desc`) com `groups`; rota restrita a `SEPLAN_ADMIN`; devolve só somas, agrupadas por `dimension` e ordenadas por `grossTotal` desc (`src/app/api/payroll/route.ts`) |
 
 ### 5.2 Formato dos dados
@@ -895,6 +916,36 @@ documentar aqui.
     troca por preferência estética. Nenhum tipo novo pode entrar sem passar por
     esta seção.
 
+18. **As opções do filtro de órgão vêm das ações, não do cadastro.** Unidade e
+    fonte sempre derivaram das `actions`; o órgão vinha de `/organizations`. Com
+    vários exercícios isso passou a divergir: o cadastro de um ano ofereceria
+    órgãos inexistentes no exercício carregado e omitiria os que só existem nele.
+    O nome do cadastro continua preferido quando há; senão vale o do próprio QDD
+    (`action.organizationName`).
+19. **A folha NÃO acompanha o exercício.** `/api/payroll` segue devolvendo o
+    snapshot mais recente do Portal da Transparência, qualquer que seja o
+    exercício selecionado. É decisão de produto: a folha é o retrato do mês
+    publicado, não um recorte do QDD.
+20. **`aggregateBySource`/`amendmentTypeFromSource` deduzem o exercício das
+    próprias ações** (`actions[0].year`). Todas as ações de uma chamada vêm de um
+    único QDD, então a primeira já responde — e o ano não precisa ser propagado
+    por prop em toda a árvore de componentes.
+21. **Quando a operação conhece o próprio exercício, ela vence o seletor.** A
+    conferência de uma prévia de QDD deriva o exercício da própria prévia
+    (`importRecord.year`) e **ignora** o `?year=`; a importação usa o campo
+    "Exercício" do formulário, porque é a única operação que mira um exercício que
+    ainda não existe. O seletor decide apenas onde a operação não sabe — e nesses
+    casos o alvo é exibido no ponto da ação, não só no cabeçalho. Deixar o ano do
+    contexto governar uma escrita já produziu um diff que sobrescreveria o cadastro
+    de um exercício com o de outro.
+22. **O exercício corrente é ato de governança, não navegação.** Trocá-lo (tela
+    Exercícios, em Estrutura vigente) muda quem pode escrever: as secretarias só
+    editam entregas do corrente. Por isso a troca pede confirmação e nunca é efeito
+    do seletor do cabeçalho.
+23. **Leituras toleram exercício inexistente, escritas não.** Um link antigo com
+    `?exercicio=` de um ano que não existe abre no corrente em vez de quebrar; uma
+    rota de escrita sem exercício, ou com um inexistente, é recusada com 400.
+
 ## 10. Proibições explícitas (anti-slop)
 
 Violação de qualquer item é motivo para rejeitar a mudança:
@@ -927,7 +978,10 @@ Violação de qualquer item é motivo para rejeitar a mudança:
     reestruturar indiscriminadamente quebra histórico e diff. Mudança de nome ou
     estrutura só com propósito funcional e registro aqui.
 12. **Nenhuma alteração no schema do banco para este módulo** — ele é somente
-    leitura (R12).
+    leitura (R12). Os modelos `FiscalYear`, `ExerciseOrganization`,
+    `ExerciseUnit` e `ExerciseUnitExecutor`, criados para os múltiplos
+    exercícios, pertencem à importação e à curadoria; este módulo apenas lê o que
+    elas alimentam.
 13. **Nenhuma tabela nova ad-hoc com markup próprio** onde `ExecutionTablePanel`
     serve (com `moneyColumns`/`hideRate`).
 14. **Nenhum gráfico novo fora do padrão da seção 7.7**: sem pizza em visões de
@@ -963,8 +1017,11 @@ Violação de qualquer item é motivo para rejeitar a mudança:
    (`memo` mantido).
 5. Filtros em cascata: órgão limpa unidade+fonte; unidade limpa fonte; "Limpar
    filtros" desabilita quando limpo; opções de unidade/fonte refletem o recorte.
+   **Trocar o exercício limpa órgão+unidade+fonte+função+subfunção+busca**, e as
+   opções passam a refletir apenas o QDD do ano escolhido.
 6. Somatórios conferem: para o QDD vigente, a soma dos buckets de cada
-   agregação fecha com o total geral (nada descartado, nada duplicado).
+   agregação fecha com o total geral (nada descartado, nada duplicado) — e isso
+   vale **em cada exercício**, não só no corrente.
 7. Textos novos seguem o padrão: pt-BR, `uppercase tracking` em rótulos,
    `tabular-nums` em números, `formatMoney`/`compactMoney` em valores.
 8. Estado vazio e `Skeleton` cobertos para o que foi alterado; estados vazios
@@ -987,7 +1044,7 @@ destes, nunca lógica nova de adivinhação:
 | Escopos da folha centralizada (código de ação → órgão/unidade) | `CENTRAL_PAYROLL_SCOPES` (`execution-monitor.ts:49-99`) | código novo/alterado de ação de folha no QDD |
 | Órgãos do portal por escopo QDD | `PAYROLL_ORGANIZATIONS_BY_QDD_SCOPE` (`payroll-scope.ts:37-103`) | órgão novo no portal, unidade nova no QDD, mudança de nome |
 | Fontes vinculadas por órgão (comprometido) | `EARMARKED_SOURCES_BY_ORGANIZATION` (`fiscal-secretariat-view.tsx:54-61`) | novo órgão dominado por fontes vinculadas |
-| Catálogo de fontes (2026, SEPLAN/DIRPLA/DEPOP) | `src/lib/fontes-recursos.ts` | exercícios futuros; nunca "completar" por chute |
+| Catálogo de fontes **por exercício** (SEPLAN/DIRPLA/DEPOP) | `CATALOGOS_POR_EXERCICIO` (`src/lib/fontes-recursos.ts`) | exercício novo exige registro explícito. Quando o anexo não muda de um ano para o outro, os dois anos apontam para o mesmo objeto — é o caso de 2025 e 2026. `getFonteLabel(code, year)` exige o ano e **não** cai no catálogo de outro exercício por conta própria: rótulo errado é pior que ausente. Ano não registrado mostra "Fonte não catalogada" |
 | Catálogos da natureza (STN/SOF) | `src/lib/expense-nature.ts` | atualização da tabela oficial |
 | Códigos de controle da dívida | `AMENDMENT_DEBT_CONTROL_CODES` (`functional-classification.ts:240-243`) | novos códigos de dívida iniciados em 8 |
 | Siglas de órgão | `ACRONYM_OVERRIDES` (`organization-acronym.ts:10-23`) | órgão sem sigla extraível do nome |
@@ -1016,12 +1073,22 @@ atualizar este documento.
 - A dedução de tipo de emenda depende do texto do rótulo da fonte ("emenda" +
   palavra-chave); mudança de nomenclatura no catálogo pode rebaixar tipos para
   `NAO_IDENTIFICADO`.
+- `CENTRAL_PAYROLL_SCOPES` (`execution-monitor.ts`) e
+  `PAYROLL_ORGANIZATIONS_BY_QDD_SCOPE` (`payroll-scope.ts`) continuam **sem
+  dimensão de exercício**: são chaveados por código de ação e nome de órgão. Num
+  exercício cujo QDD renumere as ações de folha, o escopo de pessoal vem vazio —
+  o painel mostra estado vazio, nunca zero silencioso.
+- Um exercício não registrado em `CATALOGOS_POR_EXERCICIO` mostra todas as suas
+  fontes como "Fonte não catalogada" (seção 12). É o comportamento honesto, mas
+  degrada a aba "Fonte de recurso" até o ano ser registrado. 2025 e 2026 já estão.
 
 ## 14. Referência rápida
 
 | Arquivo | Papel |
 |---|---|
 | `src/app/orcamento/page.tsx` | página, layout, filtros, navegação, KPIs |
+| `src/lib/use-exercise.ts` | exercício selecionado (URL `?exercicio=`) |
+| `src/components/domain/exercise-select.tsx` | seletor de exercício do cabeçalho |
 | `src/lib/execution-monitor.ts` | agregações, taxas, pessoal, folha centralizada, emendas |
 | `src/lib/expense-nature.ts` | parser + catálogos da natureza |
 | `src/lib/fontes-recursos.ts` | catálogo de fontes + derivação de grupo 2/3 |

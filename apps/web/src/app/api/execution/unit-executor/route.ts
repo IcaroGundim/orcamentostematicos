@@ -1,11 +1,16 @@
 import { NextRequest } from 'next/server';
 import { badRequest, forbidden, getAuthUser, notFound, ok, unauthorized } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
+import { resolveRequestYear } from '@/lib/exercise-request';
 
 /**
  * PUT /api/execution/unit-executor
  *
  * Body: { organizationCode, unitCode, executorUnitCode | null }
+ *
+ * Opera no exercício informado em `?year=` (obrigatório): o mapeamento de executor
+ * é por exercício — `getAllowedUnits` o consulta para qualquer ano ao montar o
+ * escopo de leitura, inclusive de exercícios comparativos.
  */
 export async function PUT(req: NextRequest) {
   const user = await getAuthUser(req);
@@ -23,16 +28,21 @@ export async function PUT(req: NextRequest) {
       ? null
       : String(body.executorUnitCode).trim();
 
-  const target = await prisma.governmentUnit.findUnique({
-    where: { organizationCode_code: { organizationCode, code: unitCode } },
+  const exercise = await resolveRequestYear(req, user, { mode: 'strict' });
+  if (exercise.response) return exercise.response;
+  if (exercise.year == null) return badRequest('Nenhum exercício vigente.');
+  const year = exercise.year;
+
+  const target = await prisma.exerciseUnit.findUnique({
+    where: { year_organizationCode_code: { year, organizationCode, code: unitCode } },
     select: { code: true },
   });
   if (!target) return notFound('Unidade não encontrada no cadastro de estrutura.');
 
   if (executorUnitCode) {
-    const executor = await prisma.governmentUnit.findUnique({
+    const executor = await prisma.exerciseUnit.findUnique({
       where: {
-        organizationCode_code: { organizationCode, code: executorUnitCode },
+        year_organizationCode_code: { year, organizationCode, code: executorUnitCode },
       },
       select: { code: true },
     });
@@ -41,10 +51,10 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  const row = await prisma.unitExecutor.upsert({
-    where: { organizationCode_unitCode: { organizationCode, unitCode } },
+  const row = await prisma.exerciseUnitExecutor.upsert({
+    where: { year_organizationCode_unitCode: { year, organizationCode, unitCode } },
     update: { executorOrgCode: organizationCode, executorUnitCode },
-    create: { organizationCode, unitCode, executorOrgCode: organizationCode, executorUnitCode },
+    create: { year, organizationCode, unitCode, executorOrgCode: organizationCode, executorUnitCode },
   });
 
   return ok(row);

@@ -24,10 +24,21 @@ export async function POST(req: NextRequest) {
     return badRequest('periodType e referenceMonth são obrigatórios.');
   }
 
+  // Exercício escolhido pela SEPLAN. Opcional: sem ele, o parser detecta pelo
+  // arquivo, como antes.
+  const rawYear = formData.get('year');
+  let year: number | null = null;
+  if (rawYear != null && String(rawYear) !== '') {
+    year = Number(rawYear);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      return badRequest('Exercício inválido.');
+    }
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   let parsed;
   try {
-    parsed = parseQdd(file.name, buffer, createId, { periodType, referenceMonth });
+    parsed = parseQdd(file.name, buffer, createId, { periodType, referenceMonth, year });
   } catch (err: any) {
     return badRequest(err?.message ?? 'Erro ao processar o arquivo.');
   }
@@ -35,5 +46,14 @@ export async function POST(req: NextRequest) {
   const previewId = createId('preview');
   await prisma.importPreview.create({ data: { id: previewId, data: parsed as any } });
 
-  return ok({ previewId, ...parsed.importRecord, sampleActions: parsed.sampleActions, organizationsCount: parsed.organizationsCount, unitsCount: parsed.unitsCount });
+  return ok({
+    previewId,
+    ...parsed.importRecord,
+    yearDetectedFrom: parsed.yearDetectedFrom,
+    detectedYear: parsed.detectedYear,
+    detectedYearFrom: parsed.detectedYearFrom,
+    sampleActions: parsed.sampleActions,
+    organizationsCount: parsed.organizationsCount,
+    unitsCount: parsed.unitsCount,
+  });
 }

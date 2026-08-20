@@ -49,14 +49,24 @@ function toCsv(rows, columns) {
 
 (async () => {
   // 1) Dumps brutos (restauráveis 1:1).
-  const [assignments, validations, cycles, imports] = await Promise.all([
-    prisma.$queryRawUnsafe('SELECT * FROM "ThematicAssignment"'),
-    prisma.$queryRawUnsafe('SELECT * FROM "ActionValidation"'),
-    prisma.$queryRawUnsafe('SELECT * FROM "ValidationCycle"'),
-    prisma.$queryRawUnsafe(
-      'SELECT id, filename, year, "referenceMonth", "periodType", status, "actionCount", "importedAt" FROM "BudgetImport"',
-    ),
-  ]);
+  //
+  // A estrutura por exercício entra aqui porque guarda curadoria MANUAL que não
+  // existe em nenhum outro lugar: unidades realocadas, tipo de entidade,
+  // ativo/inativo e os mapeamentos de executor. Com a retenção de ~6h do Neon,
+  // ficar de fora do backup significaria perda irreversível.
+  const [assignments, validations, cycles, imports, fiscalYears, exerciseOrgs, exerciseUnits, exerciseExecutors] =
+    await Promise.all([
+      prisma.$queryRawUnsafe('SELECT * FROM "ThematicAssignment"'),
+      prisma.$queryRawUnsafe('SELECT * FROM "ActionValidation"'),
+      prisma.$queryRawUnsafe('SELECT * FROM "ValidationCycle"'),
+      prisma.$queryRawUnsafe(
+        'SELECT id, filename, year, "referenceMonth", "periodType", status, "actionCount", "importedAt" FROM "BudgetImport"',
+      ),
+      prisma.$queryRawUnsafe('SELECT * FROM "FiscalYear"'),
+      prisma.$queryRawUnsafe('SELECT * FROM "ExerciseOrganization"'),
+      prisma.$queryRawUnsafe('SELECT * FROM "ExerciseUnit"'),
+      prisma.$queryRawUnsafe('SELECT * FROM "ExerciseUnitExecutor"'),
+    ]);
 
   writeJson('curadoria.json', {
     generatedAt: new Date().toISOString(),
@@ -65,11 +75,19 @@ function toCsv(rows, columns) {
       actionValidations: validations.length,
       validationCycles: cycles.length,
       budgetImports: imports.length,
+      fiscalYears: fiscalYears.length,
+      exerciseOrganizations: exerciseOrgs.length,
+      exerciseUnits: exerciseUnits.length,
+      exerciseUnitExecutors: exerciseExecutors.length,
     },
     thematicAssignments: assignments,
     actionValidations: validations,
     validationCycles: cycles,
     budgetImports: imports,
+    fiscalYears,
+    exerciseOrganizations: exerciseOrgs,
+    exerciseUnits: exerciseUnits,
+    exerciseUnitExecutors: exerciseExecutors,
   });
 
   // 2) Marcações denormalizadas (chave lógica) — o artefato de restore.
@@ -108,6 +126,10 @@ function toCsv(rows, columns) {
   console.log(`[backup] ${outDir}`);
   console.log(`  marcações: ${marcacoes.length}`, JSON.stringify(byTheme));
   console.log(`  validações: ${validations.length} | ciclos: ${cycles.length} | imports: ${imports.length}`);
+  console.log(
+    `  estrutura por exercício: ${exerciseOrgs.length} órgãos | ${exerciseUnits.length} unidades | ` +
+      `${exerciseExecutors.length} executores | ${fiscalYears.length} políticas de exercício`,
+  );
 
   await prisma.$disconnect();
 })().catch((e) => { console.error('ERR', e.message); process.exit(1); });

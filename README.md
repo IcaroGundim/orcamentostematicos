@@ -86,8 +86,44 @@ schema × banco; (3) **aborta** se o push removeria tabela/coluna, exigindo
 5. Entrar como representante de secretaria e preencher a validação.
 6. Revisar e aprovar/devolver pela SEPLAN.
 
+## Exercícios financeiros
+
+O sistema comporta **vários exercícios ao mesmo tempo**. A invariante é **um QDD
+vigente por exercício** — importar 2025 não afeta 2026.
+
+- **Exercício corrente**: marcado explicitamente pela SEPLAN na aba
+  **Estrutura vigente → Exercícios**. É o único em que as secretarias preenchem
+  entregas, então trocá-lo é ato de governança e pede confirmação. Enquanto nenhum
+  exercício estiver marcado, vale o ano mais recente com QDD vigente.
+- **Exercício apenas comparativo**: marcado no momento da importação. Recebe
+  execução e marcações temáticas, mas **não** gera ciclos de validação nem
+  entregas. A política é do exercício (tabela `FiscalYear`), definida na primeira
+  importação do ano; reimportar não a altera, e o `confirm` recusa uma importação
+  cuja opção divirja das anteriores do mesmo ano. Para mudar deliberadamente:
+  `PATCH /api/exercises/<ano>`.
+- Exercícios comparativos são **visíveis apenas à SEPLAN**, validado no servidor.
+- Um seletor no cabeçalho troca o exercício; ele vive na URL (`?exercicio=2025`) e
+  fica visível mesmo quando há um só exercício.
+- **Quando a operação conhece o próprio exercício, ela vence o seletor.** A
+  conferência de uma prévia de QDD confere contra o exercício **da prévia**, e a
+  importação usa o campo "Exercício" do formulário. O seletor decide só onde a
+  operação não sabe — e aí o alvo aparece na própria tela.
+- Rotas de **escrita** exigem o exercício explicitamente e recusam um ano ausente ou
+  inexistente; rotas de **leitura** caem no corrente, para um link antigo não quebrar.
+- A **folha de pagamento não acompanha** o seletor: mostra sempre o mês mais
+  recente publicado pelo Portal da Transparência.
+- Cada exercício tem a **sua própria estrutura de governo**
+  (`ExerciseOrganization` / `ExerciseUnit` / `ExerciseUnitExecutor`), porque
+  `active` significa "presente no QDD daquele ano". As tabelas antigas sem ano
+  (`GovernmentOrganization`, `GovernmentUnit`, `UnitExecutor`) seguem no banco
+  como rede de segurança até uma remoção deliberada.
+- O catálogo de fontes é por exercício (`src/lib/fontes-recursos.ts`), com cada ano
+  registrado explicitamente e **nunca** caindo no catálogo de outro por conta
+  própria — rótulo errado é pior que ausente. 2025 e 2026 compartilham o mesmo
+  anexo, que não mudou entre os dois.
+
 ## Base vigente e importação
 
-O sistema permite importar manualmente um QDD em `.xls` ou `.xlsx` pela interface da SEPLAN. A prévia consolida as linhas do QDD em ações orçamentárias; ao confirmar, o QDD é registrado como base vigente, preservando órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas de despesa, descrições, fontes e valores.
+O sistema permite importar manualmente um QDD em `.xls` ou `.xlsx` pela interface da SEPLAN. A prévia consolida as linhas do QDD em ações orçamentárias e mostra o **exercício detectado** (e de onde ele foi lido: cabeçalho da planilha, nome do arquivo ou, em último caso, o ano atual — que merece conferência). Ao confirmar, o QDD é registrado como base vigente daquele exercício, preservando órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas de despesa, descrições, fontes e valores.
 
-Ao registrar um novo QDD, importações vigentes anteriores são marcadas como histórico.
+Ao registrar um novo QDD, apenas as importações vigentes **do mesmo exercício** são marcadas como histórico.

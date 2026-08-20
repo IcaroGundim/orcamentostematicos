@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized } from '@/lib/auth-server';
+import { resolveRequestYear } from '@/lib/exercise-request';
 import { prisma } from '@/lib/prisma';
+import { getCurrentYear, listExercises } from '@/lib/store';
 
 const THEME_AXES = {
   OCAD: [
@@ -47,16 +49,40 @@ export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  const vigenteImport = await prisma.budgetImport.findFirst({
-    where: { status: 'VIGENTE' },
-    orderBy: { importedAt: 'desc' },
-  });
+  const exercise = await resolveRequestYear(req, user);
+  if (exercise.response) return exercise.response;
+
+  const [allExercises, currentYear] = await Promise.all([listExercises(), getCurrentYear()]);
+
+  // Exercícios apenas comparativos são exclusivos da SEPLAN — as secretarias nem
+  // chegam a vê-los no seletor.
+  const exercises =
+    user.role === 'SEPLAN_ADMIN' ? allExercises : allExercises.filter((e) => !e.comparisonOnly);
+
+  const selectedYear = exercise.year;
+  // `vigenteImport` continua sendo o do exercício selecionado: o campo é o mesmo de
+  // antes, então nenhum consumidor precisou mudar.
+  const vigenteImport =
+    selectedYear == null
+      ? null
+      : await prisma.budgetImport.findFirst({
+          where: { status: 'VIGENTE', year: selectedYear },
+          orderBy: { importedAt: 'desc' },
+        });
 
   return ok({
     themes: ['OCAD', 'OSG', 'CLIMATICO'],
     axes: THEME_AXES,
     classifications: THEME_CLASSIFICATIONS,
     validationStatuses: ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'],
+    exercises: exercises.map((e) => ({
+      year: e.year,
+      comparisonOnly: e.comparisonOnly,
+      isCurrent: e.isCurrent,
+    })),
+    currentYear,
+    year: selectedYear,
+    comparisonOnly: exercises.find((e) => e.year === selectedYear)?.comparisonOnly ?? false,
     vigenteImport: vigenteImport ? {
       id: vigenteImport.id,
       filename: vigenteImport.filename,

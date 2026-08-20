@@ -31,6 +31,13 @@ export interface GovernmentStructure {
 }
 
 export interface StructureDiff {
+  /** Exercício a que esta conferência se refere. */
+  year: number | null;
+  /**
+   * `true` quando o exercício ainda não tem cadastro: tudo é "novo" por definição.
+   * É a primeira importação daquele ano, não uma divergência.
+   */
+  catalogEmpty: boolean;
   newOrganizations: Array<{ code: string; name: string }>;
   newUnits: Array<{
     organizationCode: string;
@@ -261,12 +268,32 @@ export interface Evidence {
   url: string;
 }
 
+/** Um exercício financeiro disponível no seletor. */
+export interface Exercise {
+  year: number;
+  /**
+   * Exercício carregado só para comparação: tem execução e marcações temáticas,
+   * mas não gera ciclos de validação nem entregas. Visível apenas à SEPLAN.
+   */
+  comparisonOnly: boolean;
+  /** Exercício corrente: o único em que as secretarias preenchem entregas. */
+  isCurrent: boolean;
+}
+
 export interface Metadata {
   themes: ThemeBudget[];
   axes: Record<ThemeBudget, { value: string; label: string }[]>;
   classifications: Record<ThemeBudget, { value: string; label: string }[]>;
   validationStatuses: ValidationStatus[];
-  /** Importação atualmente vigente (exercício e período de referência dos dados). */
+  /** Exercícios que o usuário pode abrir, do mais recente ao mais antigo. */
+  exercises: Exercise[];
+  /** Exercício corrente: o mais recente com QDD vigente. */
+  currentYear: number | null;
+  /** Exercício efetivamente carregado nesta resposta. */
+  year: number | null;
+  /** `true` quando o exercício carregado é apenas comparativo. */
+  comparisonOnly: boolean;
+  /** Importação vigente DO EXERCÍCIO carregado (período de referência dos dados). */
   vigenteImport?: BudgetImport | null;
 }
 

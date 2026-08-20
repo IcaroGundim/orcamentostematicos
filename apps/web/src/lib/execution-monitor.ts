@@ -19,6 +19,15 @@ import {
 } from './expense-nature';
 import { actionIsAmendment } from './functional-classification';
 import { getFonteLabel } from './fontes-recursos';
+
+/**
+ * Exercício de um conjunto de ações. Todas as ações de uma chamada vêm sempre de um
+ * único QDD (a rota carrega um exercício por vez), então a primeira já responde —
+ * e evita propagar o ano por prop em toda a árvore de componentes.
+ */
+function exerciseYearOf(actions: BudgetAction[]): number | null {
+  return actions[0]?.year ?? null;
+}
 import { organizationAcronym } from './organization-acronym';
 import type { BudgetAction, ExpenseLine } from '@/types/domain';
 
@@ -460,8 +469,11 @@ export const AMENDMENT_TYPE_LABELS: Record<AmendmentType, string> = {
  * tipo declarado no QDD e caem em `NAO_IDENTIFICADO`; isso é uma limitação do dado
  * de origem, não do cálculo.
  */
-export function amendmentTypeFromSource(source: string | null | undefined): AmendmentType {
-  const label = getFonteLabel(source)?.toLowerCase() ?? '';
+export function amendmentTypeFromSource(
+  source: string | null | undefined,
+  year: number | null | undefined,
+): AmendmentType {
+  const label = getFonteLabel(source, year)?.toLowerCase() ?? '';
   if (!label.includes('emenda')) return 'NAO_IDENTIFICADO';
   if (label.includes('individua')) return 'INDIVIDUAL';
   if (label.includes('bancada')) return 'BANCADA';
@@ -487,7 +499,7 @@ export function aggregateAmendments(actions: BudgetAction[]): ExecutionRow[] {
 export function aggregateAmendmentsByType(actions: BudgetAction[]): ExecutionRow[] {
   const map = new Map<string, Bucket>();
   for (const line of linesOf(amendmentActions(actions))) {
-    const type = amendmentTypeFromSource(line.source);
+    const type = amendmentTypeFromSource(line.source, exerciseYearOf(actions));
     const label = AMENDMENT_TYPE_LABELS[type];
     const bucket = bucketOf(map, type, label, label);
     bucket.count += 1;
@@ -500,10 +512,11 @@ export function aggregateAmendmentsByType(actions: BudgetAction[]): ExecutionRow
 
 /** Agrega por fonte de recurso, rotulando pelo catálogo oficial das fontes. */
 export function aggregateBySource(actions: BudgetAction[]): ExecutionRow[] {
+  const year = exerciseYearOf(actions);
   const map = new Map<string, Bucket>();
   for (const line of linesOf(actions)) {
     const code = line.source?.trim() || 'Sem fonte';
-    const name = getFonteLabel(code) ?? 'Fonte não catalogada';
+    const name = getFonteLabel(code, year) ?? 'Fonte não catalogada';
     const bucket = bucketOf(map, code, `${code} — ${name}`, name);
     bucket.count += 1;
     addTotals(bucket, line);

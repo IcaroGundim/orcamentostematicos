@@ -29,6 +29,8 @@ type DuplicateGroup = {
 
 interface Props {
   structure: GovernmentStructure;
+  /** Exercício em que a marcação será gravada — a rota o exige explicitamente. */
+  year: number | null;
   onChanged: () => void | Promise<void>;
 }
 
@@ -50,7 +52,7 @@ function isUnidadeGestora(unitName: string) {
   return normalizeName(unitName).includes('unidade gestora');
 }
 
-export function RelocatedUnitsPanel({ structure, onChanged }: Props) {
+export function RelocatedUnitsPanel({ structure, year, onChanged }: Props) {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState<Set<string>>(new Set());
 
@@ -103,7 +105,7 @@ export function RelocatedUnitsPanel({ structure, onChanged }: Props) {
     const key = occurrenceKey(occ);
     setSaving((prev) => new Set(prev).add(key));
     try {
-      await api('/government-structure/unit-relocated', {
+      await api(`/government-structure/unit-relocated${year == null ? '' : `?year=${year}`}`, {
         method: 'PUT',
         body: JSON.stringify({
           organizationCode: occ.organizationCode,
@@ -112,7 +114,12 @@ export function RelocatedUnitsPanel({ structure, onChanged }: Props) {
         }),
       });
       await onChanged();
-      toast.success(relocated ? 'Unidade marcada como realocada.' : 'Marcação removida.');
+      // O exercício vai no texto: é a guarda barata contra gravar no ano errado
+      // com o seletor esquecido em outro exercício.
+      const alvo = year == null ? '' : ` no exercício ${year}`;
+      toast.success(
+        relocated ? `Unidade marcada como realocada${alvo}.` : `Marcação removida${alvo}.`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Não foi possível salvar a marcação.');
     } finally {

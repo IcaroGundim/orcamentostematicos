@@ -1,7 +1,14 @@
-// Fontes ou Destinações de Recursos do Exercício de 2026.
+// Fontes ou Destinações de Recursos, POR EXERCÍCIO.
 // Origem: "Anexo das Fontes ou Destinações de Recursos" — SEPLAN/DIRPLA/DEPOP.
+//
+// Os códigos podem mudar de um exercício para outro, então cada ano é registrado
+// EXPLICITAMENTE em `CATALOGOS_POR_EXERCICIO`. Um exercício não registrado NÃO cai
+// no catálogo de outro ano: isso produziria rótulos errados (pior que ausentes) e a
+// seção 12 do contrato de design proíbe "completar por chute". Código desconhecido
+// aparece como "Fonte não catalogada".
 
-export const fonteRecursosLabels: Readonly<Record<string, string>> = Object.freeze({
+/** Anexo comum a 2025 e 2026 — o mesmo documento vale para os dois exercícios. */
+const FONTES_2025_2026: Readonly<Record<string, string>> = Object.freeze({
   '15000100': 'Recursos Próprios do Tesouro',
   '15001001': 'Recursos destinados à Manutenção e Desenvolvimento do Ensino (25%)',
   '15001002': 'Recursos destinados ao Desenvolvimento das Ações de Saúde (12%)',
@@ -89,6 +96,24 @@ export const fonteRecursosLabels: Readonly<Record<string, string>> = Object.free
 });
 
 /**
+ * Catálogos por exercício. Para adicionar um ano, inclua o anexo oficial daquele
+ * exercício aqui — nunca reaproveitando o de outro ano.
+ */
+const CATALOGOS_POR_EXERCICIO: Readonly<Record<number, Readonly<Record<string, string>>>> =
+  Object.freeze({
+    // 2025 e 2026 compartilham o anexo: confirmado com a SEPLAN que o documento não
+    // mudou entre os dois exercícios. Cada ano segue registrado um a um — apontar
+    // para o mesmo objeto é uma constatação, não uma herança automática.
+    2025: FONTES_2025_2026,
+    2026: FONTES_2025_2026,
+  });
+
+/** Exercícios com catálogo de fontes disponível. */
+export function exerciciosComCatalogoDeFontes(): number[] {
+  return Object.keys(CATALOGOS_POR_EXERCICIO).map(Number).sort((a, b) => b - a);
+}
+
+/**
  * Sufixo por grupo de fonte — o primeiro dígito do código (Portaria STN).
  *
  * A destinação do recurso é dada pelos 7 dígitos seguintes; o primeiro diz apenas de
@@ -108,16 +133,23 @@ const GRUPO_FONTE_SUFIXO: Readonly<Record<string, string>> = Object.freeze({
  * vigente apareciam como "Fonte não catalogada" mesmo tendo destinação conhecida —
  * e cada nova fonte de superávit exigiria uma entrada manual no catálogo.
  */
-export function getFonteLabel(code: string | null | undefined): string | undefined {
-  if (!code) return undefined;
+export function getFonteLabel(
+  code: string | null | undefined,
+  year: number | null | undefined,
+): string | undefined {
+  if (!code || year == null) return undefined;
+  const catalogo = CATALOGOS_POR_EXERCICIO[year];
+  if (!catalogo) return undefined;
+
   const key = code.replace(/\D/g, '');
 
-  const direct = fonteRecursosLabels[key];
+  const direct = catalogo[key];
   if (direct) return direct;
 
   const sufixo = GRUPO_FONTE_SUFIXO[key[0] ?? ''];
   if (sufixo && key.length === 8) {
-    const base = fonteRecursosLabels[`1${key.slice(1)}`];
+    // A derivação resolve DENTRO do catálogo do mesmo exercício.
+    const base = catalogo[`1${key.slice(1)}`];
     if (base) return `${base} — ${sufixo}`;
   }
 

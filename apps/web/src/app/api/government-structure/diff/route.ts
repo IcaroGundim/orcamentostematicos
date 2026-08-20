@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { badRequest, forbidden, getAuthUser, ok, unauthorized } from '@/lib/auth-server';
+import { resolveRequestYear } from '@/lib/exercise-request';
 import { buildStructureDiff } from '@/lib/government-structure';
 
 export async function GET(req: NextRequest) {
@@ -17,8 +18,11 @@ export async function GET(req: NextRequest) {
     return badRequest('previewId é obrigatório quando source=preview.');
   }
 
+  const exercise = await resolveRequestYear(req, user);
+  if (exercise.response) return exercise.response;
+
   try {
-    return ok(await buildStructureDiff(source, previewId));
+    return ok(await buildStructureDiff(source, previewId, exercise.year));
   } catch (err) {
     return badRequest(err instanceof Error ? err.message : 'Erro ao calcular diferenças.');
   }

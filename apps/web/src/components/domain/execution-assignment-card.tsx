@@ -33,6 +33,8 @@ import type { ExecutionStructure, UnitExecutionRow } from '@/types/domain';
 
 interface Props {
   structure: ExecutionStructure;
+  /** Exercício em que a atribuição será gravada — a rota o exige explicitamente. */
+  year: number | null;
   onChanged: () => void | Promise<void>;
 }
 
@@ -44,7 +46,7 @@ function modeOf(unit: UnitExecutionRow): Mode {
   return 'other';
 }
 
-export function ExecutionAssignmentCard({ structure, onChanged }: Props) {
+export function ExecutionAssignmentCard({ structure, year, onChanged }: Props) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -128,6 +130,7 @@ export function ExecutionAssignmentCard({ structure, onChanged }: Props) {
                           key={`${unit.organizationCode}-${unit.unitCode}`}
                           unit={unit}
                           siblingsAsExecutors={autonomous}
+                          year={year}
                           onChanged={onChanged}
                         />
                       ))}
@@ -148,10 +151,12 @@ export function ExecutionAssignmentCard({ structure, onChanged }: Props) {
 function UnitRow({
   unit,
   siblingsAsExecutors,
+  year,
   onChanged,
 }: {
   unit: UnitExecutionRow;
   siblingsAsExecutors: UnitExecutionRow[];
+  year: number | null;
   onChanged: () => void | Promise<void>;
 }) {
   const currentMode = modeOf(unit);
@@ -185,6 +190,7 @@ function UnitRow({
       <ExecutorPickerPopover
         unit={unit}
         siblingsAsExecutors={siblingsAsExecutors}
+        year={year}
         onChanged={onChanged}
       />
     </div>
@@ -194,10 +200,13 @@ function UnitRow({
 function ExecutorPickerPopover({
   unit,
   siblingsAsExecutors,
+  year,
   onChanged,
 }: {
   unit: UnitExecutionRow;
   siblingsAsExecutors: UnitExecutionRow[];
+  /** Exercício alvo da gravação — a rota o exige explicitamente. */
+  year: number | null;
   onChanged: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -232,7 +241,7 @@ function ExecutorPickerPopover({
 
     setSaving(true);
     try {
-      await api('/execution/unit-executor', {
+      await api(`/execution/unit-executor${year == null ? '' : `?year=${year}`}`, {
         method: 'PUT',
         body: JSON.stringify({
           organizationCode: unit.organizationCode,
@@ -240,7 +249,7 @@ function ExecutorPickerPopover({
           executorUnitCode,
         }),
       });
-      toast.success('Executor atualizado.');
+      toast.success(year == null ? 'Executor atualizado.' : `Executor atualizado no exercício ${year}.`);
       setOpen(false);
       await onChanged();
     } catch (err) {

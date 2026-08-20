@@ -2,7 +2,7 @@ import 'server-only';
 
 import { prisma } from './prisma';
 import { actionLogicalKey } from './qdd-parser';
-import { getVigenteImportId } from './store';
+import { getCurrentYear, getVigenteImportId } from './store';
 import type {
   GovernmentEntityType,
   GovernmentStructure,
@@ -24,9 +24,18 @@ type ActionLike = {
   unitName: string;
 };
 
-export async function listGovernmentStructure(): Promise<GovernmentStructure> {
-  const rows = await prisma.governmentOrganization.findMany({
-    where: { active: true },
+/**
+ * Cadastro de órgãos/unidades DO EXERCÍCIO. Sem `year`, o exercício corrente.
+ *
+ * A estrutura é por exercício porque `active` significa "presente no QDD daquele
+ * ano" — num cadastro único, dois exercícios disputariam o mesmo campo.
+ */
+export async function listGovernmentStructure(year?: number | null): Promise<GovernmentStructure> {
+  const targetYear = year ?? (await getCurrentYear());
+  if (targetYear == null) return { organizations: [] };
+
+  const rows = await prisma.exerciseOrganization.findMany({
+    where: { year: targetYear, active: true },
     include: { units: { where: { active: true }, orderBy: { code: 'asc' } } },
     orderBy: { code: 'asc' },
   });
@@ -73,10 +82,14 @@ export function extractPairsFromActions(actions: ActionLike[]): StructurePair[] 
   }));
 }
 
+/**
+ * Compara o QDD com o cadastro. Puro: o exercício e o estado de primeira
+ * importação são acrescentados por quem carregou o contexto.
+ */
 export function diffGovernmentStructure(
   qddPairs: StructurePair[],
   catalog: GovernmentStructure,
-): StructureDiff {
+): Omit<StructureDiff, 'year' | 'catalogEmpty'> {
   const orgByCode = new Map(catalog.organizations.map((o) => [o.code, o]));
   const unitByKey = new Map(
     catalog.organizations.flatMap((o) =>
@@ -176,101 +189,117 @@ export async function applyStructureDiff(
   diff: StructureDiff,
   qddPairs: StructurePair[],
   selection: StructureDiffApplySelection,
+  year: number,
 ): Promise<void> {
-  const pairByOrg = new Map(qddPairs.map((p) => [p.organizationCode, p]));
-  const pairByUnit = new Map(qddPairs.map((p) => [`${p.organizationCode}|${p.unitCode}`, p]));
+  // Transação: sem ela, uma falha no meio deixa o cadastro do exercício meio
+  // aplicado — parte renomeada, parte não —, e não há como saber onde parou.
+  await prisma.$transaction(
+    async (tx) => {
+      const pairByOrg = new Map(qddPairs.map((p) => [p.organizationCode, p]));
+      const pairByUnit = new Map(qddPairs.map((p) => [`${p.organizationCode}|${p.unitCode}`, p]));
 
-  const newOrgCodes = new Set(selection.newOrganizationCodes ?? []);
-  for (const org of diff.newOrganizations) {
-    if (!newOrgCodes.has(org.code)) continue;
-    const pair = pairByOrg.get(org.code);
-    await prisma.governmentOrganization.upsert({
-      where: { code: org.code },
-      update: { name: org.name, active: true },
-      create: {
-        code: org.code,
-        name: org.name,
-        type: 'SECRETARIA',
-        active: true,
-      },
-    });
-    if (pair) pairByOrg.set(org.code, pair);
-  }
+      const newOrgCodes = new Set(selection.newOrganizationCodes ?? []);
+      for (const org of diff.newOrganizations) {
+        if (!newOrgCodes.has(org.code)) continue;
+        const pair = pairByOrg.get(org.code);
+        await tx.exerciseOrganization.upsert({
+          where: { year_code: { year, code: org.code } },
+          update: { name: org.name, active: true },
+          create: {
+            year,
+            code: org.code,
+            name: org.name,
+            type: 'SECRETARIA',
+            active: true,
+          },
+        });
+        if (pair) pairByOrg.set(org.code, pair);
+      }
 
-  const newUnitKeys = new Set(
-    (selection.newUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
+      const newUnitKeys = new Set(
+        (selection.newUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
+      );
+      for (const unit of diff.newUnits) {
+        const key = `${unit.organizationCode}|${unit.code}`;
+        if (!newUnitKeys.has(key)) continue;
+        const pair = pairByUnit.get(key);
+        const orgName = pair?.organizationName ?? unit.organizationName;
+        await tx.exerciseOrganization.upsert({
+          where: { year_code: { year, code: unit.organizationCode } },
+          update: {},
+          create: {
+            year,
+            code: unit.organizationCode,
+            name: orgName,
+            type: 'SECRETARIA',
+            active: true,
+          },
+        });
+        await tx.exerciseUnit.upsert({
+          where: { year_organizationCode_code: { year, organizationCode: unit.organizationCode, code: unit.code } },
+          update: { name: unit.name, active: true },
+          create: {
+            year,
+            organizationCode: unit.organizationCode,
+            code: unit.code,
+            name: unit.name,
+            active: true,
+          },
+        });
+      }
+
+      const renameOrgCodes = new Set(selection.renamedOrganizationCodes ?? []);
+      for (const org of diff.renamedOrganizations) {
+        if (!renameOrgCodes.has(org.code)) continue;
+        await tx.exerciseOrganization.update({
+          where: { year_code: { year, code: org.code } },
+          data: { name: org.qddName },
+        });
+      }
+
+      const renameUnitKeys = new Set(
+        (selection.renamedUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
+      );
+      for (const unit of diff.renamedUnits) {
+        const key = `${unit.organizationCode}|${unit.code}`;
+        if (!renameUnitKeys.has(key)) continue;
+        await tx.exerciseUnit.update({
+          where: { year_organizationCode_code: { year, organizationCode: unit.organizationCode, code: unit.code } },
+          data: { name: unit.qddName },
+        });
+      }
+
+      const deactivateOrgCodes = new Set(selection.deactivateOrganizationCodes ?? []);
+      for (const org of diff.missingOrganizations) {
+        if (!deactivateOrgCodes.has(org.code)) continue;
+        await tx.exerciseOrganization.update({
+          where: { year_code: { year, code: org.code } },
+          data: { active: false },
+        });
+      }
+
+      const deactivateUnitKeys = new Set(
+        (selection.deactivateUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
+      );
+      for (const unit of diff.missingUnits) {
+        const key = `${unit.organizationCode}|${unit.code}`;
+        if (!deactivateUnitKeys.has(key)) continue;
+        await tx.exerciseUnit.update({
+          where: { year_organizationCode_code: { year, organizationCode: unit.organizationCode, code: unit.code } },
+          data: { active: false },
+        });
+      }
+    },
+    { maxWait: 10000, timeout: 60000 },
   );
-  for (const unit of diff.newUnits) {
-    const key = `${unit.organizationCode}|${unit.code}`;
-    if (!newUnitKeys.has(key)) continue;
-    const pair = pairByUnit.get(key);
-    const orgName = pair?.organizationName ?? unit.organizationName;
-    await prisma.governmentOrganization.upsert({
-      where: { code: unit.organizationCode },
-      update: {},
-      create: {
-        code: unit.organizationCode,
-        name: orgName,
-        type: 'SECRETARIA',
-        active: true,
-      },
-    });
-    await prisma.governmentUnit.upsert({
-      where: { organizationCode_code: { organizationCode: unit.organizationCode, code: unit.code } },
-      update: { name: unit.name, active: true },
-      create: {
-        organizationCode: unit.organizationCode,
-        code: unit.code,
-        name: unit.name,
-        active: true,
-      },
-    });
-  }
-
-  const renameOrgCodes = new Set(selection.renamedOrganizationCodes ?? []);
-  for (const org of diff.renamedOrganizations) {
-    if (!renameOrgCodes.has(org.code)) continue;
-    await prisma.governmentOrganization.update({
-      where: { code: org.code },
-      data: { name: org.qddName },
-    });
-  }
-
-  const renameUnitKeys = new Set(
-    (selection.renamedUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
-  );
-  for (const unit of diff.renamedUnits) {
-    const key = `${unit.organizationCode}|${unit.code}`;
-    if (!renameUnitKeys.has(key)) continue;
-    await prisma.governmentUnit.update({
-      where: { organizationCode_code: { organizationCode: unit.organizationCode, code: unit.code } },
-      data: { name: unit.qddName },
-    });
-  }
-
-  const deactivateOrgCodes = new Set(selection.deactivateOrganizationCodes ?? []);
-  for (const org of diff.missingOrganizations) {
-    if (!deactivateOrgCodes.has(org.code)) continue;
-    await prisma.governmentOrganization.update({
-      where: { code: org.code },
-      data: { active: false },
-    });
-  }
-
-  const deactivateUnitKeys = new Set(
-    (selection.deactivateUnits ?? []).map((u) => `${u.organizationCode}|${u.code}`),
-  );
-  for (const unit of diff.missingUnits) {
-    const key = `${unit.organizationCode}|${unit.code}`;
-    if (!deactivateUnitKeys.has(key)) continue;
-    await prisma.governmentUnit.update({
-      where: { organizationCode_code: { organizationCode: unit.organizationCode, code: unit.code } },
-      data: { active: false },
-    });
-  }
 }
 
-export async function syncStructureFromImport(actions: ActionLike[]): Promise<void> {
+/**
+ * Sincroniza o cadastro DO EXERCÍCIO a partir das ações do QDD importado. Como
+ * cada exercício tem a sua própria estrutura, importar um ano nunca renomeia nem
+ * reativa órgãos/unidades de outro.
+ */
+export async function syncStructureFromImport(actions: ActionLike[], year: number): Promise<void> {
   const pairs = extractPairsFromActions(actions);
   const orgNames = new Map<string, string>();
 
@@ -279,20 +308,21 @@ export async function syncStructureFromImport(actions: ActionLike[]): Promise<vo
   }
 
   for (const [code, name] of orgNames) {
-    await prisma.governmentOrganization.upsert({
-      where: { code },
+    await prisma.exerciseOrganization.upsert({
+      where: { year_code: { year, code } },
       update: { name },
-      create: { code, name, type: 'SECRETARIA', active: true },
+      create: { year, code, name, type: 'SECRETARIA', active: true },
     });
   }
 
   for (const pair of pairs) {
-    await prisma.governmentUnit.upsert({
+    await prisma.exerciseUnit.upsert({
       where: {
-        organizationCode_code: { organizationCode: pair.organizationCode, code: pair.unitCode },
+        year_organizationCode_code: { year, organizationCode: pair.organizationCode, code: pair.unitCode },
       },
       update: { name: pair.unitName, active: true },
       create: {
+        year,
         organizationCode: pair.organizationCode,
         code: pair.unitCode,
         name: pair.unitName,
@@ -302,31 +332,63 @@ export async function syncStructureFromImport(actions: ActionLike[]): Promise<vo
   }
 }
 
-export async function getQddPairsForDiff(
+/**
+ * Contexto de uma conferência: o exercício em jogo e o QDD que está sendo
+ * comparado, lidos UMA única vez.
+ *
+ * Existe para eliminar a origem do bug em que uma prévia de um exercício era
+ * comparada com o cadastro e as marcações de outro: aqui o exercício é derivado da
+ * própria prévia, e o parâmetro de contexto (`?year=`) é **ignorado** nesse caso.
+ * É a mesma origem que o `confirm` usa (`importRecord.year`), então o que a
+ * conferência mostra é exatamente o que a confirmação fará.
+ */
+export type DiffContext = {
+  year: number | null;
+  pairs: StructurePair[];
+  actions: ActionKeyFields[];
+};
+
+/** Payload da prévia, na forma mínima de que a conferência precisa. */
+type PreviewPayload = {
+  importRecord?: { year?: unknown };
+  actions?: ActionKeyFields[];
+};
+
+async function loadPreviewPayload(previewId: string): Promise<PreviewPayload> {
+  const preview = await prisma.importPreview.findUnique({ where: { id: previewId } });
+  if (!preview) throw new Error('Prévia não encontrada.');
+  const parsed = preview.data as PreviewPayload | null;
+  if (!parsed || typeof parsed !== 'object') throw new Error('Prévia inválida.');
+  return parsed;
+}
+
+export async function loadDiffContext(
   source: 'preview' | 'vigente',
   previewId?: string,
-): Promise<StructurePair[]> {
+  year?: number | null,
+): Promise<DiffContext> {
   if (source === 'preview') {
     if (!previewId) throw new Error('previewId é obrigatório para source=preview.');
-    const preview = await prisma.importPreview.findUnique({ where: { id: previewId } });
-    if (!preview) throw new Error('Prévia não encontrada.');
-    const parsed = preview.data as { actions?: ActionLike[] };
-    return extractPairsFromActions(parsed.actions ?? []);
+    const parsed = await loadPreviewPayload(previewId);
+    const previewYear = Number(parsed.importRecord?.year);
+    if (!Number.isInteger(previewYear)) throw new Error('Exercício da prévia inválido.');
+    const actions = parsed.actions ?? [];
+    return { year: previewYear, pairs: extractPairsFromActions(actions), actions };
   }
 
-  const vigenteId = await getVigenteImportId();
-  if (!vigenteId) return [];
+  const targetYear = year ?? (await getCurrentYear());
+  const vigenteId = await getVigenteImportId(targetYear);
+  if (!vigenteId) return { year: targetYear, pairs: [], actions: [] };
 
+  // Uma consulta só serve às duas leituras: os pares saem das mesmas ações.
   const actions = await prisma.budgetAction.findMany({
     where: { importId: vigenteId },
     select: {
-      organizationCode: true,
-      organizationName: true,
-      unitCode: true,
-      unitName: true,
+      year: true, organizationCode: true, organizationName: true,
+      unitCode: true, unitName: true, projectActivity: true, application: true,
     },
   });
-  return extractPairsFromActions(actions);
+  return { year: targetYear, pairs: extractPairsFromActions(actions), actions };
 }
 
 type ActionKeyFields = {
@@ -340,44 +402,21 @@ type ActionKeyFields = {
 };
 
 /**
- * Retorna as ações (com campos da chave lógica) do QDD em conferência, para
- * projetar quais marcações teriam correspondência.
- */
-async function getQddActionsForDiff(
-  source: 'preview' | 'vigente',
-  previewId?: string,
-): Promise<ActionKeyFields[]> {
-  if (source === 'preview') {
-    if (!previewId) throw new Error('previewId é obrigatório para source=preview.');
-    const preview = await prisma.importPreview.findUnique({ where: { id: previewId } });
-    if (!preview) throw new Error('Prévia não encontrada.');
-    const parsed = preview.data as { actions?: ActionKeyFields[] };
-    return parsed.actions ?? [];
-  }
-
-  const vigenteId = await getVigenteImportId();
-  if (!vigenteId) return [];
-  return prisma.budgetAction.findMany({
-    where: { importId: vigenteId },
-    select: {
-      year: true, organizationCode: true, organizationName: true,
-      unitCode: true, unitName: true, projectActivity: true, application: true,
-    },
-  });
-}
-
-/**
  * Projeta as marcações temáticas atuais sobre o QDD em conferência: agrupa por
  * ação (chave lógica) e separa entre as que têm correspondência (serão mantidas)
  * e as que ficariam sem par.
  */
 export async function buildMarkersProjection(
-  source: 'preview' | 'vigente',
-  previewId?: string,
+  context: DiffContext,
 ): Promise<NonNullable<StructureDiff['markers']>> {
-  const [qddActions, assignments] = await Promise.all([
-    getQddActionsForDiff(source, previewId),
+  // O recorte por exercício é indispensável: sem ele, conferir uma prévia de um ano
+  // listaria as marcações de todos os outros como "sem par" — `actionLogicalKey`
+  // começa pelo ano e jamais casaria. O ano vem do contexto, que para prévias é o
+  // da própria prévia.
+  const { year: targetYear, actions: qddActions } = context;
+  const [assignments] = await Promise.all([
     prisma.thematicAssignment.findMany({
+      where: targetYear == null ? {} : { action: { year: targetYear } },
       select: {
         action: {
           select: {
@@ -426,11 +465,24 @@ export async function buildMarkersProjection(
 export async function buildStructureDiff(
   source: 'preview' | 'vigente',
   previewId?: string,
+  year?: number | null,
 ): Promise<StructureDiff> {
-  const [catalog, qddPairs, markers] = await Promise.all([
-    listGovernmentStructure(),
-    getQddPairsForDiff(source, previewId),
-    buildMarkersProjection(source, previewId),
+  const context = await loadDiffContext(source, previewId, year);
+  return buildStructureDiffFromContext(context);
+}
+
+/** Mesma conferência, quando o contexto já foi carregado (evita reler a prévia). */
+export async function buildStructureDiffFromContext(context: DiffContext): Promise<StructureDiff> {
+  const [catalog, markers] = await Promise.all([
+    listGovernmentStructure(context.year),
+    buildMarkersProjection(context),
   ]);
-  return { ...diffGovernmentStructure(qddPairs, catalog), markers };
+  return {
+    ...diffGovernmentStructure(context.pairs, catalog),
+    markers,
+    year: context.year,
+    // Exercício ainda sem cadastro: tudo aparece como "novo", e isso é o correto —
+    // é a primeira importação do exercício, não uma divergência a corrigir.
+    catalogEmpty: catalog.organizations.length === 0,
+  };
 }

@@ -13,25 +13,149 @@ export function createId(prefix: string) {
   return `${prefix}-${randomUUID()}`;
 }
 
-// ── Vigente import ───────────────────────────────────────────────────────────
+// ── Exercícios financeiros ───────────────────────────────────────────────────
 
-export async function getVigenteImportId(): Promise<string | null> {
-  // Determinístico: sempre o import VIGENTE mais recente. Sem `orderBy`, o
-  // `findFirst` pode escolher imports diferentes entre chamadas caso a invariante
-  // "um único VIGENTE" seja violada — o que faria uma leitura eventual voltar
-  // ações/marcações vazias e "apagar" a tela até um F5.
-  const rows = await prisma.budgetImport.findMany({
+/**
+ * Exercício corrente: aquele marcado `isCurrent` em `FiscalYear`.
+ *
+ * **Isto é uma fronteira de autorização, não só um padrão de tela.** Seis rotas de
+ * escrita das secretarias comparam com este valor (classificar, editar e remover
+ * marcação, rascunho, envio e envio em lote). Trocar o corrente derruba o acesso de
+ * escrita ao exercício anterior — por isso a troca é um ato de governança na tela da
+ * SEPLAN, jamais efeito do seletor do cabeçalho.
+ *
+ * Enquanto NENHUM ano estiver marcado, vale o ano mais recente com QDD vigente — o
+ * comportamento anterior, preservado para que nada precisasse ser semeado. Depois da
+ * primeira marcação esse fallback nunca mais roda.
+ */
+export async function getCurrentYear(): Promise<number | null> {
+  const flagged = await prisma.fiscalYear.findMany({
+    where: { isCurrent: true },
+    orderBy: { year: 'desc' },
+    select: { year: true },
+  });
+  if (flagged.length > 1) {
+    console.warn(
+      `[getCurrentYear] Invariante violada: ${flagged.length} exercícios marcados como ` +
+        `corrente (${flagged.map((r) => r.year).join(', ')}). Usando o mais recente.`,
+    );
+  }
+  if (flagged[0]) return flagged[0].year;
+
+  const row = await prisma.budgetImport.findFirst({
     where: { status: 'VIGENTE' },
+    orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
+    select: { year: true },
+  });
+  return row?.year ?? null;
+}
+
+/**
+ * Marca um exercício como corrente, zerando os demais na mesma transação — a
+ * invariante "só um corrente" não é expressável como índice no Prisma (exigiria
+ * índice parcial), então mora aqui, como já acontece com "um VIGENTE por ano".
+ */
+export async function setCurrentYear(year: number): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.fiscalYear.updateMany({ where: { isCurrent: true }, data: { isCurrent: false } });
+    await tx.fiscalYear.upsert({
+      where: { year },
+      create: { year, isCurrent: true },
+      update: { isCurrent: true },
+    });
+  });
+}
+
+/**
+ * Import vigente de um exercício; sem `year`, o do exercício corrente.
+ *
+ * A invariante é **um VIGENTE por ano** (antes era um único global). O `orderBy`
+ * mantém a escolha determinística: sem ele, o `findFirst` poderia devolver imports
+ * diferentes entre chamadas caso a invariante seja violada — o que faria uma
+ * leitura eventual voltar ações/marcações vazias e "apagar" a tela até um F5.
+ */
+export async function getVigenteImportId(year?: number | null): Promise<string | null> {
+  const targetYear = year ?? (await getCurrentYear());
+  if (targetYear == null) return null;
+  const rows = await prisma.budgetImport.findMany({
+    where: { status: 'VIGENTE', year: targetYear },
     orderBy: { importedAt: 'desc' },
     select: { id: true },
   });
   if (rows.length > 1) {
     console.warn(
       `[getVigenteImportId] Invariante violada: ${rows.length} imports VIGENTE simultâneos ` +
-        `(${rows.map((r) => r.id).join(', ')}). Usando o mais recente.`,
+        `no exercício ${targetYear} (${rows.map((r) => r.id).join(', ')}). Usando o mais recente.`,
     );
   }
   return rows[0]?.id ?? null;
+}
+
+export type ExerciseInfo = {
+  year: number;
+  comparisonOnly: boolean;
+  /** Exercício corrente: o único que recebe entregas das secretarias. */
+  isCurrent: boolean;
+  vigenteImportId: string;
+};
+
+/** Exercícios disponíveis: todo ano com QDD VIGENTE, do mais recente ao mais antigo. */
+export async function listExercises(): Promise<ExerciseInfo[]> {
+  const [imports, policies, currentYear] = await Promise.all([
+    prisma.budgetImport.findMany({
+      where: { status: 'VIGENTE' },
+      orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
+      select: { id: true, year: true },
+    }),
+    prisma.fiscalYear.findMany({ select: { year: true, comparisonOnly: true } }),
+    getCurrentYear(),
+  ]);
+  const comparisonByYear = new Map(policies.map((p) => [p.year, p.comparisonOnly]));
+  const byYear = new Map<number, ExerciseInfo>();
+  for (const imp of imports) {
+    if (byYear.has(imp.year)) continue; // já ordenado por importedAt desc
+    byYear.set(imp.year, {
+      year: imp.year,
+      comparisonOnly: comparisonByYear.get(imp.year) ?? false,
+      isCurrent: imp.year === currentYear,
+      vigenteImportId: imp.id,
+    });
+  }
+  return [...byYear.values()];
+}
+
+/**
+ * Exercício apenas comparativo: recebe execução e marcações temáticas, mas **não**
+ * gera ciclos de validação nem entregas. Ausência de linha em `FiscalYear`
+ * significa exercício completo — por isso nada precisou ser semeado.
+ */
+export async function isComparisonOnlyYear(year: number): Promise<boolean> {
+  const row = await prisma.fiscalYear.findUnique({
+    where: { year },
+    select: { comparisonOnly: true },
+  });
+  return row?.comparisonOnly ?? false;
+}
+
+/**
+ * Resolve o exercício de uma requisição, aplicando o controle de acesso: só a
+ * SEPLAN abre exercícios comparativos. Devolve `null` em `year` quando não há
+ * nenhum QDD, e `forbidden: true` quando o usuário pediu um exercício vedado.
+ */
+export async function resolveExerciseYear(
+  user: ScopedUser,
+  requested?: number | null,
+): Promise<{ year: number | null; forbidden: boolean }> {
+  const current = await getCurrentYear();
+  if (requested == null || requested === current) return { year: current, forbidden: false };
+
+  const exercises = await listExercises();
+  const target = exercises.find((e) => e.year === requested);
+  if (!target) return { year: current, forbidden: false };
+  if (target.comparisonOnly && user.role !== 'SEPLAN_ADMIN') {
+    return { year: current, forbidden: true };
+  }
+  return { year: requested, forbidden: false };
 }
 
 // ── Scope (Órgão Executor) ───────────────────────────────────────────────────
@@ -43,19 +167,29 @@ export type ScopedUser = {
 };
 
 /**
- * Retorna a lista de (organizationCode, unitCode) que o usuário pode acessar.
+ * Retorna a lista de (organizationCode, unitCode) que o usuário pode acessar no
+ * exercício indicado.
  * - SEPLAN_ADMIN: retorna `null` (sem restrição, vê tudo).
- * - Demais roles: consulta `UnitExecutor` cujo executor seja igual ao escopo do
- *   usuário (`executorOrgCode = user.organizationCode` e
+ * - Demais roles: consulta `ExerciseUnitExecutor` do exercício, cujo executor seja
+ *   igual ao escopo do usuário (`executorOrgCode = user.organizationCode` e
  *   `executorUnitCode` igual a `user.unitCode` — ambos NULL = secretaria;
  *   ambos preenchidos = unidade autônoma).
  *   Sem `organizationCode` definido, retorna array vazio (nada acessível).
+ *
+ * O exercício importa porque a estrutura de governo muda entre anos: uma unidade
+ * pode trocar de executor, nascer ou ser extinta.
  */
-export async function getAllowedUnits(user: ScopedUser): Promise<Array<{ organizationCode: string; unitCode: string }> | null> {
+export async function getAllowedUnits(
+  user: ScopedUser,
+  year?: number | null,
+): Promise<Array<{ organizationCode: string; unitCode: string }> | null> {
   if (user.role === 'SEPLAN_ADMIN') return null;
   if (!user.organizationCode) return [];
-  const rows = await prisma.unitExecutor.findMany({
+  const targetYear = year ?? (await getCurrentYear());
+  if (targetYear == null) return [];
+  const rows = await prisma.exerciseUnitExecutor.findMany({
     where: {
+      year: targetYear,
       executorOrgCode: user.organizationCode,
       executorUnitCode: user.unitCode ?? null,
     },
@@ -95,17 +229,22 @@ export function controlsUnitFromAllowed(
  * Devolve um fragmento Prisma `where` que restringe `organizationCode`+`unitCode`
  * ao escopo do usuário. Para SEPLAN_ADMIN retorna `{}` (sem restrição).
  */
-export async function scopeWhere(user: ScopedUser): Promise<Record<string, unknown>> {
-  return scopeWhereFromAllowed(await getAllowedUnits(user));
+export async function scopeWhere(user: ScopedUser, year?: number | null): Promise<Record<string, unknown>> {
+  return scopeWhereFromAllowed(await getAllowedUnits(user, year));
 }
 
 /**
  * Verifica se o usuário controla a unidade indicada (point-check usado para
  * autorização em mutations sobre um único registro).
  */
-export async function userControlsUnit(user: ScopedUser, organizationCode: string, unitCode: string): Promise<boolean> {
+export async function userControlsUnit(
+  user: ScopedUser,
+  organizationCode: string,
+  unitCode: string,
+  year?: number | null,
+): Promise<boolean> {
   if (user.role === 'SEPLAN_ADMIN') return true;
-  return controlsUnitFromAllowed(await getAllowedUnits(user), organizationCode, unitCode);
+  return controlsUnitFromAllowed(await getAllowedUnits(user, year), organizationCode, unitCode);
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -131,12 +270,12 @@ export async function listActions(user: ScopedUser, filters: {
   organizationCode?: string;
   unitCode?: string;
 }) {
-  const vigenteId = await getVigenteImportId();
+  // `year` SELECIONA o import do exercício — não é um filtro aplicado dentro dele.
+  const vigenteId = await getVigenteImportId(filters.year);
   if (!vigenteId) return [];
 
-  const scope = await scopeWhere(user);
+  const scope = await scopeWhere(user, filters.year);
   const where: Record<string, unknown> = { importId: vigenteId, ...scope };
-  if (filters.year) where['year'] = filters.year;
 
   if (user.role === 'SEPLAN_ADMIN') {
     if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
@@ -153,8 +292,8 @@ export async function listActions(user: ScopedUser, filters: {
 
 // ── Organizations ────────────────────────────────────────────────────────────
 
-export async function listOrganizations() {
-  const structure = await listGovernmentStructure();
+export async function listOrganizations(year?: number | null) {
+  const structure = await listGovernmentStructure(year);
   return structure.organizations
     .map((org) => ({
       id: org.code,
@@ -172,11 +311,18 @@ export async function listOrganizations() {
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
-export async function getSummary(user: ScopedUser) {
+export async function getSummary(user: ScopedUser, year?: number | null) {
   // Resolve escopo e import vigente uma única vez e busca apenas os campos que a
   // agregação usa — evita materializar o grafo completo (expenseLines etc.).
-  const [vigenteId, allowed] = await Promise.all([getVigenteImportId(), getAllowedUnits(user)]);
+  const targetYear = year ?? (await getCurrentYear());
+  const [vigenteId, allowed] = await Promise.all([
+    getVigenteImportId(targetYear),
+    getAllowedUnits(user, targetYear),
+  ]);
   const scope = scopeWhereFromAllowed(allowed);
+  // Ciclos e validações também são por exercício: sem este recorte, o resumo de um
+  // ano exibiria as contagens somadas de todos eles.
+  const yearScope = targetYear == null ? {} : { action: { year: targetYear } };
 
   const [actions, assignments, cycleCount, validations] = await Promise.all([
     vigenteId
@@ -186,11 +332,12 @@ export async function getSummary(user: ScopedUser) {
         })
       : Promise.resolve([] as Array<{ id: string; liquidated: number }>),
     prisma.thematicAssignment.findMany({
+      where: yearScope,
       select: { id: true, actionId: true, theme: true, classification: true, weightingFactor: true, createdAt: true },
     }),
-    prisma.validationCycle.count(),
+    prisma.validationCycle.count({ where: targetYear == null ? {} : { year: targetYear } }),
     prisma.actionValidation.findMany({
-      where: scope,
+      where: { ...scope, ...yearScope },
       select: { status: true, theme: true, assignmentId: true, deliveries: true },
     }),
   ]);
@@ -284,10 +431,17 @@ export async function getSummary(user: ScopedUser) {
  * Classificações anteriores ao ciclo implícito podem não possuir a validação
  * correspondente. Reconcilia apenas esses registros ausentes para que a visão
  * administrativa contemple todos os orçamentos temáticos.
+ *
+ * Escopo por exercício é OBRIGATÓRIO aqui: sem ele, esta função recriaria as
+ * entregas de um exercício apenas comparativo na primeira listagem da SEPLAN,
+ * desfazendo em produção a supressão feita na classificação.
  */
-async function ensureMissingAssignmentValidations() {
+async function ensureMissingAssignmentValidations(year: number | null) {
+  if (year == null) return;
+  if (await isComparisonOnlyYear(year)) return;
+
   const missingAssignments = await prisma.thematicAssignment.findMany({
-    where: { validations: { none: {} } },
+    where: { validations: { none: {} }, action: { year } },
     select: {
       id: true,
       actionId: true,
@@ -331,11 +485,16 @@ async function ensureMissingAssignmentValidations() {
   }
 }
 
-export async function listValidations(user: ScopedUser) {
+export async function listValidations(user: ScopedUser, year?: number | null) {
+  const targetYear = year ?? (await getCurrentYear());
   if (user.role === 'SEPLAN_ADMIN') {
-    await ensureMissingAssignmentValidations();
+    await ensureMissingAssignmentValidations(targetYear);
   }
-  const where: Record<string, unknown> = await scopeWhere(user);
+  const scope = await scopeWhere(user, targetYear);
+  const where: Record<string, unknown> = {
+    ...scope,
+    ...(targetYear == null ? {} : { action: { year: targetYear } }),
+  };
   const rows = await prisma.actionValidation.findMany({
     where,
     include: {
@@ -490,25 +649,48 @@ export function mapValidation(row: any) {
 // ── Executor reconciliation ──────────────────────────────────────────────────
 
 /**
- * Após uma importação de QDD, garante que existe um `UnitExecutor` default para
- * cada par (organizationCode, unitCode) presente em BudgetAction vigente. O
- * default é "secretaria pai executa" (`executorOrgCode = organizationCode`,
- * `executorUnitCode = NULL`). Mapeamentos já configurados (ex.: FEM controlando
- * o Fundo Estadual de Cultura) são PRESERVADOS.
+ * Após uma importação de QDD, garante que existe um `ExerciseUnitExecutor` default
+ * para cada par (organizationCode, unitCode) do exercício. O default é "secretaria
+ * pai executa" (`executorOrgCode = organizationCode`, `executorUnitCode = NULL`).
+ * Mapeamentos já configurados (ex.: FEM controlando o Fundo Estadual de Cultura)
+ * são PRESERVADOS.
+ *
+ * A união com os pares das ações importadas cobre unidades que ainda não entraram
+ * no cadastro do exercício — `ExerciseUnitExecutor` não tem FK para `ExerciseUnit`
+ * justamente para permitir isso.
  */
-export async function reconcileExecutorsForVigenteImport(): Promise<void> {
-  const units = await prisma.governmentUnit.findMany({
-    where: { active: true },
+export async function reconcileExecutorsForImport(
+  year: number,
+  actions: Array<{ organizationCode: string; unitCode: string }> = [],
+): Promise<void> {
+  const units = await prisma.exerciseUnit.findMany({
+    where: { year, active: true },
     select: { organizationCode: true, code: true },
   });
-  if (units.length === 0) return;
 
-  // `skipDuplicates` sobre a PK (organizationCode, unitCode) equivale ao upsert
-  // com `update: {}`: cria o default se não existe e preserva o que já existe.
-  await prisma.unitExecutor.createMany({
-    data: units.map((row) => ({
+  const pairs = new Map<string, { organizationCode: string; unitCode: string }>();
+  for (const row of units) {
+    pairs.set(`${row.organizationCode}|${row.code}`, {
       organizationCode: row.organizationCode,
       unitCode: row.code,
+    });
+  }
+  for (const action of actions) {
+    if (!action?.organizationCode || !action?.unitCode) continue;
+    pairs.set(`${action.organizationCode}|${action.unitCode}`, {
+      organizationCode: action.organizationCode,
+      unitCode: action.unitCode,
+    });
+  }
+  if (pairs.size === 0) return;
+
+  // `skipDuplicates` sobre a PK (year, organizationCode, unitCode) equivale ao
+  // upsert com `update: {}`: cria o default se não existe e preserva o que já existe.
+  await prisma.exerciseUnitExecutor.createMany({
+    data: [...pairs.values()].map((row) => ({
+      year,
+      organizationCode: row.organizationCode,
+      unitCode: row.unitCode,
       executorOrgCode: row.organizationCode,
       executorUnitCode: null,
     })),
@@ -587,7 +769,7 @@ export async function deleteBudgetImportPreservingAssignments(importId: string) 
     // For a historical import, prefer the current QDD. When the current QDD is
     // deleted, this picks the newest historical QDD, which is promoted below.
     const survivingActions = await tx.budgetAction.findMany({
-      where: { importId: { not: importId } },
+      where: { importId: { not: importId }, year: target.year },
       select: {
         id: true, year: true, organizationCode: true, unitCode: true,
         projectActivity: true, application: true,
@@ -624,14 +806,19 @@ export async function deleteBudgetImportPreservingAssignments(importId: string) 
     });
     await tx.budgetImport.delete({ where: { id: importId } });
 
+    // A promoção é DENTRO DO MESMO EXERCÍCIO. Sem o recorte por ano, apagar o
+    // único VIGENTE de um exercício encontraria o VIGENTE de outro ano, o ramo
+    // abaixo não rodaria e o exercício ficaria sem nenhum vigente — sumindo por
+    // inteiro da aplicação.
     const vigente = await tx.budgetImport.findFirst({
-      where: { status: 'VIGENTE' },
+      where: { status: 'VIGENTE', year: target.year },
       orderBy: { importedAt: 'desc' },
       select: { id: true },
     });
 
     if (!vigente) {
       const nextImport = await tx.budgetImport.findFirst({
+        where: { year: target.year },
         orderBy: { importedAt: 'desc' },
       });
 
@@ -652,20 +839,29 @@ export async function deleteBudgetImportPreservingAssignments(importId: string) 
 
 export async function addImportedBudget(importRecord: any, actions: any[]): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
   return prisma.$transaction(async (tx) => {
-    // Captura TODAS as ações que ainda têm marcações (de qualquer import) para
-    // religá-las às novas ações (que receberão IDs novos). As ações recém-criadas
-    // deste import ainda não têm marcações, então isso cobre tanto o vigente
-    // anterior quanto eventuais marcações já órfãs de imports históricos —
-    // tornando a preservação automática no confirm, sem ação manual.
+    // Captura as ações DO MESMO EXERCÍCIO que ainda têm marcações, para religá-las
+    // às novas ações (que receberão IDs novos). As ações recém-criadas deste import
+    // ainda não têm marcações, então isso cobre tanto o vigente anterior quanto
+    // eventuais marcações já órfãs de imports históricos — tornando a preservação
+    // automática no confirm, sem ação manual.
+    //
+    // O recorte por ano é essencial: `actionLogicalKey` começa pelo exercício, então
+    // marcações de outro ano nunca casariam e seriam reportadas como órfãs, fazendo
+    // a tela de importação anunciar uma perda que não aconteceu.
     const oldMarkedActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
-      where: { assignments: { some: {} } },
+      where: { year: importRecord.year, assignments: { some: {} } },
       select: {
         id: true, year: true, organizationCode: true, organizationName: true,
         unitCode: true, unitName: true, projectActivity: true, application: true,
       },
     });
 
-    await tx.budgetImport.updateMany({ where: { status: 'VIGENTE' }, data: { status: 'HISTORICO' } });
+    // Rebaixa apenas o vigente DO MESMO EXERCÍCIO: os demais exercícios seguem
+    // intactos, cada um com o seu próprio vigente.
+    await tx.budgetImport.updateMany({
+      where: { status: 'VIGENTE', year: importRecord.year },
+      data: { status: 'HISTORICO' },
+    });
     await tx.budgetImport.create({
       data: {
         id: importRecord.id, filename: importRecord.filename, year: importRecord.year,
@@ -734,11 +930,18 @@ export async function addImportedBudget(importRecord: any, actions: any[]): Prom
 }
 
 /**
- * Recuperação única do estado já quebrado: religa ao QDD vigente as marcações
- * que ficaram órfãs em importações anteriores (presas a ações HISTORICO). Idempotente.
+ * Religa ao QDD vigente do exercício as marcações que ficaram órfãs em importações
+ * anteriores (presas a ações HISTORICO). Idempotente.
+ *
+ * Opera dentro de um único exercício: como `actionLogicalKey` começa pelo ano, uma
+ * marcação de outro exercício jamais casaria — varrer os demais só produziria ruído.
  */
-export async function reattachOrphanAssignmentsToVigente(): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
-  const vigenteId = await getVigenteImportId();
+export async function reattachOrphanAssignmentsToVigente(
+  year?: number | null,
+): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
+  const targetYear = year ?? (await getCurrentYear());
+  if (targetYear == null) return { reattached: 0, unmatched: [] };
+  const vigenteId = await getVigenteImportId(targetYear);
   if (!vigenteId) return { reattached: 0, unmatched: [] };
 
   return prisma.$transaction(async (tx) => {
@@ -751,7 +954,7 @@ export async function reattachOrphanAssignmentsToVigente(): Promise<{ reattached
     );
 
     const orphanActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
-      where: { importId: { not: vigenteId }, assignments: { some: {} } },
+      where: { importId: { not: vigenteId }, year: targetYear, assignments: { some: {} } },
       select: {
         id: true, year: true, organizationCode: true, organizationName: true,
         unitCode: true, unitName: true, projectActivity: true, application: true,

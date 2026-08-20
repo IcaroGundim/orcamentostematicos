@@ -3,7 +3,7 @@ import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
 import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
 import { getValidationFormIssues, type ValidationFormInput } from '@/lib/validation-schema';
-import { scopeWhere } from '@/lib/store';
+import { getCurrentYear, scopeWhere } from '@/lib/store';
 import { logUserActivity } from '@/lib/user-activity';
 
 /**
@@ -18,10 +18,12 @@ export async function POST(req: NextRequest) {
 
   const targetStatuses = ['RASCUNHO', 'DEVOLVIDO'];
 
-  const scope = await scopeWhere(user);
+  const currentYear = await getCurrentYear();
+  const scope = await scopeWhere(user, currentYear);
   const rows = await prisma.actionValidation.findMany({
     where: {
       ...scope,
+      ...(currentYear == null ? {} : { action: { year: currentYear } }),
       status: { in: targetStatuses as any },
     },
     include: { assignment: true },

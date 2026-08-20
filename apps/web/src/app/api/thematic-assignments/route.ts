@@ -2,16 +2,34 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment, getOrCreateImplicitCycle, scopeWhere, userControlsUnit } from '@/lib/store';
+import {
+  mapAssignment,
+  getCurrentYear,
+  getOrCreateImplicitCycle,
+  getVigenteImportId,
+  isComparisonOnlyYear,
+  scopeWhere,
+  userControlsUnit,
+} from '@/lib/store';
+import { resolveRequestYear } from '@/lib/exercise-request';
 import { logUserActivity } from '@/lib/user-activity';
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  const actionScope = await scopeWhere(user);
+  const exercise = await resolveRequestYear(req, user);
+  if (exercise.response) return exercise.response;
+  const year = exercise.year;
+
+  const actionScope = await scopeWhere(user, year);
+  // Mesmo a SEPLAN passa a receber apenas o exercício selecionado: antes o `where`
+  // ficava `undefined` e devolvia as marcações de todos os anos de uma vez.
+  const yearScope = year == null ? {} : { year };
   const rows = await prisma.thematicAssignment.findMany({
-    where: user.role === 'SEPLAN_ADMIN' ? undefined : { action: actionScope },
+    where: {
+      action: user.role === 'SEPLAN_ADMIN' ? yearScope : { ...actionScope, ...yearScope },
+    },
     orderBy: { createdAt: 'asc' },
   });
   return ok(rows.map(mapAssignment));
@@ -29,11 +47,26 @@ export async function POST(req: NextRequest) {
 
   const action = await prisma.budgetAction.findUnique({
     where: { id: body.actionId },
-    select: { organizationCode: true, unitCode: true, year: true },
+    select: { organizationCode: true, unitCode: true, year: true, importId: true },
   });
   if (!action) return badRequest('Ação orçamentária não encontrada.');
+
+  // A ação precisa pertencer ao QDD vigente do seu exercício. Sem esta amarração,
+  // um id de ação de importação histórica seria aceito e a marcação nasceria presa
+  // a dados aposentados.
+  const vigenteImportId = await getVigenteImportId(action.year);
+  if (!vigenteImportId || action.importId !== vigenteImportId) {
+    return badRequest('Esta ação não pertence ao QDD vigente do exercício.');
+  }
+
+  const comparisonOnly = await isComparisonOnlyYear(action.year);
+
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    const allowed = await userControlsUnit(user, action.organizationCode, action.unitCode);
+    // Secretaria só atua no exercício corrente: exercícios comparativos são
+    // exclusivos da SEPLAN e não têm entregas a preencher.
+    const currentYear = await getCurrentYear();
+    if (comparisonOnly || action.year !== currentYear) return forbidden();
+    const allowed = await userControlsUnit(user, action.organizationCode, action.unitCode, action.year);
     if (!allowed) return forbidden();
   }
 
@@ -48,7 +81,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Ciclo implícito do par tema/exercício — substitui a antiga "liberação" manual.
-  const cycle = await getOrCreateImplicitCycle(body.theme, action.year);
+  // Exercício apenas comparativo não gera ciclo nem entrega: ele recebe execução e
+  // marcações temáticas e para por aí.
+  const cycle = comparisonOnly ? null : await getOrCreateImplicitCycle(body.theme, action.year);
 
   const row = await prisma.$transaction(async (tx) => {
     const assignment = await tx.thematicAssignment.create({
@@ -70,11 +105,13 @@ export async function POST(req: NextRequest) {
 
     // A validação é gerada automaticamente: a secretaria já a vê na aba
     // Validações sem depender de a SEPLAN abrir um ciclo.
-    const alreadyExists = await tx.actionValidation.findFirst({
-      where: { assignmentId: assignment.id },
-      select: { id: true },
-    });
-    if (!alreadyExists) {
+    const alreadyExists = cycle
+      ? await tx.actionValidation.findFirst({
+          where: { assignmentId: assignment.id },
+          select: { id: true },
+        })
+      : null;
+    if (cycle && !alreadyExists) {
       await tx.actionValidation.create({
         data: {
           cycleId: cycle.id,

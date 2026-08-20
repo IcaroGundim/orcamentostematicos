@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound } from '@/lib/auth-server';
 import { resolveInformedExecutedValue } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { userControlsUnit } from '@/lib/store';
+import { getCurrentYear, userControlsUnit } from '@/lib/store';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser(req);
@@ -14,10 +14,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const existing = await prisma.actionValidation.findUnique({
     where: { id },
-    include: { assignment: true },
+    include: { assignment: true, action: { select: { year: true } } },
   });
   if (!existing) return notFound('Validação não encontrada.');
-  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode))) return forbidden();
+  // Entregas só existem no exercício corrente.
+  if (existing.action.year !== (await getCurrentYear())) return forbidden();
+  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year))) {
+    return forbidden();
+  }
 
   const deliveries = body.deliveries !== undefined ? body.deliveries : existing.deliveries;
   const classification = existing.assignment?.classification ?? '';

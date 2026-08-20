@@ -151,26 +151,26 @@ model BudgetImport {
 }
 
 model BudgetAction {
-  id               String @id @default(cuid())
-  importId         String
-  year             Int
-  organizationCode String
-  organizationName String
-  unitCode         String
-  unitName         String
-  application      String
+  id                String @id @default(cuid())
+  importId          String
+  year              Int
+  organizationCode  String
+  organizationName  String
+  unitCode          String
+  unitName          String
+  application       String
   functionalProgram String
-  projectActivity  String
+  projectActivity   String
 
-  initialBudget  Float @default(0)
-  supplemented   Float @default(0)
-  updatedBudget  Float @default(0)
-  committed      Float @default(0)
-  liquidated     Float @default(0)
-  paid           Float @default(0)
-  available      Float @default(0)
+  initialBudget Float @default(0)
+  supplemented  Float @default(0)
+  updatedBudget Float @default(0)
+  committed     Float @default(0)
+  liquidated    Float @default(0)
+  paid          Float @default(0)
+  available     Float @default(0)
 
-  import      BudgetImport         @relation(fields: [importId], references: [id], onDelete: Cascade)
+  import       BudgetImport         @relation(fields: [importId], references: [id], onDelete: Cascade)
   expenseLines ExpenseLine[]
   assignments  ThematicAssignment[]
   validations  ActionValidation[]
@@ -180,19 +180,19 @@ model BudgetAction {
 }
 
 model ExpenseLine {
-  id               String @id @default(cuid())
-  actionId         String
-  organizationCode String
-  organizationName String
-  unitCode         String
-  unitName         String
-  application      String
-  functionalProgram String
-  projectActivity  String
-  expenseAccount   String
+  id                 String @id @default(cuid())
+  actionId           String
+  organizationCode   String
+  organizationName   String
+  unitCode           String
+  unitName           String
+  application        String
+  functionalProgram  String
+  projectActivity    String
+  expenseAccount     String
   expenseDescription String
-  reduced          String
-  source           String
+  reduced            String
+  source             String
 
   initialBudget      Float @default(0)
   supplemented       Float @default(0)
@@ -210,33 +210,33 @@ model ExpenseLine {
 }
 
 model ThematicAssignment {
-  id               String           @id @default(cuid())
-  actionId         String
-  theme            ThemeBudget
-  axis             String
-  classification   String
-  weightingFactor  Float?
-  justification    String?
-  status           AssignmentStatus @default(PRONTO_PARA_VALIDACAO)
-  createdBy        String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id              String           @id @default(cuid())
+  actionId        String
+  theme           ThemeBudget
+  axis            String
+  classification  String
+  weightingFactor Float?
+  justification   String?
+  status          AssignmentStatus @default(PRONTO_PARA_VALIDACAO)
+  createdBy       String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
-  action      BudgetAction       @relation(fields: [actionId], references: [id], onDelete: Cascade)
-  createdByUser User             @relation(fields: [createdBy], references: [id])
-  validations ActionValidation[]
+  action        BudgetAction       @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  createdByUser User               @relation(fields: [createdBy], references: [id])
+  validations   ActionValidation[]
 
   @@index([actionId])
 }
 
 model ValidationCycle {
-  id        String   @id @default(cuid())
-  name      String
-  year      Int
-  theme     ThemeBudget
-  status    String   @default("ABERTO")
-  openedAt  DateTime @default(now())
-  closedAt  DateTime?
+  id       String      @id @default(cuid())
+  name     String
+  year     Int
+  theme    ThemeBudget
+  status   String      @default("ABERTO")
+  openedAt DateTime    @default(now())
+  closedAt DateTime?
 
   validations ActionValidation[]
 }
@@ -297,22 +297,22 @@ model PayrollGroup {
 }
 
 model ActionValidation {
-  id                   String           @id @default(cuid())
-  cycleId              String
-  actionId             String
-  assignmentId         String
-  organizationCode     String
-  unitCode             String
-  theme                ThemeBudget
-  status               ValidationStatus @default(RASCUNHO)
-  executionStatus      String?
-  realizedDescription  String?
+  id                    String           @id @default(cuid())
+  cycleId               String
+  actionId              String
+  assignmentId          String
+  organizationCode      String
+  unitCode              String
+  theme                 ThemeBudget
+  status                ValidationStatus @default(RASCUNHO)
+  executionStatus       String?
+  realizedDescription   String?
   informedExecutedValue Float?
-  observations         String?
-  submittedAt          DateTime?
-  reviewedAt           DateTime?
-  reviewerComment      String?
-  updatedAt            DateTime         @updatedAt
+  observations          String?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  reviewerComment       String?
+  updatedAt             DateTime         @updatedAt
 
   deliveries Json @default("[]")
   evidences  Json @default("[]")
@@ -323,4 +323,71 @@ model ActionValidation {
 
   @@index([cycleId])
   @@index([organizationCode])
+}
+
+/// Política do exercício financeiro. Uma linha por exercício; a AUSÊNCIA de linha
+/// significa exercício completo (entregas habilitadas), então nada precisa ser
+/// semeado para os exercícios que já existiam.
+model FiscalYear {
+  year           Int      @id
+  /// Exercício corrente: o que recebe entregas das secretarias. Marcado
+  /// explicitamente pela SEPLAN — trocar é ato de governança, não navegação.
+  /// Enquanto NENHUM ano estiver marcado, vale o ano mais recente com QDD vigente,
+  /// que é o comportamento anterior (por isso nada precisou ser semeado).
+  isCurrent      Boolean  @default(false)
+  /// Exercício carregado apenas para comparação: recebe execução e marcações
+  /// temáticas, mas NÃO gera ciclos de validação nem entregas.
+  comparisonOnly Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/// Estrutura de governo POR EXERCÍCIO. Substitui `GovernmentOrganization`,
+/// `GovernmentUnit` e `UnitExecutor`, que não tinham ano — nelas o campo `active`
+/// significava "presente no único QDD vigente" e perdia o sentido com mais de um
+/// exercício. As tabelas antigas seguem no banco como rede de segurança até uma
+/// remoção deliberada.
+model ExerciseOrganization {
+  year      Int
+  code      String
+  name      String
+  type      GovernmentEntityType @default(SECRETARIA)
+  active    Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  units ExerciseUnit[]
+
+  @@id([year, code])
+}
+
+model ExerciseUnit {
+  year             Int
+  organizationCode String
+  code             String
+  name             String
+  active           Boolean  @default(true)
+  /// Anotação manual da SEPLAN para desambiguar unidade remanejada entre órgãos.
+  relocated        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization ExerciseOrganization @relation(fields: [year, organizationCode], references: [year, code], onDelete: Cascade)
+
+  @@id([year, organizationCode, code])
+  @@index([year, organizationCode])
+}
+
+/// Quem executa cada unidade, por exercício. Sem FK para `ExerciseUnit`: o padrão
+/// é criado a partir das ações importadas, que podem trazer pares ainda ausentes
+/// do cadastro.
+model ExerciseUnitExecutor {
+  year             Int
+  organizationCode String
+  unitCode         String
+  executorOrgCode  String
+  executorUnitCode String?
+
+  @@id([year, organizationCode, unitCode])
+  @@index([year, executorOrgCode, executorUnitCode])
 }

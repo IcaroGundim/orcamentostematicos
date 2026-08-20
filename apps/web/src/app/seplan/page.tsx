@@ -29,7 +29,7 @@ import {
   UploadIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Cell, Pie, PieChart } from 'recharts';
@@ -95,6 +95,8 @@ import { FunctionalClassificationFilters } from '@/components/domain/functional-
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { AdminDeliveryWorkspace } from '@/components/domain/admin-delivery-workspace';
 import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
+import { exerciseQuery, useExercise } from '@/lib/use-exercise';
+import { ExerciseSelect } from '@/components/domain/exercise-select';
 import {
   buildVerifiedDeliveryExecutedMap,
   isWeightingFactorLocked,
@@ -143,6 +145,7 @@ import type {
   ValidationItem,
 } from '@/types/domain';
 import { ExecutionAssignmentCard } from '@/components/domain/execution-assignment-card';
+import { ExercisesPanel } from '@/components/domain/exercises-panel';
 import { RelocatedUnitsPanel } from '@/components/domain/relocated-units-panel';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { functionalColumnFilterMatches, type FunctionalColumnFilterValue } from '@/lib/functional-classification';
@@ -162,6 +165,11 @@ type ImportPreview = {
   actionCount: number;
   organizationsCount: number;
   unitsCount: number;
+  /** Onde o exercício veio: `manual` é a escolha da SEPLAN no formulário. */
+  yearDetectedFrom?: 'manual' | 'header' | 'filename' | 'fallback';
+  /** Exercício que o próprio arquivo declara — confere contra o escolhido. */
+  detectedYear?: number;
+  detectedYearFrom?: 'header' | 'filename' | 'fallback';
   sampleActions: BudgetAction[];
 };
 
@@ -177,6 +185,22 @@ type DeleteImportResult = {
   deleted: BudgetImport;
   reattachedAssignments: number;
 };
+
+/**
+ * Exercício mais antigo que o sistema comporta. 2025 entrou apenas para comparação
+ * com 2026; anos anteriores não fazem parte do escopo.
+ */
+const EARLIEST_IMPORT_YEAR = 2025;
+
+/**
+ * Exercícios oferecidos na importação: do próximo ano (para carregar o QDD antes de
+ * o exercício começar) até `EARLIEST_IMPORT_YEAR`. O limite superior vem do relógio
+ * para não exigir manutenção anual.
+ */
+const IMPORT_YEAR_OPTIONS: number[] = Array.from(
+  { length: Math.max(1, new Date().getFullYear() + 1 - EARLIEST_IMPORT_YEAR + 1) },
+  (_, i) => new Date().getFullYear() + 1 - i,
+);
 
 const MONTH_NAMES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -374,14 +398,18 @@ function displayStatusCount(byStatus: Record<string, number>, status: string): n
   return byStatus[status] ?? 0;
 }
 
-export default function SeplanPage() {
+function SeplanPageContent() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [metadata, setMetadata] = useState<Metadata | null>(null);
+  const { requestedYear, year, setYear } = useExercise(metadata?.currentYear);
+  /** Exercício efetivamente carregado, conforme o servidor. */
+  const loadedYear = metadata?.year ?? null;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [actions, setActions] = useState<BudgetAction[]>([]);
   const [validations, setValidations] = useState<ValidationItem[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [importComparisonOnly, setImportComparisonOnly] = useState(false);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
   const [executionStructure, setExecutionStructure] = useState<ExecutionStructure>({ organizations: [] });
   const [governmentStructure, setGovernmentStructure] = useState<GovernmentStructure>({ organizations: [] });
@@ -396,6 +424,12 @@ export default function SeplanPage() {
   const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPeriodType, setSelectedPeriodType] = useState<QddPeriodType>('ACUMULADO_ANUAL');
+  /**
+   * Exercício da importação, escolhido explicitamente. Começa `null` e assume o
+   * exercício corrente assim que o metadata chega — a maioria das importações é do
+   * ano em curso, e um valor errado aqui cria um exercício inteiro no lugar errado.
+   */
+  const [selectedImportYear, setSelectedImportYear] = useState<number | null>(null);
   const [selectedReferenceMonth, setSelectedReferenceMonth] = useState(new Date().getMonth() + 1);
   const [selectedActionId, setSelectedActionId] = useState('');
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
@@ -488,15 +522,32 @@ export default function SeplanPage() {
       return;
     }
     setSession(session);
+  }, [router]);
+
+  useEffect(() => {
+    if (selectedImportYear != null) return;
+    const fallback = metadata?.currentYear ?? new Date().getFullYear();
+    setSelectedImportYear(fallback);
+  }, [metadata?.currentYear, selectedImportYear]);
+
+  // Carga separada da sessão: assim a troca de exercício recarrega os dados sem
+  // reavaliar o redirecionamento.
+  useEffect(() => {
+    if (!session) return;
     load().catch((err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Erro ao carregar dados. O servidor pode estar indisponível.');
     });
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, requestedYear]);
 
   const loadStructureDiff = useCallback(
     async (source: 'preview' | 'vigente', previewId?: string) => {
       const params = new URLSearchParams({ source });
       if (previewId) params.set('previewId', previewId);
+      // Só a conferência do QDD vigente usa o exercício do contexto. Para uma prévia,
+      // o exercício vem da própria prévia no servidor — mandar o do seletor foi o que
+      // fez o QDD de um ano ser comparado com o cadastro de outro.
+      if (source === 'vigente' && requestedYear != null) params.set('year', String(requestedYear));
       try {
         const diff = await api<StructureDiff>(`/government-structure/diff?${params.toString()}`);
         setStructureDiff(diff);
@@ -504,19 +555,22 @@ export default function SeplanPage() {
         setStructureDiff(null);
       }
     },
-    [],
+    [requestedYear],
   );
 
   async function load() {
+    // `requestedYear` (e não `year`) para não recarregar quando o metadata chega.
+    const q = exerciseQuery(requestedYear);
     const [meta, summaryData, actionData, validationData, importsData, executionData, govStructure] =
       await Promise.all([
-        api<Metadata>('/metadata'),
-        api<Summary>('/reports/summary'),
-        api<BudgetAction[]>('/budget-actions'),
-        api<ValidationItem[]>('/validations/my'),
+        api<Metadata>(`/metadata${q}`),
+        api<Summary>(`/reports/summary${q}`),
+        api<BudgetAction[]>(`/budget-actions${q}`),
+        api<ValidationItem[]>(`/validations/my${q}`),
+        // O histórico de importações é deliberadamente de TODOS os exercícios.
         api<BudgetImport[]>('/imports/qdd'),
-        api<ExecutionStructure>('/execution/structure').catch(() => ({ organizations: [] })),
-        api<GovernmentStructure>('/government-structure').catch(() => ({ organizations: [] })),
+        api<ExecutionStructure>(`/execution/structure${q}`).catch(() => ({ organizations: [] })),
+        api<GovernmentStructure>(`/government-structure${q}`).catch(() => ({ organizations: [] })),
       ]);
     setMetadata(meta);
     setSummary(summaryData);
@@ -529,7 +583,8 @@ export default function SeplanPage() {
     setSelectedActionId((current) => current || firstAction);
     setAssignment((current) => ({ ...current, actionId: current.actionId || firstAction }));
 
-    if (importsData.some((i) => i.status === 'VIGENTE') || actionData.length > 0) {
+    const loaded = meta.year ?? null;
+    if (importsData.some((i) => i.status === 'VIGENTE' && (loaded == null || i.year === loaded)) || actionData.length > 0) {
       await loadStructureDiff('vigente');
     } else {
       setStructureDiff(null);
@@ -543,6 +598,7 @@ export default function SeplanPage() {
       formData.set('file', file);
       formData.set('periodType', selectedPeriodType);
       formData.set('referenceMonth', String(selectedReferenceMonth));
+      if (selectedImportYear != null) formData.set('year', String(selectedImportYear));
       const result = await api<ImportPreview>('/imports/qdd/preview', {
         method: 'POST',
         body: formData,
@@ -565,11 +621,16 @@ export default function SeplanPage() {
     try {
       const result = await api<ReattachResult>('/imports/qdd/confirm', {
         method: 'POST',
-        body: JSON.stringify({ previewId: preview.previewId }),
+        body: JSON.stringify({ previewId: preview.previewId, comparisonOnly: importComparisonOnly }),
       });
       setPreview(null);
+      setImportComparisonOnly(false);
       setStructureSubTab('reconciliation');
-      toast.success('QDD importado e registrado como vigente.');
+      toast.success(
+        importComparisonOnly
+          ? 'QDD importado como exercício apenas comparativo.'
+          : 'QDD importado e registrado como vigente.',
+      );
       reportReattach(result);
       await load();
       await loadStructureDiff('vigente');
@@ -603,7 +664,10 @@ export default function SeplanPage() {
     if (isReattaching) return;
     setIsReattaching(true);
     try {
-      const result = await api<ReattachResult>('/imports/qdd/reattach', { method: 'POST' });
+      const result = await api<ReattachResult>(
+        `/imports/qdd/reattach?year=${loadedYear ?? metadata?.currentYear ?? ''}`,
+        { method: 'POST' },
+      );
       if (result.reattachedAssignments === 0 && (result.unmatchedAssignments ?? []).length === 0) {
         toast.success('Nenhuma classificação órfã encontrada — tudo já está vinculado ao QDD vigente.');
       } else {
@@ -1369,12 +1433,31 @@ export default function SeplanPage() {
   const filteredActionCount = table.getFilteredRowModel().rows.length;
   const organizationCount = governmentStructure.organizations.length;
   const catalogUnitCount = governmentStructure.organizations.reduce((s, o) => s + o.units.length, 0);
+  // Com vários exercícios há um VIGENTE por ano: sem o recorte, o `find` devolveria
+  // um qualquer e o cabeçalho de dados poderia apontar para outro exercício.
   const vigenteImport = useMemo(
-    () => importHistory.find((imp) => imp.status === 'VIGENTE'),
-    [importHistory],
+    () => importHistory.find((imp) => imp.status === 'VIGENTE' && (loadedYear == null || imp.year === loadedYear)),
+    [importHistory, loadedYear],
   );
   const unitCount = uniqueBy(actions, (action) => `${action.organizationCode}-${action.unitCode}`).length;
   const expenseLineCount = actions.reduce((total, action) => total + (action.expenseLinesCount ?? action.expenseLines?.length ?? 0), 0);
+
+  // Entregas e validações existem só no exercício corrente. Quando o seletor está em
+  // outro exercício, a tela vira consulta — e diz por quê, em vez de aparecer vazia.
+  const offCurrentExercise =
+    loadedYear != null && metadata?.currentYear != null && loadedYear !== metadata.currentYear;
+  const offCurrentNotice = offCurrentExercise ? (
+    <Alert>
+      <ClipboardCheckIcon />
+      <AlertDescription>
+        Você está no exercício <span className="font-medium tabular-nums">{loadedYear}</span>, e as
+        entregas pertencem ao exercício corrente (
+        <span className="font-medium tabular-nums">{metadata?.currentYear}</span>). Esta tela está
+        em modo de consulta — para preencher ou revisar, volte ao exercício corrente no seletor do
+        cabeçalho.
+      </AlertDescription>
+    </Alert>
+  ) : null;
 
   const navItems: AdminSidebarNavItem[] = [
     { id: 'overview', label: 'Visão geral', icon: GaugeIcon },
@@ -1450,7 +1533,12 @@ export default function SeplanPage() {
               <span className="hidden text-xl font-semibold uppercase tracking-widest text-primary-foreground/50 select-none lg:inline">|</span>
               <span className="hidden truncate font-semibold uppercase tracking-widest lg:inline" style={{ fontSize: '22px' }}>Orçamentos Temáticos</span>
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 items-center gap-2">
+              <ExerciseSelect
+                exercises={metadata?.exercises ?? []}
+                year={loadedYear ?? year}
+                onChange={setYear}
+              />
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="secondary" className="border-border/60 bg-white text-foreground hover:bg-white/90 aria-expanded:bg-white">
@@ -1540,12 +1628,26 @@ export default function SeplanPage() {
                   activeValue={structureSubTab}
                   items={[
                     { value: 'base', content: 'Base vigente' },
+                    { value: 'exercises', content: 'Exercícios' },
                     { value: 'executors', content: 'Atribuição de execução' },
                     { value: 'users', content: 'Usuários' },
                     { value: 'duplicates', content: 'Unidades duplicadas' },
                     { value: 'reconciliation', content: 'Conferência com QDD' },
                   ]}
                 />
+
+                <TabsContent value="exercises">
+                  <ExercisesPanel
+                    exercises={metadata?.exercises ?? []}
+                    onChanged={() =>
+                      load().catch((err: unknown) => {
+                        toast.error(
+                          err instanceof Error ? err.message : 'Erro ao recarregar os exercícios.',
+                        );
+                      })
+                    }
+                  />
+                </TabsContent>
 
                 <TabsContent value="users">
                   <UsersPanel organizations={governmentStructure.organizations} />
@@ -1554,10 +1656,14 @@ export default function SeplanPage() {
                 <TabsContent value="duplicates">
                   <RelocatedUnitsPanel
                     structure={governmentStructure}
+                    year={loadedYear}
                     onChanged={async () => {
-                      const govStructure = await api<GovernmentStructure>('/government-structure').catch(
-                        () => ({ organizations: [] }),
-                      );
+                      // O refetch precisa do mesmo exercício: sem ele, uma gravação
+                      // fora do corrente era seguida da recarga do corrente e o painel
+                      // parecia não ter feito nada.
+                      const govStructure = await api<GovernmentStructure>(
+                        `/government-structure${exerciseQuery(requestedYear)}`,
+                      ).catch(() => ({ organizations: [] }));
                       setGovernmentStructure(govStructure);
                     }}
                   />
@@ -1565,14 +1671,17 @@ export default function SeplanPage() {
 
                 <TabsContent value="reconciliation">
                   <QddStructureReconciliationPanel
+                    detectedYear={preview?.detectedYear}
+                    detectedYearFrom={preview?.yearDetectedFrom}
                     diff={structureDiff}
                     source={preview ? 'preview' : 'vigente'}
                     previewId={preview?.previewId}
                     hasQddSource={Boolean(preview) || actions.length > 0}
                     onApplied={async () => {
+                      const q = exerciseQuery(requestedYear);
                       const [govStructure, executionData] = await Promise.all([
-                        api<GovernmentStructure>('/government-structure'),
-                        api<ExecutionStructure>('/execution/structure').catch(() => ({ organizations: [] })),
+                        api<GovernmentStructure>(`/government-structure${q}`),
+                        api<ExecutionStructure>(`/execution/structure${q}`).catch(() => ({ organizations: [] })),
                       ]);
                       setGovernmentStructure(govStructure);
                       setExecutionStructure(executionData);
@@ -1618,6 +1727,24 @@ export default function SeplanPage() {
                       </CardHeader>
                       <CardContent className="flex flex-col gap-3">
                         <FieldGroup>
+                          <Field>
+                            <FieldLabel>Exercício</FieldLabel>
+                            <Select
+                              value={selectedImportYear == null ? undefined : String(selectedImportYear)}
+                              onValueChange={(v) => setSelectedImportYear(Number(v))}
+                            >
+                              <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o exercício" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectGroup>
+                                  {IMPORT_YEAR_OPTIONS.map((option) => (
+                                    <SelectItem key={option} value={String(option)}>
+                                      <span className="tabular-nums">{option}</span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </Field>
                           <Field>
                             <FieldLabel>Tipo de período</FieldLabel>
                             <Select value={selectedPeriodType} onValueChange={(v) => setSelectedPeriodType(v as QddPeriodType)}>
@@ -1676,6 +1803,30 @@ export default function SeplanPage() {
                             <FileSpreadsheetIcon />
                             <AlertDescription>
                               <span className="block font-medium text-foreground">Prévia: {preview.filename}</span>
+                              <span className="block">
+                                Exercício: <span className="font-semibold tabular-nums">{preview.year}</span>
+                                {preview.yearDetectedFrom === 'manual'
+                                  ? ' (escolhido no formulário)'
+                                  : preview.yearDetectedFrom === 'header'
+                                    ? ' (lido do cabeçalho da planilha)'
+                                    : preview.yearDetectedFrom === 'filename'
+                                      ? ' (lido do nome do arquivo)'
+                                      : preview.yearDetectedFrom === 'fallback'
+                                        ? ' — não localizado no arquivo, assumido o ano atual. Confira antes de confirmar.'
+                                        : ''}
+                              </span>
+                              {preview.detectedYear != null &&
+                              preview.detectedYear !== preview.year &&
+                              preview.detectedYearFrom !== 'fallback' ? (
+                                <span className="block font-medium text-destructive">
+                                  Atenção: o arquivo declara o exercício {preview.detectedYear}
+                                  {preview.detectedYearFrom === 'header'
+                                    ? ' no cabeçalho da planilha'
+                                    : ' no nome do arquivo'}
+                                  , diferente do escolhido. Confirme se o arquivo é o certo antes de
+                                  registrar.
+                                </span>
+                              ) : null}
                               <span className="block">Período: {formatPeriod(preview.referenceMonth, preview.year, preview.periodType)}</span>
                               <span className="block">
                                 {preview.rowCount.toLocaleString('pt-BR')} linhas · {preview.actionCount.toLocaleString('pt-BR')} ações ·{' '}
@@ -1691,6 +1842,25 @@ export default function SeplanPage() {
                               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                           </Alert>
+                        ) : null}
+                        {preview ? (
+                          <label className="flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 size-4 shrink-0 accent-primary"
+                              checked={importComparisonOnly}
+                              onChange={(event) => setImportComparisonOnly(event.target.checked)}
+                              disabled={isConfirmingImport}
+                            />
+                            <span>
+                              <span className="block font-medium">Exercício apenas para comparação</span>
+                              <span className="block text-xs text-muted-foreground">
+                                Recebe execução e marcações temáticas, mas não gera ciclos de validação
+                                nem entregas das secretarias. Define a política do exercício {preview.year} na
+                                primeira importação.
+                              </span>
+                            </span>
+                          </label>
                         ) : null}
                         {preview ? (
                           <Button disabled={isConfirmingImport || isPreviewingImport} onClick={() => void confirmImport()}>
@@ -1790,6 +1960,10 @@ export default function SeplanPage() {
                                   <Badge variant={imp.status === 'VIGENTE' ? 'default' : 'secondary'} className="shrink-0">
                                     {imp.status === 'VIGENTE' ? 'Vigente' : 'Histórico'}
                                   </Badge>
+                                  {/* O exercício vem junto do selo porque há um vigente por ano. */}
+                                  <Badge variant="outline" className="shrink-0 tabular-nums">
+                                    Exercício {imp.year}
+                                  </Badge>
                                   <span className="font-medium">{formatPeriod(imp.referenceMonth, imp.year, imp.periodType)}</span>
                                   <span className="text-xs text-muted-foreground">{imp.periodType === 'ACUMULADO_ANUAL' ? 'Acumulado' : 'Mês isolado'}</span>
                                 </div>
@@ -1824,6 +1998,7 @@ export default function SeplanPage() {
                 <TabsContent value="executors">
                   <ExecutionAssignmentCard
                     structure={executionStructure}
+                    year={loadedYear}
                     onChanged={() =>
                       load().catch((err) => {
                         toast.error(err instanceof Error ? err.message : 'Erro ao recarregar.');
@@ -1862,6 +2037,10 @@ export default function SeplanPage() {
             </div>
           ) : null}
 
+          {activeSection === 'entregas' && offCurrentNotice ? (
+            <div className="mb-4">{offCurrentNotice}</div>
+          ) : null}
+
           {activeSection === 'entregas' ? (
             <AdminDeliveryWorkspace
               validations={validations}
@@ -1887,6 +2066,7 @@ export default function SeplanPage() {
 
           {activeSection === 'review' ? (
             <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+              {offCurrentNotice}
               {validationsByYearOrg.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
@@ -2741,4 +2921,16 @@ function uniqueBy<T>(items: T[], key: (item: T) => string) {
     seen.add(value);
     return true;
   });
+}
+
+/**
+ * `useExercise` lê `useSearchParams`, que exige um limite de Suspense — sem ele o
+ * `next build` falha ao pré-renderizar a rota.
+ */
+export default function SeplanPage() {
+  return (
+    <Suspense fallback={<div className="min-h-svh bg-white" />}>
+      <SeplanPageContent />
+    </Suspense>
+  );
 }

@@ -404,7 +404,8 @@ export function FiscalSecretariatView({
   // mentir a cada órgão novo incluído em EARMARKED_SOURCES_BY_ORGANIZATION.
   const commitmentHelpText = useMemo(() => {
     const describe = (source: string) => {
-      const label = getFonteLabel(source);
+      // O exercício vem das próprias ações: o catálogo de fontes é por ano.
+      const label = getFonteLabel(source, actions[0]?.year);
       return label ? `${source} (${label})` : source;
     };
     const base = 'Valor empenhado dividido pela dotação atualizada, considerando a Fonte 100';
@@ -414,7 +415,7 @@ export function FiscalSecretariatView({
     return `${base} — ${describe(UNRESTRICTED_TREASURY_SOURCE)} — somada às fontes vinculadas deste órgão: ${earmarkedSources
       .map(describe)
       .join('; ')}.`;
-  }, [earmarkedSources]);
+  }, [earmarkedSources, actions]);
   const cycle = [
     { label: 'Atualizado', value: totals.updatedBudget, base: totals.updatedBudget },
     { label: 'Empenhado', value: totals.committed, base: totals.updatedBudget },

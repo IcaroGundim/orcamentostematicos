@@ -18,7 +18,67 @@ interface Props {
   source: 'preview' | 'vigente';
   previewId?: string;
   hasQddSource: boolean;
+  /** Exercício que o arquivo declara, quando difere do escolhido no formulário. */
+  detectedYear?: number;
+  detectedYearFrom?: 'manual' | 'header' | 'filename' | 'fallback';
   onApplied: () => void | Promise<void>;
+}
+
+/** Rótulo do exercício da conferência — o alvo real da gravação. */
+function ExerciseLine({ diff }: { diff: StructureDiff }) {
+  if (diff.year == null) return null;
+  return (
+    <span className="block font-medium text-foreground">
+      Exercício <span className="tabular-nums">{diff.year}</span>
+    </span>
+  );
+}
+
+/**
+ * Primeira importação de um exercício: o cadastro está vazio, então tudo aparece
+ * como "novo". Isso é o funcionamento correto, não uma divergência — sem dizê-lo, a
+ * lista inteira é lida como erro.
+ */
+function FirstImportNotice({ diff }: { diff: StructureDiff }) {
+  if (!diff.catalogEmpty) return null;
+  return (
+    <div className="rounded-md border border-primary/25 bg-primary/5 p-3">
+      <h3 className="text-sm font-medium">
+        Primeira importação do exercício {diff.year}
+      </h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Este exercício ainda não tem cadastro de estrutura, então todos os órgãos e unidades
+        aparecem como novos. Aplicar cria o cadastro do exercício {diff.year} — os demais
+        exercícios não são afetados.
+      </p>
+    </div>
+  );
+}
+
+/** Divergência entre o exercício escolhido e o que o arquivo declara. */
+function DetectedYearWarning({
+  diff,
+  detectedYear,
+  detectedYearFrom,
+}: {
+  diff: StructureDiff;
+  detectedYear?: number;
+  detectedYearFrom?: 'manual' | 'header' | 'filename' | 'fallback';
+}) {
+  if (detectedYear == null || diff.year == null) return null;
+  if (detectedYear === diff.year) return null;
+  if (detectedYearFrom === 'fallback') return null;
+  return (
+    <div className="rounded-md border border-destructive/40 p-3">
+      <h3 className="text-sm font-medium text-destructive">Exercício divergente</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        O arquivo declara o exercício {detectedYear}
+        {detectedYearFrom === 'header' ? ' no cabeçalho da planilha' : ' no nome do arquivo'},
+        mas a conferência está sendo feita para {diff.year}. Confirme se o arquivo é o certo
+        antes de aplicar.
+      </p>
+    </div>
+  );
 }
 
 function diffIsEmpty(diff: StructureDiff): boolean {
@@ -37,6 +97,8 @@ export function QddStructureReconciliationPanel({
   source,
   previewId,
   hasQddSource,
+  detectedYear,
+  detectedYearFrom,
   onApplied,
 }: Props) {
   const [selectedNewOrgs, setSelectedNewOrgs] = useState<Set<string>>(new Set());
@@ -112,11 +174,18 @@ export function QddStructureReconciliationPanel({
 
     setApplying(true);
     try {
-      await api('/government-structure/apply', {
+      // Para `vigente` o exercício vai na query (a rota o exige); para `preview` o
+      // servidor o deriva da própria prévia e ignora o que viesse aqui.
+      const query = source === 'vigente' && diff.year != null ? `?year=${diff.year}` : '';
+      await api(`/government-structure/apply${query}`, {
         method: 'POST',
         body: JSON.stringify({ source, previewId, selection }),
       });
-      toast.success('Cadastro de estrutura atualizado.');
+      toast.success(
+        diff.year == null
+          ? 'Cadastro de estrutura atualizado.'
+          : `Cadastro de estrutura do exercício ${diff.year} atualizado.`,
+      );
       setSelectedNewOrgs(new Set());
       setSelectedNewUnits(new Set());
       setSelectedRenameOrgs(new Set());
@@ -175,6 +244,7 @@ export function QddStructureReconciliationPanel({
         <CardHeader>
           <CardTitle>Conferência com QDD</CardTitle>
           <CardDescription>
+            <ExerciseLine diff={diff} />
             Fonte: {source === 'preview' ? 'prévia do arquivo' : 'QDD vigente'}.
           </CardDescription>
         </CardHeader>
@@ -202,7 +272,8 @@ export function QddStructureReconciliationPanel({
         <div>
           <CardTitle>Conferência com QDD</CardTitle>
           <CardDescription>
-            Revise e marque o que incorporar ao cadastro. Fonte:{' '}
+            <ExerciseLine diff={diff} />
+            Revise e marque o que incorporar ao cadastro do exercício. Fonte:{' '}
             {source === 'preview' ? 'prévia' : 'vigente'}.
           </CardDescription>
         </div>
@@ -221,6 +292,12 @@ export function QddStructureReconciliationPanel({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        <DetectedYearWarning
+          diff={diff}
+          detectedYear={detectedYear}
+          detectedYearFrom={detectedYearFrom}
+        />
+        <FirstImportNotice diff={diff} />
         <MarkersSummary markers={diff.markers} source={source} />
 
         <DiffSection

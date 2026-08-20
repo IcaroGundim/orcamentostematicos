@@ -14,7 +14,7 @@ import {
   SearchIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   CycleLineChart,
@@ -26,6 +26,7 @@ import {
 import { PayrollPanel, type PayrollDto } from '@/components/domain/payroll-panel';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FiscalSecretariatView } from '@/components/domain/fiscal-secretariat-view';
+import { ExerciseSelect } from '@/components/domain/exercise-select';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
@@ -61,6 +62,7 @@ import {
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { getFonteLabel } from '@/lib/fontes-recursos';
 import { organizationAcronym } from '@/lib/organization-acronym';
+import { exerciseQuery, useExercise } from '@/lib/use-exercise';
 import { payrollHeadcountForQddScope } from '@/lib/payroll-scope';
 import { cn } from '@/lib/utils';
 import type { BudgetAction, Metadata, Organization } from '@/types/domain';
@@ -218,7 +220,7 @@ function normalizeSourceCode(value: string) {
   return trimmed.replace(/\D/g, '') || trimmed;
 }
 
-export default function OrcamentoPage() {
+function OrcamentoPageContent() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [actions, setActions] = useState<BudgetAction[]>([]);
@@ -242,13 +244,23 @@ export default function OrcamentoPage() {
   const [subfunctionFilter, setSubfunctionFilter] = useState(allValue);
   const [search, setSearch] = useState('');
 
+  const { requestedYear, year, setYear } = useExercise(metadata?.currentYear);
+  /**
+   * Exercício efetivamente carregado, conforme o servidor. Difere de `year` quando
+   * a URL pede um exercício inexistente — nesse caso o servidor devolve o corrente,
+   * e rotular os dados pelo ano da URL mostraria o catálogo de fontes errado.
+   */
+  const loadedYear = metadata?.year ?? null;
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
+      // `requestedYear` (e não `year`) para não recarregar quando o metadata chega.
+      const q = exerciseQuery(requestedYear);
       const [loadedActions, loadedOrganizations, loadedMetadata] = await Promise.all([
-        api<BudgetAction[]>('/budget-actions'),
-        api<Organization[]>('/organizations'),
-        api<Metadata>('/metadata'),
+        api<BudgetAction[]>(`/budget-actions${q}`),
+        api<Organization[]>(`/organizations${q}`),
+        api<Metadata>(`/metadata${q}`),
       ]);
       setActions(loadedActions);
       setOrganizations(loadedOrganizations);
@@ -256,14 +268,17 @@ export default function OrcamentoPage() {
 
       // A folha vem de fonte externa e é opcional: se a coleta ainda não rodou ou o
       // portal estiver fora do ar, o resto do painel não pode deixar de carregar.
+      // Ela NÃO acompanha o exercício: mostra sempre o mês mais recente publicado.
       api<PayrollDto>('/payroll')
         .then(setPayroll)
         .catch(() => setPayroll(null));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [requestedYear]);
 
+  // Sessão e redirecionamento vivem num efeito próprio: juntá-los à carga faria o
+  // redirect ser reavaliado a cada troca de exercício.
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) {
@@ -275,12 +290,38 @@ export default function OrcamentoPage() {
       return;
     }
     setSession(stored);
+  }, [router]);
+
+  useEffect(() => {
+    if (!session) return;
     load().catch((error: unknown) => {
       toast.error(
         error instanceof Error ? error.message : 'Erro ao carregar os dados da execução orçamentária.',
       );
     });
-  }, [router, load]);
+  }, [session, load]);
+
+  // Se a URL pedia um exercício que não existe, o servidor devolveu o corrente:
+  // alinhar a URL evita que o seletor mostre um ano que não é o dos dados.
+  useEffect(() => {
+    if (loadedYear == null || requestedYear == null) return;
+    if (loadedYear !== requestedYear) setYear(loadedYear);
+  }, [loadedYear, requestedYear, setYear]);
+
+  // A estrutura do QDD muda entre exercícios: manter órgão/unidade/fonte de outro
+  // ano deixaria a tela filtrada por algo que não existe no exercício escolhido.
+  const changeYear = useCallback(
+    (next: number) => {
+      setOrganizationCode(allValue);
+      setUnitFilter(allValue);
+      setSourceFilter(allValue);
+      setFunctionFilter(allValue);
+      setSubfunctionFilter(allValue);
+      setSearch('');
+      setYear(next);
+    },
+    [setYear],
+  );
 
   // Replica a transição lateral de "Informações Gerais". Campos e controles de
   // seleção preservam as setas para sua própria navegação.
@@ -321,25 +362,33 @@ export default function OrcamentoPage() {
     router.push('/login');
   }
 
+  // Órgãos derivados das ações do exercício carregado — como já acontece com
+  // unidade e fonte. A estrutura de governo muda entre exercícios, então usar o
+  // cadastro como fonte ofereceria órgãos que não existem no ano escolhido (e
+  // omitiria os que só existem nele). O nome do cadastro é preferido quando há;
+  // senão vale o do próprio QDD.
+  const organizationEntries = useMemo(() => {
+    const nameByCode = new Map(organizations.map((organization) => [organization.code, organization.name]));
+    const byCode = new Map<string, string>();
+    for (const action of actions) {
+      if (byCode.has(action.organizationCode)) continue;
+      byCode.set(
+        action.organizationCode,
+        nameByCode.get(action.organizationCode) ?? action.organizationName,
+      );
+    }
+    return [...byCode.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+      .map(([code, name]) => ({ value: code, label: `${code} — ${name}` }));
+  }, [actions, organizations]);
+
   const organizationOptions = useMemo(
-    () => [
-      { value: allValue, label: 'Todos os órgãos' },
-      ...organizations.map((organization) => ({
-        value: organization.code,
-        label: `${organization.code} — ${organization.name}`,
-      })),
-    ],
-    [organizations],
+    () => [{ value: allValue, label: 'Todos os órgãos' }, ...organizationEntries],
+    [organizationEntries],
   );
   const fiscalOrganizationOptions = useMemo(
-    () => [
-      { value: allValue, label: 'Selecione uma secretaria' },
-      ...organizations.map((organization) => ({
-        value: organization.code,
-        label: `${organization.code} — ${organization.name}`,
-      })),
-    ],
-    [organizations],
+    () => [{ value: allValue, label: 'Selecione uma secretaria' }, ...organizationEntries],
+    [organizationEntries],
   );
 
   const unitOptions = useMemo(() => {
@@ -377,7 +426,7 @@ export default function OrcamentoPage() {
         if (!code || sources.has(code)) continue;
         sources.set(code, {
           value: code,
-          label: `${code} — ${getFonteLabel(code) ?? 'Fonte não catalogada'}`,
+          label: `${code} — ${getFonteLabel(code, loadedYear) ?? 'Fonte não catalogada'}`,
         });
       }
     }
@@ -610,6 +659,12 @@ export default function OrcamentoPage() {
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <ExerciseSelect
+              exercises={metadata?.exercises ?? []}
+              year={loadedYear ?? year}
+              onChange={changeYear}
+              disabled={isLoading}
+            />
             <Button
               variant="secondary"
               className="hidden rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100 lg:inline-flex"
@@ -1142,5 +1197,24 @@ export default function OrcamentoPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * `useExercise` lê `useSearchParams`, que exige um limite de Suspense — sem ele o
+ * `next build` falha ao pré-renderizar a rota.
+ */
+export default function OrcamentoPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col gap-4 bg-white p-6">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-[calc(100vh-8rem)] w-full" />
+        </div>
+      }
+    >
+      <OrcamentoPageContent />
+    </Suspense>
   );
 }

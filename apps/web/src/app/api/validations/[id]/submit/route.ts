@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
-import { userControlsUnit } from '@/lib/store';
+import { getCurrentYear, userControlsUnit } from '@/lib/store';
 import { logUserActivity } from '@/lib/user-activity';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,9 +10,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (user.role !== 'SECRETARIA_REPRESENTANTE') return forbidden();
 
   const { id } = await params;
-  const existing = await prisma.actionValidation.findUnique({ where: { id }, select: { organizationCode: true, unitCode: true } });
+  const existing = await prisma.actionValidation.findUnique({
+    where: { id },
+    select: { organizationCode: true, unitCode: true, action: { select: { year: true } } },
+  });
   if (!existing) return notFound('Validação não encontrada.');
-  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode))) return forbidden();
+  if (existing.action.year !== (await getCurrentYear())) return forbidden();
+  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year))) {
+    return forbidden();
+  }
 
   const row = await prisma.actionValidation.update({
     where: { id },

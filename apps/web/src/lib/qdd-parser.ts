@@ -23,8 +23,22 @@ export interface BudgetAction {
   totals: BudgetTotals; expenseLines: ExpenseLine[]; assignmentIds: string[];
 }
 
+/**
+ * Onde o exercício veio: escolha da SEPLAN no formulário (`manual`) ou, na ausência
+ * dela, cabeçalho da planilha, nome do arquivo ou relógio.
+ */
+export type YearSource = 'manual' | 'header' | 'filename' | 'fallback';
+
 export interface ParsedQdd {
   importRecord: { id: string; filename: string; year: number; referenceMonth: number; periodType: string; importedAt: string; rowCount: number; actionCount: number; status: string };
+  yearDetectedFrom: YearSource;
+  /**
+   * Exercício que o próprio arquivo declara, independentemente da escolha manual.
+   * Serve de conferência: divergir do escolhido é sinal de arquivo trocado.
+   */
+  detectedYear: number;
+  /** Origem do `detectedYear` — nunca `manual`. */
+  detectedYearFrom: Exclude<YearSource, 'manual'>;
   actions: BudgetAction[];
   sampleActions: BudgetAction[];
   organizationsCount: number;
@@ -35,7 +49,7 @@ export function parseQdd(
   filename: string,
   buffer: Buffer,
   createId: (prefix: string) => string,
-  periodInfo: { periodType: string; referenceMonth: number },
+  periodInfo: { periodType: string; referenceMonth: number; year?: number | null },
 ): ParsedQdd {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -44,7 +58,11 @@ export function parseQdd(
   if (headerIndex < 0) throw new Error('Não foi possível localizar o cabeçalho do QDD.');
 
   const headers = (rows[headerIndex] as unknown[]).map((h) => String(h).trim());
-  const year = detectYear(rows, filename);
+  // O exercício escolhido no formulário PREVALECE sobre o detectado: a detecção
+  // vira conferência, não decisão. Sem escolha, cai na detecção como antes.
+  const { year: detectedYear, from: detectedYearFrom } = detectYear(rows, filename);
+  const year = periodInfo.year ?? detectedYear;
+  const yearDetectedFrom: YearSource = periodInfo.year == null ? detectedYearFrom : 'manual';
   const lines: ExpenseLine[] = [];
 
   for (const row of rows.slice(headerIndex + 1) as unknown[][]) {
@@ -110,7 +128,7 @@ export function parseQdd(
   };
 
   return {
-    importRecord, actions,
+    importRecord, yearDetectedFrom, detectedYear, detectedYearFrom, actions,
     sampleActions: actions.slice(0, 8).map((a) => ({ ...a, expenseLines: a.expenseLines.slice(0, 3) })),
     organizationsCount: new Set(actions.map((a) => a.organizationCode)).size,
     unitsCount: new Set(actions.map((a) => `${a.organizationCode}-${a.unitCode}`)).size,
@@ -144,9 +162,20 @@ function toNumber(value: unknown) {
 function emptyTotals(): BudgetTotals {
   return { initialBudget: 0, supplemented: 0, updatedBudget: 0, committed: 0, liquidated: 0, paid: 0, available: 0 };
 }
-function detectYear(rows: unknown[][], filename: string) {
+/**
+ * Detecta o exercício da planilha. A origem é devolvida junto porque `fallback`
+ * (ano corrente do relógio) é um palpite: um QDD de outro exercício sem ano no
+ * cabeçalho nem no nome do arquivo entraria no exercício errado e colidiria com o
+ * vigente. A interface de importação mostra a origem para a SEPLAN conferir.
+ */
+function detectYear(
+  rows: unknown[][],
+  filename: string,
+): { year: number; from: Exclude<YearSource, 'manual'> } {
   const joined = rows.slice(0, 5).flat().map((c) => String(c)).join(' ');
   const fromHeader = joined.match(/Exerc[ií]cio:\s*(\d{4})/i)?.[1];
+  if (fromHeader) return { year: Number(fromHeader), from: 'header' };
   const fromFilename = filename.match(/20\d{2}/)?.[0];
-  return Number(fromHeader ?? fromFilename ?? new Date().getFullYear());
+  if (fromFilename) return { year: Number(fromFilename), from: 'filename' };
+  return { year: new Date().getFullYear(), from: 'fallback' };
 }

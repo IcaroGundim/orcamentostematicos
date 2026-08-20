@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, conflict } from '@/lib/auth-server';
 import { resolveWeightingFactor } from '@/lib/classification-rules';
 import { prisma } from '@/lib/prisma';
-import { mapAssignment, isEmptyDraftValidation, userControlsUnit } from '@/lib/store';
+import { getCurrentYear, mapAssignment, isEmptyDraftValidation, userControlsUnit } from '@/lib/store';
 import { logUserActivity } from '@/lib/user-activity';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,13 +16,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.thematicAssignment.findUnique({
     where: { id },
     include: {
-      action: { select: { organizationCode: true, unitCode: true } },
+      action: { select: { organizationCode: true, unitCode: true, year: true } },
     },
   });
   if (!existing) return notFound('Atribuição temática não encontrada.');
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    const allowed = await userControlsUnit(user, existing.action.organizationCode, existing.action.unitCode);
+    // Secretaria atua somente no exercício corrente.
+    if (existing.action.year !== (await getCurrentYear())) return forbidden();
+    const allowed = await userControlsUnit(
+      user, existing.action.organizationCode, existing.action.unitCode, existing.action.year,
+    );
     if (!allowed) return forbidden();
   }
 
@@ -67,14 +71,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const row = await prisma.thematicAssignment.findUnique({
     where: { id },
     include: {
-      action: { select: { organizationCode: true, unitCode: true } },
+      action: { select: { organizationCode: true, unitCode: true, year: true } },
     },
   });
 
   if (!row) return notFound('Atribuição temática não encontrada.');
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    const allowed = await userControlsUnit(user, row.action.organizationCode, row.action.unitCode);
+    if (row.action.year !== (await getCurrentYear())) return forbidden();
+    const allowed = await userControlsUnit(
+      user, row.action.organizationCode, row.action.unitCode, row.action.year,
+    );
     if (!allowed) return forbidden();
   } else if (user.role !== 'SEPLAN_ADMIN') {
     return forbidden();

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden } from '@/lib/auth-server';
+import { resolveRequestYear } from '@/lib/exercise-request';
 import { prisma } from '@/lib/prisma';
 import { mapCycle } from '@/lib/store';
 
@@ -8,7 +9,11 @@ const VALIDATION_STATUSES = ['RASCUNHO', 'ENVIADO', 'DEVOLVIDO', 'APROVADO'] as 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
+  const exercise = await resolveRequestYear(req, user);
+  if (exercise.response) return exercise.response;
+
   const rows = await prisma.validationCycle.findMany({
+    where: exercise.year == null ? {} : { year: exercise.year },
     orderBy: { openedAt: 'desc' },
     include: { validations: { select: { status: true } } },
   });
