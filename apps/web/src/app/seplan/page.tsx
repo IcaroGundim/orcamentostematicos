@@ -416,6 +416,9 @@ function SeplanPageContent() {
   const [structureDiff, setStructureDiff] = useState<StructureDiff | null>(null);
   const [structureSubTab, setStructureSubTab] = useState('base');
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
+  // Prévia gerada pela coleta automática do SICAF, à espera de confirmação da SEPLAN.
+  const [sicafPending, setSicafPending] = useState<(ImportPreview & { generatedAt?: string }) | null>(null);
+  const [isOpeningSicaf, setIsOpeningSicaf] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
   const [isReattaching, setIsReattaching] = useState(false);
@@ -591,6 +594,38 @@ function SeplanPageContent() {
     }
   }
 
+  // Há prévia do SICAF pendente? A coleta agendada grava uma; aqui só a exibimos.
+  const loadSicafPending = useCallback(async () => {
+    try {
+      const pending = await api<(ImportPreview & { generatedAt?: string }) | null>('/imports/qdd/pending');
+      setSicafPending(pending ?? null);
+    } catch {
+      setSicafPending(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSicafPending();
+  }, [loadSicafPending]);
+
+  // Carrega a prévia do SICAF no MESMO fluxo de conferência do upload manual: a partir
+  // daqui, reconciliação e `confirmImport` funcionam sem distinção de origem.
+  async function openSicafPreview() {
+    if (!sicafPending || isOpeningSicaf) return;
+    setIsOpeningSicaf(true);
+    try {
+      setPreview(sicafPending);
+      setStructureSubTab('reconciliation');
+      await loadStructureDiff('preview', sicafPending.previewId);
+      setActiveSection('structure');
+      toast.success('Prévia do SICAF aberta para conferência.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao abrir a prévia do SICAF.');
+    } finally {
+      setIsOpeningSicaf(false);
+    }
+  }
+
   async function uploadQdd(file: File) {
     setIsPreviewingImport(true);
     try {
@@ -626,6 +661,7 @@ function SeplanPageContent() {
       setPreview(null);
       setImportComparisonOnly(false);
       setStructureSubTab('reconciliation');
+      void loadSicafPending(); // a prévia do SICAF é consumida no confirm; ressincroniza o aviso
       toast.success(
         importComparisonOnly
           ? 'QDD importado como exercício apenas comparativo.'
@@ -635,6 +671,9 @@ function SeplanPageContent() {
       await load();
       await loadStructureDiff('vigente');
     } catch (err) {
+      // Se a coleta agendada substituiu a prévia enquanto ela estava aberta, o confirm
+      // devolve 404 ("prévia expirada"); ressincroniza o aviso para a SEPLAN reabrir.
+      void loadSicafPending();
       toast.error(err instanceof Error ? err.message : 'Erro ao confirmar a importação do QDD.');
     } finally {
       setIsConfirmingImport(false);
@@ -1773,6 +1812,32 @@ function SeplanPageContent() {
                             </Select>
                           </Field>
                         </FieldGroup>
+                        {sicafPending && preview?.previewId !== sicafPending.previewId ? (
+                          <Alert className="border-primary/25 bg-primary/5">
+                            <FileSpreadsheetIcon />
+                            <AlertDescription>
+                              <span className="block font-medium text-foreground">
+                                Prévia do SICAF pronta (exercício {sicafPending.year})
+                              </span>
+                              <span className="block">
+                                Coleta automática · {sicafPending.actionCount} ações, {sicafPending.organizationsCount} órgãos
+                                {sicafPending.generatedAt
+                                  ? ` · gerada em ${new Date(sicafPending.generatedAt).toLocaleString('pt-BR')}`
+                                  : ''}
+                                . Não precisa exportar nem enviar o arquivo — revise e confirme.
+                              </span>
+                              <Button
+                                size="sm"
+                                className="mt-2"
+                                disabled={isOpeningSicaf || isPreviewingImport || isConfirmingImport}
+                                onClick={() => void openSicafPreview()}
+                              >
+                                {isOpeningSicaf ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : null}
+                                Revisar prévia do SICAF
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
                         <Button
                           asChild
                           variant="outline"

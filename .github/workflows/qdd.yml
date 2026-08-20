@@ -1,0 +1,68 @@
+name: Coleta do QDD (SICAF)
+
+# Puxa o QDD "Saldo Retroativo — Execução" (vTIPOREL=2) do SICAF/SEFAZ, baixa o Excel
+# nativo e o entrega à rota /imports/qdd/from-sicaf do app, que o processa com o MESMO
+# parser do upload manual e grava uma PRÉVIA. Nada entra no orçamento sem a SEPLAN
+# confirmar na tela — ver docs/ingestao-qdd-sicaf.md.
+#
+# Roda no Actions (não na Vercel) porque a raspagem depende de sessão GeneXus e do TLS
+# da SEFAZ, como a coleta da folha. É idempotente: cada execução substitui a prévia do
+# SICAF ainda não confirmada.
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5' # dias úteis, 08:00 UTC (05:00 America/Rio_Branco)
+  workflow_dispatch:
+    inputs:
+      exercicio:
+        description: 'Exercício (ano) do QDD. Vazio = ano corrente.'
+        required: false
+      mes:
+        description: 'Mês de referência 1-12 (acumulado até ele). Vazio = mês corrente.'
+        required: false
+      dry_run:
+        description: 'true = só baixa e valida, não envia ao app'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: coleta-qdd
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Coletar QDD do SICAF
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          SICAF_CPF: ${{ secrets.SICAF_CPF }}
+          SICAF_SENHA: ${{ secrets.SICAF_SENHA }}
+          SICAF_JOB_TOKEN: ${{ secrets.SICAF_JOB_TOKEN }}
+          SICAF_INSECURE_TLS: ${{ secrets.SICAF_INSECURE_TLS }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.exercicio }}" ]; then ARGS="$ARGS --exercicio=${{ github.event.inputs.exercicio }}"; fi
+          if [ -n "${{ github.event.inputs.mes }}" ]; then ARGS="$ARGS --mes=${{ github.event.inputs.mes }}"; fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          node apps/web/scripts/fetch-sicaf-qdd.mjs $ARGS
+
+      - name: Guardar respostas de depuração (quando a coleta falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sicaf-debug
+          path: apps/web/scripts/.sicaf-debug/
+          if-no-files-found: ignore
+          retention-days: 7
