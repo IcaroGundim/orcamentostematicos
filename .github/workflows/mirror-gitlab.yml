@@ -1,0 +1,46 @@
+name: Espelhar no GitLab
+
+# Mantém uma cópia do repositório na gitlab.com. O GitHub segue sendo a fonte de
+# verdade — o GitLab nunca escreve de volta.
+#
+# Por que uma action e não o mirroring nativo do GitLab: a direção que queremos
+# (GitHub -> GitLab) é PULL mirroring, que na gitlab.com é Premium. E inverter não
+# serve: o backup.yml commita em backups/ e dá push na main daqui todo dia; se o
+# GitLab fosse a origem de um push mirror, ele sobrescreveria esses commits.
+#
+# Como este workflow dispara em push na main, o commit diário do backup.yml também
+# é espelhado.
+#
+# Segredos necessários (Settings > Secrets and variables > Actions):
+#   GITLAB_MIRROR_URL  https://gitlab.com/<namespace>/orcamentostematicos.git
+#   GITLAB_TOKEN       Project Access Token do GitLab, escopo write_repository
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: mirror-gitlab
+  cancel-in-progress: false
+
+jobs:
+  espelhar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Obrigatório: o checkout raso padrão faz o push ser recusado pelo GitLab.
+          fetch-depth: 0
+
+      - name: Push para o GitLab
+        env:
+          URL: ${{ secrets.GITLAB_MIRROR_URL }}
+          TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "::error::GITLAB_MIRROR_URL ou GITLAB_TOKEN não configurados."
+            exit 1
+          fi
+          git push --prune "https://oauth2:${TOKEN}@${URL#https://}" \
+            "+refs/remotes/origin/*:refs/heads/*" "+refs/tags/*:refs/tags/*"
