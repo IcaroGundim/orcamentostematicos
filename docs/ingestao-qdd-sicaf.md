@@ -53,10 +53,26 @@ com o **mesmo valor**. É o que autentica o job na rota `/imports/qdd/from-sicaf
 
 ## Rodar
 
+- **Pela interface (SEPLAN):** botão **"Puxar QDD do SICAF agora"** na seção de importação.
+  Ele aciona o workflow via GitHub API (`workflow_dispatch`) — a raspagem roda no Actions,
+  não na Vercel — e a prévia aparece no banner em seguida (use *Verificar prévia* para
+  atualizar). Requer os segredos `GITHUB_*` abaixo **e** o `qdd.yml` mesclado na branch
+  default do repositório (o dispatch só enxerga workflows da branch default).
 - **Agendado:** dias úteis, 08:00 UTC (05:00 Rio Branco). Idempotente — cada execução
   substitui a prévia do SICAF ainda não confirmada.
-- **Sob demanda:** GitHub → Actions → *Coleta do QDD (SICAF)* → *Run workflow* (aceita
-  `exercicio`, `mes` e `dry_run`).
+- **Sob demanda (direto no GitHub):** Actions → *Coleta do QDD (SICAF)* → *Run workflow*
+  (aceita `exercicio`, `mes` e `dry_run`).
+
+### Segredos do botão da interface (na Vercel, escopo Production)
+
+| Variável | O que é |
+|---|---|
+| `GITHUB_DISPATCH_TOKEN` | PAT fine-grained com permissão **Actions: read/write** no repositório. |
+| `GITHUB_REPO` | `owner/repo` (default `IcaroGundim/orcamentostematicos`). |
+| `GITHUB_WORKFLOW_REF` | Branch de execução (default `main`). |
+
+Sem esses segredos o botão responde 503 com instrução clara; a coleta agendada continua
+funcionando de qualquer forma.
 - **Local (validação assistida):**
   ```bash
   SICAF_CPF=... SICAF_SENHA=... node apps/web/scripts/fetch-sicaf-qdd.mjs --dry-run --exercicio=2026

@@ -419,6 +419,7 @@ function SeplanPageContent() {
   // Prévia gerada pela coleta automática do SICAF, à espera de confirmação da SEPLAN.
   const [sicafPending, setSicafPending] = useState<(ImportPreview & { generatedAt?: string }) | null>(null);
   const [isOpeningSicaf, setIsOpeningSicaf] = useState(false);
+  const [isTriggeringSicaf, setIsTriggeringSicaf] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
   const [isReattaching, setIsReattaching] = useState(false);
@@ -607,6 +608,28 @@ function SeplanPageContent() {
   useEffect(() => {
     void loadSicafPending();
   }, [loadSicafPending]);
+
+  // Dispara a coleta do QDD no SICAF a partir da tela. A raspagem roda no GitHub Actions
+  // (não na Vercel); esta chamada só a aciona. A prévia aparece no banner segundos depois.
+  async function triggerSicafCollection() {
+    if (isTriggeringSicaf) return;
+    setIsTriggeringSicaf(true);
+    try {
+      const exercicio = requestedYear ?? metadata?.currentYear ?? null;
+      await api('/imports/qdd/from-sicaf/trigger', {
+        method: 'POST',
+        body: JSON.stringify(exercicio != null ? { exercicio } : {}),
+      });
+      toast.success(
+        `Coleta do SICAF disparada${exercicio != null ? ` (exercício ${exercicio})` : ''}. ` +
+          'A prévia aparecerá aqui em alguns instantes — use "Verificar prévia" para atualizar.',
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível disparar a coleta do SICAF.');
+    } finally {
+      setIsTriggeringSicaf(false);
+    }
+  }
 
   // Carrega a prévia do SICAF no MESMO fluxo de conferência do upload manual: a partir
   // daqui, reconciliação e `confirmImport` funcionam sem distinção de origem.
@@ -1812,6 +1835,35 @@ function SeplanPageContent() {
                             </Select>
                           </Field>
                         </FieldGroup>
+                        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/30 p-3">
+                          <div className="flex-1 min-w-40">
+                            <span className="block text-sm font-medium text-foreground">Coleta automática do SICAF</span>
+                            <span className="block text-xs text-muted-foreground">
+                              Puxa o QDD "Saldo Retroativo" direto do SICAF — sem exportar nem enviar arquivo.
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isTriggeringSicaf || isPreviewingImport || isConfirmingImport}
+                            onClick={() => void triggerSicafCollection()}
+                          >
+                            {isTriggeringSicaf ? (
+                              <RefreshCwIcon data-icon="inline-start" className="animate-spin" />
+                            ) : (
+                              <RefreshCwIcon data-icon="inline-start" />
+                            )}
+                            Puxar QDD do SICAF agora
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isTriggeringSicaf}
+                            onClick={() => void loadSicafPending()}
+                          >
+                            Verificar prévia
+                          </Button>
+                        </div>
                         {sicafPending && preview?.previewId !== sicafPending.previewId ? (
                           <Alert className="border-primary/25 bg-primary/5">
                             <FileSpreadsheetIcon />
