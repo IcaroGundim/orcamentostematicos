@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { parseQdd } from '@/lib/qdd-parser';
@@ -6,6 +7,22 @@ import { createId } from '@/lib/store';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+function sameSecret(received: string | null, expected: string | undefined) {
+  // Painéis de secrets usam textarea e podem preservar uma quebra de linha invisível.
+  // Tokens aleatórios não contêm espaços nas extremidades, então normalizar aqui é
+  // seguro e evita um 401 impossível de distinguir visualmente na configuração.
+  const left = Buffer.from(received?.trim() ?? '');
+  const right = Buffer.from(expected?.trim() ?? '');
+  return left.length > 0 && left.length === right.length && timingSafeEqual(left, right);
+}
+
+function jobTokenError(message: string, status: 401 | 503) {
+  return NextResponse.json(
+    { message, error: status === 401 ? 'Unauthorized' : 'Service Unavailable', statusCode: status },
+    { status },
+  );
+}
 
 /**
  * Recebe os BYTES do QDD "Saldo Retroativo" já exportado do SICAF e gera uma PRÉVIA,
@@ -25,7 +42,22 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   const jobToken = req.headers.get('x-job-token');
   const expectedToken = process.env.SICAF_JOB_TOKEN;
-  const authorizedByJob = Boolean(expectedToken && jobToken && jobToken === expectedToken);
+  const authorizedByJob = sameSecret(jobToken, expectedToken);
+
+  // Quando a chamada se identifica como job, devolve a causa configuracional exata.
+  // Sem isso, ambos os casos caíam no login de usuário e viram o mesmo 401 genérico.
+  if (!authorizedByJob && jobToken != null) {
+    if (!expectedToken?.trim()) {
+      return jobTokenError(
+        'SICAF_JOB_TOKEN não está configurado neste deployment da Vercel.',
+        503,
+      );
+    }
+    return jobTokenError(
+      'SICAF_JOB_TOKEN recebido do GitHub diverge do valor configurado na Vercel.',
+      401,
+    );
+  }
 
   if (!authorizedByJob) {
     const user = await getAuthUser(req);
