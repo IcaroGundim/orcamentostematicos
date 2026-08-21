@@ -1,0 +1,60 @@
+# Pipeline do espelho no GitLab.
+#
+# IMPORTANTE — por que o deploy é MANUAL:
+# A Vercel já faz deploy automático a partir do GitHub, que é a fonte de verdade
+# desta topologia. Se este pipeline também publicasse em produção a cada push, os
+# dois competiriam pelo mesmo alias de produção e o vencedor dependeria de quem
+# terminasse por último. O job `deploy_producao` existe para emergência (GitHub
+# fora do ar, por exemplo) e só roda se alguém clicar.
+#
+# Este app NÃO roda no GitLab Pages: são 42 rotas de API server-side, middleware e
+# Prisma. Pages serve apenas conteúdo estático.
+#
+# Variáveis necessárias (Settings > CI/CD > Variables), só para o deploy manual:
+#   VERCEL_TOKEN       token da conta Vercel        (Masked, Protected)
+#   VERCEL_ORG_ID      de .vercel/project.json      (Masked, Protected)
+#   VERCEL_PROJECT_ID  de .vercel/project.json      (Masked, Protected)
+
+stages:
+  - validar
+  - deploy
+
+default:
+  image: node:22
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+
+validar:
+  stage: validar
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npx prisma generate --schema apps/web/prisma/schema.prisma
+    - npx tsc --noEmit -p apps/web/tsconfig.json
+    # DATABASE_URL fictícia: o build não consulta o banco, mas o Prisma exige a
+    # variável presente. NUNCA colocar a URL real aqui — o build não precisa dela.
+    - DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+deploy_producao:
+  stage: deploy
+  needs: [validar]
+  script:
+    - npm i -g vercel@latest
+    - vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+    - vercel build --prod --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+  environment:
+    name: producao
+    url: https://orcamentostematicos.vercel.app
+  rules:
+    # Só na main, só apertando o botão. Ver o comentário no topo do arquivo.
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true

@@ -13,7 +13,13 @@ name: Espelhar no GitLab
 #
 # Segredos necessários (Settings > Secrets and variables > Actions):
 #   GITLAB_MIRROR_URL  https://gitlab.com/<namespace>/orcamentostematicos.git
-#   GITLAB_TOKEN       Project Access Token do GitLab, escopo write_repository
+#   GITLAB_TOKEN       Personal Access Token do GitLab, escopo write_repository
+#
+# Por que PESSOAL e não Project Access Token: na gitlab.com o project access token
+# exige Premium, e deploy token não tem escopo de escrita (só read_repository). No
+# plano free sobra o token pessoal. Ele carrega a identidade do dono, então use um
+# token DEDICADO a este espelho, com write_repository e mais nada — assim dá para
+# revogar sem perder o acesso do glab.
 
 on:
   push:
