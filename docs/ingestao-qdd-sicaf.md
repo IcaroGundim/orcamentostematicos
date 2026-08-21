@@ -10,9 +10,10 @@ no banco continua sob **confirmação humana** — nada entra no orçamento sozi
 GitHub Actions (.github/workflows/qdd.yml)
   └─ node apps/web/scripts/fetch-sicaf-qdd.mjs
        1. login no SICAF (app.sicaf) com SICAF_CPF / SICAF_SENHA
-       2. abre app.quadrodetalhadodespesa, dispara DOEXCEL (vTIPOREL=2)
-       3. baixa o Excel nativo do "Saldo Retroativo — Execução"
-       4. POST multipart → APP_URL/api/imports/qdd/from-sicaf  (header x-job-token)
+       2. confirma/troca o exercício no seletor GeneXus do SICAF
+       3. abre app.quadrodetalhadodespesa e dispara DOEXCEL (vTIPOREL=2)
+       4. baixa o Excel e confere formato, cabeçalho, exercício e linhas
+       5. POST multipart → APP_URL/api/imports/qdd/from-sicaf  (header x-job-token)
                                    │
 Vercel (app)                       ▼
   /api/imports/qdd/from-sicaf → parseQdd (o MESMO do upload) → ImportPreview "sicafpreview-…"
@@ -42,7 +43,7 @@ No **GitHub → Settings → Secrets and variables → Actions**:
 | `SICAF_CPF` | Login nominal habilitado na SEFAZ (perfil de leitura do QDD). |
 | `SICAF_SENHA` | Senha do login. Trocar se algum dia vazar. |
 | `SICAF_JOB_TOKEN` | Segredo compartilhado job ↔ rota. Gere aleatório (`openssl rand -hex 32`). |
-| `APP_URL` | Base do app publicado (ex.: `https://orcamentos.vercel.app`). |
+| `APP_URL` | Base do app publicado: `https://orcamentostematicos.vercel.app`. |
 | `SICAF_INSECURE_TLS` | Opcional, `1` só se o handshake TLS da SEFAZ falhar no runner. |
 
 Na **Vercel → Project → Settings → Environment Variables** (Production): `SICAF_JOB_TOKEN`
@@ -58,7 +59,7 @@ com o **mesmo valor**. É o que autentica o job na rota `/imports/qdd/from-sicaf
   não na Vercel — e a prévia aparece no banner em seguida (use *Verificar prévia* para
   atualizar). Requer os segredos `GITHUB_*` abaixo **e** o `qdd.yml` mesclado na branch
   default do repositório (o dispatch só enxerga workflows da branch default).
-- **Agendado:** dias úteis, 08:00 UTC (05:00 Rio Branco). Idempotente — cada execução
+- **Agendado:** dias úteis, 10:00 UTC (05:00 Rio Branco). Idempotente — cada execução
   substitui a prévia do SICAF ainda não confirmada.
 - **Sob demanda (direto no GitHub):** Actions → *Coleta do QDD (SICAF)* → *Run workflow*
   (aceita `exercicio`, `mes` e `dry_run`).
@@ -79,24 +80,24 @@ funcionando de qualquer forma.
   ```
   `--dry-run` baixa o Excel para `apps/web/scripts/.sicaf-debug/` e **não** envia ao app.
 
-## ⚠️ Antes de confiar no agendamento: validar o seam do SICAF UMA vez
+## Validação do protocolo do SICAF
 
-A raspagem **não foi validada contra o sistema vivo** (não há acesso ao SICAF a partir do
-ambiente de desenvolvimento) e a documentação de referência diverge em nomes de campo
-(`GX_STATE` × `GXState`; `app.consultadotacao` × `app.quadrodetalhadodespesa`). Por isso o
-script foi feito para **falhar de forma legível**: em qualquer passo que não encontre o
-campo esperado, ele grava a resposta bruta em `apps/web/scripts/.sicaf-debug/` dizendo
-**qual** extração quebrou (login form, GXState da tela, ajaxSecurityToken, URL do Excel).
+O fluxo foi validado contra o SICAF de produção em **21/08/2026**, sempre com
+`--dry-run` (nenhum envio ao app):
 
-Passo a passo da 1ª validação:
+- troca de contexto **2026 → 2025** e **2025 → 2026**, confirmada pelo novo GXState;
+- exportação DOEXCEL por postback e download pelo `app.adownloadarquivos`;
+- QDD/2025: 9.279 linhas reconhecidas;
+- QDD/2026: 7.053 linhas, 1.730 ações, 33 órgãos e 129 unidades reconhecidos pelo
+  `parseQdd` usado na aplicação.
 
-1. Rode `--dry-run` localmente. Se baixar o `.xls`, o seam está correto — importe uma vez
-   pela tela para conferir que o `parseQdd` casa as colunas.
-2. Se falhar, abra o arquivo indicado em `.sicaf-debug/` e ajuste o regex/campo
-   correspondente em `fetch-sicaf-qdd.mjs` (as listas `RE_STATE`, `RE_TOKEN`, os nomes dos
-   parâmetros `vTIPOREL`/`vEXRORC`/… e o padrão da URL do Excel). Idealmente capture uma
-   requisição real do DOEXCEL pelo DevTools do navegador (HAR) e alinhe o payload.
-3. Só depois habilite o `schedule`.
+O coletor agora falha antes do envio se o arquivo não for Excel, não tiver o cabeçalho
+do QDD, estiver vazio ou declarar exercício diferente do solicitado. A rota do app repete
+a conferência antes de criar/substituir a prévia.
+
+Se uma futura versão do GeneXus mudar o protocolo, o script grava a resposta da etapa que
+falhou em `apps/web/scripts/.sicaf-debug/`. Use esses arquivos apenas para diagnóstico:
+eles podem conter estado e tokens temporários de sessão.
 
 O `.sicaf-debug/` está no `.gitignore` (contém dados brutos) e é publicado como artifact do
 Actions quando o job falha, para depurar sem expor no repositório.

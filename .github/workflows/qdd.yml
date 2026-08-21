@@ -11,7 +11,7 @@ name: Coleta do QDD (SICAF)
 
 on:
   schedule:
-    - cron: '0 8 * * 1-5' # dias úteis, 08:00 UTC (05:00 America/Rio_Branco)
+    - cron: '0 10 * * 1-5' # dias úteis, 10:00 UTC (05:00 America/Rio_Branco)
   workflow_dispatch:
     inputs:
       exercicio:
@@ -51,12 +51,15 @@ jobs:
           SICAF_SENHA: ${{ secrets.SICAF_SENHA }}
           SICAF_JOB_TOKEN: ${{ secrets.SICAF_JOB_TOKEN }}
           SICAF_INSECURE_TLS: ${{ secrets.SICAF_INSECURE_TLS }}
+          INPUT_EXERCICIO: ${{ github.event.inputs.exercicio }}
+          INPUT_MES: ${{ github.event.inputs.mes }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          ARGS=""
-          if [ -n "${{ github.event.inputs.exercicio }}" ]; then ARGS="$ARGS --exercicio=${{ github.event.inputs.exercicio }}"; fi
-          if [ -n "${{ github.event.inputs.mes }}" ]; then ARGS="$ARGS --mes=${{ github.event.inputs.mes }}"; fi
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          node apps/web/scripts/fetch-sicaf-qdd.mjs $ARGS
+          args=()
+          if [ -n "$INPUT_EXERCICIO" ]; then args+=("--exercicio=$INPUT_EXERCICIO"); fi
+          if [ -n "$INPUT_MES" ]; then args+=("--mes=$INPUT_MES"); fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then args+=("--dry-run"); fi
+          node apps/web/scripts/fetch-sicaf-qdd.mjs "${args[@]}"
 
       - name: Guardar respostas de depuração (quando a coleta falha)
         if: failure()

@@ -64,6 +64,15 @@ export async function POST(req: NextRequest) {
     return badRequest(err?.message ?? 'Erro ao processar o QDD do SICAF.');
   }
 
+  // Defesa em profundidade: o coletor já confere o cabeçalho antes do envio, mas a
+  // rota também recusa a divergência ANTES de criar/substituir a prévia. Sem esta trava,
+  // um contexto de sessão preso em outro ano poderia rotular QDD de 2025 como 2026.
+  if (parsed.detectedYear !== year) {
+    return badRequest(
+      `O arquivo do SICAF declara o exercício ${parsed.detectedYear}, mas a coleta informou ${year}.`,
+    );
+  }
+
   const previewId = createId('sicafpreview');
   const data = { ...parsed, __source: 'sicaf', __generatedAt: new Date().toISOString() };
 
