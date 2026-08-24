@@ -54,7 +54,7 @@ const ALL = 'ALL';
 const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
-const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[72rem]';
+const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[111rem]';
 const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
 const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
@@ -150,7 +150,12 @@ const OverviewActionRow = memo(function OverviewActionRow({
                 />
               </TableCell>
             ) : null}
-            <TableCell className="w-[36%] min-w-[12rem] whitespace-normal break-words py-2 align-top">
+            <TableCell
+              className={cn(
+                'whitespace-normal break-words py-2 align-top',
+                institutional ? 'w-[32rem]' : 'w-[36%] min-w-[12rem]',
+              )}
+            >
               <div className="flex min-w-0 items-start gap-1.5">
                 <button
                   type="button"
@@ -198,7 +203,9 @@ const OverviewActionRow = memo(function OverviewActionRow({
                 </div>
               </div>
             </TableCell>
-          <TableCell className="w-[6rem] py-2 align-top text-sm">
+          <TableCell
+            className={cn('py-2 align-top text-sm', institutional ? 'w-[8rem]' : 'w-[6rem]')}
+          >
             <span
               className="font-medium"
               title={`${action.organizationCode} — ${action.organizationName}`}
@@ -207,7 +214,12 @@ const OverviewActionRow = memo(function OverviewActionRow({
             </span>
           </TableCell>
           {showUnit ? (
-            <TableCell className="w-[15%] max-w-[9rem] py-2 align-top text-sm">
+            <TableCell
+              className={cn(
+                'py-2 align-top text-sm',
+                institutional ? 'w-[16rem]' : 'w-[15%] max-w-[9rem]',
+              )}
+            >
               <span className="text-xs text-muted-foreground">{action.unitCode}</span>
               <p className="truncate text-xs" title={action.unitName}>
                 {action.unitName}
@@ -219,7 +231,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
               <TableCell
                 key={metric}
                 className={cn(
-                  'w-[8rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm',
+                  'w-[11rem] whitespace-nowrap border-l border-black/10 px-3 py-2 text-right align-top tabular-nums text-sm',
                   metric === executionMetric && 'font-semibold',
                 )}
               >
@@ -956,14 +968,32 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                           />
                         </TableHead>
                       ) : null}
-                      <TableHead className={cn('h-9 w-[36%] min-w-[12rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                      <TableHead
+                        className={cn(
+                          'h-9 text-xs uppercase tracking-[0.12em]',
+                          isExecutionVariant ? 'w-[32rem]' : 'w-[36%] min-w-[12rem]',
+                          tableHeadClass,
+                        )}
+                      >
                         Ação
                       </TableHead>
-                      <TableHead className={cn('h-9 w-[6rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                      <TableHead
+                        className={cn(
+                          'h-9 text-xs uppercase tracking-[0.12em]',
+                          isExecutionVariant ? 'w-[8rem]' : 'w-[6rem]',
+                          tableHeadClass,
+                        )}
+                      >
                         Órgão
                       </TableHead>
                       {showUnit ? (
-                        <TableHead className={cn('h-9 w-[15%] max-w-[9rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        <TableHead
+                          className={cn(
+                            'h-9 text-xs uppercase tracking-[0.12em]',
+                            isExecutionVariant ? 'w-[16rem]' : 'w-[15%] max-w-[9rem]',
+                            tableHeadClass,
+                          )}
+                        >
                           Unidade
                         </TableHead>
                       ) : null}
@@ -972,7 +1002,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                           <TableHead
                             key={metric}
                             className={cn(
-                              'h-9 w-[8rem] text-right text-xs uppercase tracking-[0.12em]',
+                              'h-9 w-[11rem] border-l border-white/25 px-3 text-right text-xs uppercase tracking-[0.12em]',
                               tableHeadClass,
                               metric === executionMetric && 'font-semibold',
                             )}

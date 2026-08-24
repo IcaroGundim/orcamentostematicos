@@ -698,7 +698,9 @@ de ações paralelo para o módulo; evoluir este. No variant de execução, a ta
 mostra os mesmos estágios monetários da aba `Tabela`: Dotação inicial, Dotação
 atualizada, Empenhado, Liquidado e Pago, nessa ordem, com destaque tipográfico
 para o estágio selecionado no filtro lateral. Usa uma largura mínima compartilhada
-pelo cabeçalho e pelas linhas. O contêiner
+pelo cabeçalho e pelas linhas: no modo de execução, Ação, Órgão e Unidade
+possuem larguras fixas e cada estágio monetário reserva 11rem, com divisor vertical
+sutil. Isso impede que cabeçalhos e valores financeiros se sobreponham. O contêiner
 da lista concentra a rolagem vertical e horizontal para manter as colunas alinhadas
 durante a navegação lateral.
 
