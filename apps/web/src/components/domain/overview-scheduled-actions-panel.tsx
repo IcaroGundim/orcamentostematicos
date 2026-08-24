@@ -49,6 +49,9 @@ const ALL = 'ALL';
 const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
+const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[72rem]';
+const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
+const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
 const switchTrackClass =
   'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534] md:text-[17px]';
@@ -111,7 +114,11 @@ const OverviewActionRow = memo(function OverviewActionRow({
   const selected = selectionState !== 'none';
   const checkboxChecked =
     selectionState === 'full' ? true : selectionState === 'partial' ? 'indeterminate' : false;
-  const minWidth = selectable ? 'min-w-[50rem]' : 'min-w-[48rem]';
+  const minWidth = institutional
+    ? EXECUTION_TABLE_MIN_WIDTH
+    : selectable
+      ? SELECTABLE_TABLE_MIN_WIDTH
+      : DEFAULT_TABLE_MIN_WIDTH;
   return (
     <div className={`w-full ${minWidth}`}>
       <Table className="table-fixed w-full">
@@ -204,9 +211,19 @@ const OverviewActionRow = memo(function OverviewActionRow({
           <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
             {formatMoney(action.totals.updatedBudget)}
           </TableCell>
+          {institutional ? (
+            <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+              {formatMoney(action.totals.committed)}
+            </TableCell>
+          ) : null}
           <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
             {formatMoney(action.totals.liquidated)}
           </TableCell>
+          {institutional ? (
+            <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+              {formatMoney(action.totals.paid)}
+            </TableCell>
+          ) : null}
           <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
             {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
           </TableCell>
@@ -487,7 +504,11 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, [displayedActions, selectedIds]);
 
   const showUnit = unitCode === ALL;
-  const tableMinWidth = calculatorMode ? 'min-w-[50rem]' : 'min-w-[48rem]';
+  const tableMinWidth = isExecutionVariant
+    ? EXECUTION_TABLE_MIN_WIDTH
+    : calculatorMode
+      ? SELECTABLE_TABLE_MIN_WIDTH
+      : DEFAULT_TABLE_MIN_WIDTH;
   const tableHeadClass = isExecutionVariant
     ? 'bg-green-900 text-white'
     : 'bg-background text-muted-foreground';
@@ -891,62 +912,71 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
           <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!isExecutionVariant ? <Separator className="shrink-0" /> : null}
             <div ref={scrollRef} className="h-0 min-h-0 min-w-0 flex-1 overflow-auto">
-              <Table className={`table-fixed w-full ${tableMinWidth}`}>
-                <TableHeader
-                  className={cn(
-                    'sticky top-0 z-10',
-                    isExecutionVariant ? 'bg-green-900' : 'bg-background',
-                  )}
-                >
-                  <TableRow
-                    style={
-                      isExecutionVariant
-                        ? { borderBottomColor: '#000', borderBottomWidth: '1px' }
-                        : undefined
-                    }
+              <div className={`sticky top-0 z-10 w-full ${tableMinWidth}`}>
+                <Table className="table-fixed w-full">
+                  <TableHeader
+                    className={cn(isExecutionVariant ? 'bg-green-900' : 'bg-background')}
                   >
-                    {calculatorMode ? (
-                      <TableHead className="h-9 w-5 px-0 bg-background text-center align-middle">
-                        <Checkbox
-                          className="mx-auto size-5"
-                          checked={
-                            displayedSelectionState === 'all'
-                              ? true
-                              : displayedSelectionState === 'some'
-                                ? 'indeterminate'
-                                : false
-                          }
-                          onCheckedChange={toggleSelectDisplayed}
-                          aria-label="Selecionar todas as ações exibidas"
-                        />
+                    <TableRow
+                      style={
+                        isExecutionVariant
+                          ? { borderBottomColor: '#000', borderBottomWidth: '1px' }
+                          : undefined
+                      }
+                    >
+                      {calculatorMode ? (
+                        <TableHead className="h-9 w-5 px-0 bg-background text-center align-middle">
+                          <Checkbox
+                            className="mx-auto size-5"
+                            checked={
+                              displayedSelectionState === 'all'
+                                ? true
+                                : displayedSelectionState === 'some'
+                                  ? 'indeterminate'
+                                  : false
+                            }
+                            onCheckedChange={toggleSelectDisplayed}
+                            aria-label="Selecionar todas as ações exibidas"
+                          />
+                        </TableHead>
+                      ) : null}
+                      <TableHead className={cn('h-9 w-[36%] min-w-[12rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Ação
                       </TableHead>
-                    ) : null}
-                    <TableHead className={cn('h-9 w-[36%] min-w-[12rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Ação
-                    </TableHead>
-                    <TableHead className={cn('h-9 w-[6rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Órgão
-                    </TableHead>
-                    {showUnit ? (
-                      <TableHead className={cn('h-9 w-[15%] max-w-[9rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                        Unidade
+                      <TableHead className={cn('h-9 w-[6rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Órgão
                       </TableHead>
-                    ) : null}
-                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Inicial
-                    </TableHead>
-                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Atualizado
-                    </TableHead>
-                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Liquidado
-                    </TableHead>
-                    <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                      Disponível
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-              </Table>
+                      {showUnit ? (
+                        <TableHead className={cn('h-9 w-[15%] max-w-[9rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                          Unidade
+                        </TableHead>
+                      ) : null}
+                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Inicial
+                      </TableHead>
+                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Atualizado
+                      </TableHead>
+                      {isExecutionVariant ? (
+                        <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                          Empenhado
+                        </TableHead>
+                      ) : null}
+                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Liquidado
+                      </TableHead>
+                      {isExecutionVariant ? (
+                        <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                          Pago
+                        </TableHead>
+                      ) : null}
+                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                        Disponível
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                </Table>
+              </div>
               <div
                 className={`relative w-full ${tableMinWidth}`}
                 style={{ height: `${virtualizer.getTotalSize()}px` }}

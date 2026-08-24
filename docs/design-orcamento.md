@@ -692,9 +692,13 @@ Mecânica:
 Compartilhado com os orçamentos temáticos; no módulo é usado com
 `variant="execution"`, `actions={filteredActions}` e `organizations`. O variant
 adapta o painel para receber filtros externos (órgão, função, subfunção, busca)
-em vez de expor os próprios. O painel e a linha da tabela (`OverviewActionRow`,
-linha 98) são `memo` — a lista chega a milhares de linhas. Não criar um painel
-de ações paralelo para o módulo; evoluir este.
+em vez de expor os próprios. O painel e a linha da tabela (`OverviewActionRow`)
+são `memo` — a lista chega a milhares de linhas. Não criar um painel
+de ações paralelo para o módulo; evoluir este. No variant de execução, a tabela
+mostra Inicial, Atualizado, Empenhado, Liquidado, Pago e Disponível, nessa ordem,
+e usa uma largura mínima compartilhada pelo cabeçalho e pelas linhas. O contêiner
+da lista concentra a rolagem vertical e horizontal para manter as colunas alinhadas
+durante a navegação lateral.
 
 ### 7.4 `FiscalSecretariatView` (`fiscal-secretariat-view.tsx`)
 
