@@ -1000,6 +1000,7 @@ function OrcamentoPageContent() {
                 actions={filteredActions}
                 organizations={organizations}
                 variant="execution"
+                executionMetric={metric}
               />
             </TabsContent>
 

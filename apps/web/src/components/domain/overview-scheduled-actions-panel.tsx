@@ -40,6 +40,11 @@ import { formatMoney, themeLabels } from '@/lib/api';
 import { effectiveWeightingFactor } from '@/lib/classification-rules';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
+import {
+  EXECUTION_METRIC_LABELS,
+  EXECUTION_METRICS,
+  type ExecutionMetric,
+} from '@/lib/execution-monitor';
 import { organizationAcronym } from '@/lib/organization-acronym';
 import { cn } from '@/lib/utils';
 import type { BudgetAction, BudgetImport, ThemeBudget } from '@/types/domain';
@@ -70,6 +75,8 @@ type Props = {
   lockedScopeLabel?: string;
   /** Adapta o painel para receber órgão, função, subfunção e busca de filtros externos. */
   variant?: 'thematic' | 'execution';
+  /** Estágio selecionado no monitor de execução, destacado como na aba Tabela. */
+  executionMetric?: ExecutionMetric;
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -90,6 +97,7 @@ type OverviewActionRowProps = {
   selectedLineKeys: ReadonlySet<string>;
   relocated: boolean;
   institutional: boolean;
+  executionMetric?: ExecutionMetric;
   expanded: boolean;
   onToggle: (id: string) => void;
   onToggleExpand: (id: string) => void;
@@ -106,6 +114,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
   selectedLineKeys,
   relocated,
   institutional,
+  executionMetric,
   expanded,
   onToggle,
   onToggleExpand,
@@ -205,28 +214,34 @@ const OverviewActionRow = memo(function OverviewActionRow({
               </p>
             </TableCell>
           ) : null}
-          <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-            {formatMoney(action.totals.initialBudget)}
-          </TableCell>
-          <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-            {formatMoney(action.totals.updatedBudget)}
-          </TableCell>
           {institutional ? (
-            <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-              {formatMoney(action.totals.committed)}
-            </TableCell>
-          ) : null}
-          <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-            {formatMoney(action.totals.liquidated)}
-          </TableCell>
-          {institutional ? (
-            <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-              {formatMoney(action.totals.paid)}
-            </TableCell>
-          ) : null}
-          <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
-            {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
-          </TableCell>
+            EXECUTION_METRICS.map((metric) => (
+              <TableCell
+                key={metric}
+                className={cn(
+                  'w-[8rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm',
+                  metric === executionMetric && 'font-semibold',
+                )}
+              >
+                {formatMoney(action.totals[metric])}
+              </TableCell>
+            ))
+          ) : (
+            <>
+              <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                {formatMoney(action.totals.initialBudget)}
+              </TableCell>
+              <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                {formatMoney(action.totals.updatedBudget)}
+              </TableCell>
+              <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                {formatMoney(action.totals.liquidated)}
+              </TableCell>
+              <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
+                {formatMoney(action.totals.updatedBudget - action.totals.liquidated)}
+              </TableCell>
+            </>
+          )}
           </TableRow>
         </TableBody>
       </Table>
@@ -253,6 +268,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   vigenteImport,
   lockedScopeLabel,
   variant = 'thematic',
+  executionMetric,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -951,28 +967,35 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                           Unidade
                         </TableHead>
                       ) : null}
-                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                        Inicial
-                      </TableHead>
-                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                        Atualizado
-                      </TableHead>
                       {isExecutionVariant ? (
-                        <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                          Empenhado
-                        </TableHead>
-                      ) : null}
-                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                        Liquidado
-                      </TableHead>
-                      {isExecutionVariant ? (
-                        <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                          Pago
-                        </TableHead>
-                      ) : null}
-                      <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
-                        Disponível
-                      </TableHead>
+                        EXECUTION_METRICS.map((metric) => (
+                          <TableHead
+                            key={metric}
+                            className={cn(
+                              'h-9 w-[8rem] text-right text-xs uppercase tracking-[0.12em]',
+                              tableHeadClass,
+                              metric === executionMetric && 'font-semibold',
+                            )}
+                          >
+                            {EXECUTION_METRIC_LABELS[metric]}
+                          </TableHead>
+                        ))
+                      ) : (
+                        <>
+                          <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Inicial
+                          </TableHead>
+                          <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Atualizado
+                          </TableHead>
+                          <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Liquidado
+                          </TableHead>
+                          <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Disponível
+                          </TableHead>
+                        </>
+                      )}
                     </TableRow>
                   </TableHeader>
                 </Table>
@@ -1006,6 +1029,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         selectedLineKeys={selectedLines.get(action.id) ?? EMPTY_LINE_KEYS}
                         relocated={relocatedUnitKeys?.has(`${action.organizationCode}|${action.unitCode}`) ?? false}
                         institutional={isExecutionVariant}
+                        executionMetric={executionMetric}
                         expanded={expandedIds.has(action.id)}
                         onToggle={toggleSelection}
                         onToggleExpand={toggleExpand}

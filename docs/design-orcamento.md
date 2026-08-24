@@ -695,8 +695,10 @@ adapta o painel para receber filtros externos (órgão, função, subfunção, b
 em vez de expor os próprios. O painel e a linha da tabela (`OverviewActionRow`)
 são `memo` — a lista chega a milhares de linhas. Não criar um painel
 de ações paralelo para o módulo; evoluir este. No variant de execução, a tabela
-mostra Inicial, Atualizado, Empenhado, Liquidado, Pago e Disponível, nessa ordem,
-e usa uma largura mínima compartilhada pelo cabeçalho e pelas linhas. O contêiner
+mostra os mesmos estágios monetários da aba `Tabela`: Dotação inicial, Dotação
+atualizada, Empenhado, Liquidado e Pago, nessa ordem, com destaque tipográfico
+para o estágio selecionado no filtro lateral. Usa uma largura mínima compartilhada
+pelo cabeçalho e pelas linhas. O contêiner
 da lista concentra a rolagem vertical e horizontal para manter as colunas alinhadas
 durante a navegação lateral.
 
