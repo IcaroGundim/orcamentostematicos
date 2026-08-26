@@ -6,6 +6,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CoinsIcon,
+  DownloadIcon,
   LogOutIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -32,6 +33,12 @@ import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -118,9 +125,9 @@ const VIEWS: { id: ViewId; label: string; icon: typeof BarChart3Icon }[] = [
 ];
 
 const CONTENT_VIEWS: { id: ContentView; label: string }[] = [
-  { id: 'overview', label: 'Visão geral' },
-  { id: 'fiscal', label: 'Órgão' },
   { id: 'actions', label: 'Ações' },
+  { id: 'overview', label: 'Gráficos' },
+  { id: 'fiscal', label: 'Órgão' },
   { id: 'table', label: 'Tabela' },
   { id: 'payroll', label: 'Folha de pagamento' },
 ];
@@ -230,12 +237,14 @@ function OrcamentoPageContent() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [view, setView] = useState<ViewId>('geral');
-  const [contentView, setContentView] = useState<ContentView>('overview');
+  const [contentView, setContentView] = useState<ContentView>('actions');
   // Declarado junto dos demais hooks: precisa vir antes do `return null` de sessão
   // ausente, senão a chamada passa a ser condicional.
   const contentViewPill = useHoverPill(contentView);
   const [metric, setMetric] = useState<ExecutionMetric>('updatedBudget');
   const [payroll, setPayroll] = useState<PayrollDto | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx');
 
   const [organizationCode, setOrganizationCode] = useState(allValue);
   const [unitFilter, setUnitFilter] = useState(allValue);
@@ -598,6 +607,11 @@ function OrcamentoPageContent() {
   const amendmentGroupRows = useMemo(() => aggregateByGroup(amendments), [amendments]);
   const amendmentCategoryRows = useMemo(() => aggregateByCategory(amendments), [amendments]);
 
+  // A dimensão de análise é o recorte dominante da tela: com `Emendas
+  // parlamentares` ativa, KPIs, exportação e o painel de Ações refletem apenas
+  // as ações de emenda — os filtros da trilha continuam valendo dentro dele.
+  const dimensionActions = view === 'amendments' ? amendments : filteredActions;
+
   const hasFilters =
     organizationCode !== allValue ||
     unitFilter !== allValue ||
@@ -615,24 +629,62 @@ function OrcamentoPageContent() {
     setSearch('');
   }
 
+  // Exportação cliente-side sobre o recorte da dimensão (`dimensionActions`):
+  // com Emendas parlamentares ativa, o arquivo carrega só as ações de emenda;
+  // em Geral, todo o recorte dos filtros da trilha. Import dinâmico, como no
+  // painel de ações, para não pesar o bundle.
+  const handleExport = useCallback(async () => {
+    if (dimensionActions.length === 0) {
+      toast.error('Não há ações correspondentes aos filtros aplicados para exportar.');
+      return;
+    }
+    const exportYear = loadedYear ?? year;
+    if (exportYear == null) {
+      toast.error('Aguarde o carregamento dos dados antes de exportar.');
+      return;
+    }
+    try {
+      const { buildExecutionRows, exportExecution } = await import('@/lib/execution-export');
+      const rows = buildExecutionRows(dimensionActions);
+      exportExecution(rows, exportFormat, exportYear);
+      setExportOpen(false);
+      toast.success(
+        `Exportação ${exportFormat.toUpperCase()} concluída (${rows.length} linha(s)).`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao exportar.');
+    }
+  }, [dimensionActions, exportFormat, loadedYear, year]);
+
   if (!session) return null;
 
   const rate = executionRate(totals.liquidated, totals.updatedBudget);
   const contentViewIndex = CONTENT_VIEWS.findIndex((item) => item.id === contentView);
-  const previousContentView = CONTENT_VIEWS[Math.max(0, contentViewIndex - 1)]?.id ?? 'overview';
+  const previousContentView = CONTENT_VIEWS[Math.max(0, contentViewIndex - 1)]?.id ?? 'actions';
   const nextContentView =
-    CONTENT_VIEWS[Math.min(CONTENT_VIEWS.length - 1, contentViewIndex + 1)]?.id ?? 'table';
+    CONTENT_VIEWS[Math.min(CONTENT_VIEWS.length - 1, contentViewIndex + 1)]?.id ?? 'actions';
   const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll';
+  const isAmendmentsDimension = view === 'amendments';
+
+  // KPIs globais seguem a dimensão: em Emendas parlamentares, os totais são os
+  // das ações de emenda. Sem memo de propósito: hooks não podem vir depois do
+  // guard de sessão (R11), e somar totais é aritmética barata sobre listas já
+  // calculadas.
+  const dimensionTotals = isAmendmentsDimension ? totalsOf(amendments) : totals;
+  const dimensionRate = executionRate(
+    dimensionTotals.liquidated,
+    dimensionTotals.updatedBudget,
+  );
 
   const kpis = [
-    { label: 'Dotação inicial', value: formatMoney(totals.initialBudget) },
-    { label: 'Dotação atualizada', value: formatMoney(totals.updatedBudget) },
-    { label: 'Empenhado', value: formatMoney(totals.committed) },
-    { label: 'Liquidado', value: formatMoney(totals.liquidated) },
-    { label: 'Pago', value: formatMoney(totals.paid) },
+    { label: 'Dotação inicial', value: formatMoney(dimensionTotals.initialBudget) },
+    { label: 'Dotação atualizada', value: formatMoney(dimensionTotals.updatedBudget) },
+    { label: 'Empenhado', value: formatMoney(dimensionTotals.committed) },
+    { label: 'Liquidado', value: formatMoney(dimensionTotals.liquidated) },
+    { label: 'Pago', value: formatMoney(dimensionTotals.paid) },
     {
       label: 'Execução',
-      value: `${rate.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`,
+      value: `${dimensionRate.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`,
     },
   ];
 
@@ -827,30 +879,27 @@ function OrcamentoPageContent() {
             </Button>
           </div>
 
-          {/* Visões — abaixo dos filtros e do seletor */}
-          {contentView !== 'actions' ? (
-            <nav
-              className="shrink-0 bg-white"
-              aria-label="Visões da execução orçamentária"
+          {/* Visões — abaixo dos filtros e do seletor. Presente também na aba
+              Ações: a dimensão (Geral/Emendas) recorta o painel de ações do mesmo
+              modo que recorta os gráficos e as tabelas. */}
+          <nav
+            className="shrink-0 bg-white"
+            aria-label="Visões da execução orçamentária"
+          >
+            <div
+              className={cn(
+                'border-b border-black/30 px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+                sidebarCollapsed && 'xl:sr-only',
+              )}
             >
-              <div
-                className={cn(
-                  'border-b border-black/30 px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
-                  sidebarCollapsed && 'xl:sr-only',
-                )}
-              >
-                Dimensão de análise
-              </div>
-              <ExecutionViewNavigation
-                activeView={view}
-                collapsed={sidebarCollapsed}
-                onSelect={(selectedView) => {
-                  setView(selectedView);
-                  setContentView('overview');
-                }}
-              />
-            </nav>
-          ) : null}
+              Dimensão de análise
+            </div>
+            <ExecutionViewNavigation
+              activeView={view}
+              collapsed={sidebarCollapsed}
+              onSelect={setView}
+            />
+          </nav>
         </div>
         ) : null}
 
@@ -868,12 +917,61 @@ function OrcamentoPageContent() {
           >
             {sidebarCollapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
           </Button>
-          <h1 className="font-heading text-xl font-bold tracking-tight">Monitoramento da execução orçamentária</h1>
+          <h1 className="font-heading text-xl font-bold tracking-tight">
+            Monitoramento da execução orçamentária
+            {isAmendmentsDimension ? ' — Emendas parlamentares' : ''}
+          </h1>
           <p className="border-l border-black/40 pl-3 text-sm text-muted-foreground">
             {isLoading
               ? 'Carregando dados do QDD vigente…'
-              : `${filteredActions.length.toLocaleString('pt-BR')} ação(ões)`}
+              : `${dimensionActions.length.toLocaleString('pt-BR')} ação(ões)`}
           </p>
+          {/*
+            Exportação do recorte da dimensão ativa: em Geral, as ações do QDD sob
+            os filtros da trilha; em Emendas parlamentares, só as ações de emenda.
+            A folha de pagamento fica de fora por construção: o arquivo nunca contém
+            dado da folha.
+          */}
+          <Popover open={exportOpen} onOpenChange={setExportOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto shrink-0 border-black bg-white shadow-none hover:bg-stone-100"
+                disabled={isLoading}
+              >
+                <DownloadIcon data-icon="inline-start" />
+                Exportar
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 space-y-4">
+              <div className="space-y-1.5">
+                <Label className={filterFieldLabelClass}>Formato</Label>
+                <Select
+                  value={exportFormat}
+                  onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                    <SelectItem value="csv">CSV (.csv)</SelectItem>
+                    <SelectItem value="json">JSON (.json)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => void handleExport()}
+                disabled={dimensionActions.length === 0}
+              >
+                <DownloadIcon />
+                Exportar recorte filtrado
+              </Button>
+            </PopoverContent>
+          </Popover>
         </div>
         ) : null}
 
@@ -913,7 +1011,7 @@ function OrcamentoPageContent() {
             onValueChange={(value) => setContentView(value as ContentView)}
             className="min-h-0 flex-1 overflow-hidden"
             role="group"
-            aria-label="Visualização da execução — use as setas do teclado para alternar entre Visão geral, Órgão, Ações, Tabela e Folha de pagamento"
+            aria-label="Visualização da execução — use as setas do teclado para alternar entre Ações, Gráficos, Órgão, Tabela e Folha de pagamento"
           >
             <TabsContent value="overview" forceMount className="min-h-0 overflow-hidden">
               <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
@@ -996,8 +1094,13 @@ function OrcamentoPageContent() {
             </TabsContent>
 
             <TabsContent value="actions" forceMount className="h-full min-h-0 overflow-hidden">
+              {/*
+                A dimensão de análise recorta a aba Ações do mesmo modo que recorta
+                gráficos e tabelas: Geral mostra todas as ações filtradas; Emendas
+                parlamentares mostra apenas as ações de emenda.
+              */}
               <OverviewScheduledActionsPanel
-                actions={filteredActions}
+                actions={dimensionActions}
                 organizations={organizations}
                 variant="execution"
                 executionMetric={metric}

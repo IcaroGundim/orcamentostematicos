@@ -129,13 +129,13 @@ const OverviewActionRow = memo(function OverviewActionRow({
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;
   return (
-    <div className={`w-full ${minWidth}`}>
+    <div className={`w-full ${institutional ? 'border-b border-black/30' : ''} ${minWidth}`}>
       <Table className="table-fixed w-full">
         <TableBody>
           <TableRow
             data-state={selectable && selected ? 'selected' : undefined}
             onClick={selectable ? () => onToggle(action.id) : undefined}
-            className={`data-[state=selected]:bg-muted/40 ${institutional ? 'border-b border-black/15 hover:bg-stone-50' : ''} ${selectable ? 'cursor-pointer' : ''}`}
+            className={`data-[state=selected]:bg-muted/40 ${institutional ? 'hover:bg-stone-50' : ''} ${selectable ? 'cursor-pointer' : ''}`}
           >
             {selectable ? (
               <TableCell
@@ -588,6 +588,11 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     count: displayedActions.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_ESTIMATE + ROW_GAP,
+    // Keya o cache de alturas pelo id da ação (padrão é o índice numérico).
+    // Sem isso, ao trocar a lista (filtros ou dimensão Geral ⇄ Emendas) as
+    // linhas novas herdam as alturas medidas das linhas antigas nas mesmas
+    // posições e nascem sobrepostas — corrigindo só depois de rolar.
+    getItemKey: (index) => displayedActions[index]?.id ?? String(index),
     overscan: 12,
     // offsetHeight (e não getBoundingClientRect) porque o Card usa `zoom`: o
     // getBoundingClientRect retornaria a altura já escalada pelo zoom, enquanto

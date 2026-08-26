@@ -75,12 +75,18 @@ Regras de uso:
    inclusive as ocultas.
 5. **R5 — Navegação em dois níveis, preservada.** Dimensão de análise
    (`Geral`/`Emendas`, na trilha lateral, `page.tsx:110-113`) × Visualização
-   (`Visão geral`/`Órgão`/`Ações`/`Tabela`/`Folha de pagamento`, no footer,
-   `page.tsx:115-121`). Selecionar uma dimensão força `setContentView('overview')`
-   (`page.tsx:789-792`). Nova visualização = novo item em `CONTENT_VIEWS`, com
-   entrada no footer, no comportamento de setas e na lógica de
-   anterior/próxima; nova dimensão = novo item em `VIEWS`, com grade própria nas
-   abas `overview` e `table`.
+   (`Ações`/`Gráficos`/`Órgão`/`Tabela`/`Folha de pagamento`, no footer;
+   `Ações` é a primeira e a principal — estado inicial da página — e a aba
+   `overview` de gráficos foi renomeada para `Gráficos`, `page.tsx:115-121`).
+   Selecionar uma dimensão **navega para lugar nenhum** — só troca o recorte,
+   que se aplica às abas `Ações`, `overview` (Gráficos) e `table`, **e à tela
+   como um todo**: com `Emendas parlamentares` ativa, os KPIs globais, a
+   contagem do heading, o botão Exportar (`dimensionActions`) e o painel de
+   Ações refletem apenas as ações de emenda; o título ganha o sufixo
+   "— Emendas parlamentares". Nova visualização =
+   novo item em `CONTENT_VIEWS`, com entrada no footer, no comportamento de
+   setas e na lógica de anterior/próxima; nova dimensão = novo item em `VIEWS`,
+   com grade própria nas abas `overview` e `table`.
 6. **R6 — Shell de zoom e rolagem interna.** A raiz é
    `orcamento-page-root h-svh w-full overflow-hidden`; dentro dela, o shell
    `orcamento-zoom-shell` aplica `width: 100/0.95%`, `height: 100/0.95%`,
@@ -158,7 +164,7 @@ orcamento-page-root (h-svh w-full overflow-hidden)
   exercício **limpa órgão, unidade, fonte, função, subfunção e busca**, porque a
   estrutura do QDD difere entre anos. Não usa `useHoverPill`: a seção 4.4 vale
   para abas/pílulas, não para `Select`.
-- três botões à direita, todos `variant="secondary"` com a receita visual
+- quatro botões à direita, todos `variant="secondary"` com a receita visual
   `rounded-sm border-black/50 bg-white text-foreground shadow-none
   hover:bg-stone-100`:
   - **Orçamentos Temáticos** → `router.push('/seplan')` (`hidden lg:inline-flex`);
@@ -198,7 +204,9 @@ quatro zonas:
    - **Limpar filtros**: `variant="outline" size="sm"`, `disabled={!hasFilters}`.
 4. **Dimensão de análise** (`page.tsx:772-795`): rótulo de seção
    `text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground`
-   (vira `xl:sr-only` quando colapsada) + `ExecutionViewNavigation`.
+   (vira `xl:sr-only` quando colapsada) + `ExecutionViewNavigation`. Presente em
+   **todas** as visões não-executivas, inclusive `Ações` (o painel de ações
+   responde à dimensão: `Emendas parlamentares` mostra só as ações de emenda).
 
 `ExecutionViewNavigation` (`page.tsx:123-204`): lista com `role="tablist"`,
 itens `role="tab"` com `aria-selected`, `data-execution-view` e
@@ -215,7 +223,29 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
   `PanelLeftOpenIcon`, `hidden xl:inline-flex`), `h1` "Monitoramento da execução
   orçamentária" (`font-heading text-xl font-bold tracking-tight`) e contagem
   `{N} ação(ões)` à direita com `border-l border-black/40 pl-3` (ou "Carregando
-  dados do QDD vigente…" enquanto `isLoading`).
+  dados do QDD vigente…" enquanto `isLoading`). Na extremidade direita da linha
+  (`ml-auto`), botão **Exportar** (`variant="outline" size="sm"`, receita
+  `border-black/50 bg-white shadow-none hover:bg-stone-100`, igual ao botão
+  Exportar dos orçamentos temáticos): `Popover` com `Select` de formato
+  (Excel/CSV/JSON) + botão "Exportar recorte filtrado". No Excel, a saída é uma
+  **sheet única estruturada por órgão**: cabeçalho geral e, na sequência, uma
+  linha de seção mesclada por órgão (`{código} — {nome} (N ação(ões))`, ordem de
+  código) com as ações dele abaixo; valores monetários e percentual saem como
+  números formatados (`#,##0.00` / `0.0`) e colunas têm largura própria.
+  Obs.: a edição community do SheetJS não aplica fonte/fundo — a hierarquia
+  visual vem da estrutura de seções mescladas.
+  Exporta **client-side** sobre o recorte da dimensão ativa (`dimensionActions`:
+  `filteredActions` em Geral; só as ações de emenda em Emendas parlamentares —
+  seção 5.3), logo o arquivo
+  carrega exatamente o recorte dos filtros da trilha e **nunca contém dado da
+  folha de pagamento** (que não faz parte de `filteredActions`); nome de arquivo
+  `execucao-orcamentaria-{ano}-{data}.{ext}` com o exercício carregado
+  (`loadedYear ?? year`). Import dinâmico de `src/lib/execution-export.ts` (mesmo
+  padrão do export do painel de ações — o `xlsx` não entra no bundle principal).
+  Sem recorte, o botão do popover desabilita e um `toast.error` concreto
+  explica; sucesso/erro também por `toast`. Nenhuma rota nova: é leitura do
+  estado já em memória. Some junto com o heading nas visões executivas
+  (`isExecutiveView`).
 - **KPIs globais** (`page.tsx:828-848`): `<dl>` com `grid-cols-2 lg:grid-cols-3
   2xl:grid-cols-6` (6 células: Dotação inicial, Dotação atualizada, Empenhado,
   Liquidado, Pago, Execução). Células com `border-b border-r border-black/20`,
@@ -226,7 +256,7 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
 - **Tabs de visualização**: `Tabs` com `role="group"` e `aria-label` que explica a
   navegação por setas (`page.tsx:853-859`). Conteúdo por aba:
 
-  - `overview`: `Tabs` interno pela dimensão; `geral` renderiza a grade
+  - `overview` (aba `Gráficos`): `Tabs` interno pela dimensão; `geral` renderiza a grade
     `gridClass` (`grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2
     xl:grid-cols-3 xl:grid-rows-2`) com **6 cards de tipos mistos** (seção 7.7):
     `CycleStackedBarChart` (elemento, fonte), `CycleLineChart` (grupo),
@@ -420,6 +450,8 @@ Todos os `useMemo` da página e o que os invalida:
 | `personnelScope` | `actions`, `fiscalActions`, `selectedOrganization`, `unitFilter` | ações locais vs. folha centralizada (3 casos, abaixo) |
 | `elementRows`…`sourceRows` | `filteredActions` | agregações da dimensão `geral` |
 | `amendments` + 6 agregações | `filteredActions` | recortes da dimensão `emendas` |
+| `dimensionActions` | `view`, `amendments`, `filteredActions` | recorte dominante da tela: alimenta KPIs, contagem do heading, Exportar e painel de Ações |
+| `dimensionTotals` | `view`, `amendments`, `totals` | KPIs globais (emendas quando a dimensão é `emendas`) |
 | `hasFilters` | 6 filtros | habilita "Limpar filtros" |
 | `contentViewPill` | `contentView` | hook de pílula do footer (não é memo) |
 | `rate` | `totals` | % de execução dos KPIs |
@@ -1102,6 +1134,7 @@ atualizar este documento.
 | `src/lib/fontes-recursos.ts` | catálogo de fontes + derivação de grupo 2/3 |
 | `src/lib/functional-classification.ts` | emenda, filtros funcionais |
 | `src/lib/expense-breakdown.ts` | limpeza de descrição, linhas por conta+fonte |
+| `src/lib/execution-export.ts` | exportação XLSX/CSV/JSON do recorte filtrado (client-side) |
 | `src/lib/organization-acronym.ts` | siglas |
 | `src/components/domain/execution-breakdown-panel.tsx` | `ExecutionChartCard`, `ExecutionTablePanel` |
 | `src/components/domain/fiscal-secretariat-view.tsx` | visão por órgão |
