@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
   const rows = await prisma.actionValidation.findMany({
     where: {
       ...scope,
-      ...(currentYear == null ? {} : { action: { year: currentYear } }),
+      action: {
+        presentInCurrentQdd: true,
+        ...(currentYear == null ? {} : { year: currentYear }),
+      },
       status: { in: targetStatuses as any },
     },
     include: { assignment: true },

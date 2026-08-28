@@ -9,6 +9,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ impo
   if (user.role !== 'SEPLAN_ADMIN') return forbidden();
 
   const { importId } = await params;
-  const rows = await prisma.budgetAction.findMany({ where: { importId }, include: { expenseLines: true } });
+  const rows = await prisma.budgetAction.findMany({
+    where: { importId, presentInCurrentQdd: true },
+    include: { expenseLines: true },
+  });
   return ok(rows.map(mapAction));
 }

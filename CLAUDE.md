@@ -32,9 +32,9 @@ workspaces (`apps/web`), deploy na Vercel.
 
 ## Múltiplos exercícios financeiros
 
-- A invariante é **um QDD `VIGENTE` por ano**, não um global. `getVigenteImportId(year)`
-  é a única porta de entrada; sem `year`, resolve o **exercício corrente**
-  (`max(year)` entre os vigentes).
+- A invariante é **uma única `BudgetImport` por ano**, garantida por índice único.
+  `getVigenteImportId(year)` continua sendo a porta de entrada compatível; sem `year`,
+  resolve o exercício corrente.
 - Todo caminho de leitura precisa do recorte por exercício. Os pontos que já
   causaram mistura silenciosa estão comentados no código —
   em especial `ensureMissingAssignmentValidations` (`store.ts`), que **fabrica
@@ -64,5 +64,6 @@ workspaces (`apps/web`), deploy na Vercel.
 - "Marcações"/curadoria = tabela `ThematicAssignment` (tema OCAD/OSG/CLIMATICO + eixo +
   classificação + ponderador por ação). A chave que liga marcações entre versões de QDD é
   `actionLogicalKey` em `apps/web/src/lib/qdd-parser.ts`.
-- Reimportar QDD religa marcações via `remapAssignments`/`reattachOrphanAssignmentsToVigente`
-  em `apps/web/src/lib/store.ts` (usa `updateMany`, não deleta).
+- Reimportar QDD atualiza a mesma base e conserva o ID das ações equivalentes pela chave
+  lógica. Ações marcadas ausentes ficam com `presentInCurrentQdd=false`; consultas e
+  escritas normais devem sempre excluir essas ações, que só aparecem no painel da SEPLAN.

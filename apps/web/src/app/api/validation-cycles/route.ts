@@ -15,7 +15,12 @@ export async function GET(req: NextRequest) {
   const rows = await prisma.validationCycle.findMany({
     where: exercise.year == null ? {} : { year: exercise.year },
     orderBy: { openedAt: 'desc' },
-    include: { validations: { select: { status: true } } },
+    include: {
+      validations: {
+        where: { action: { presentInCurrentQdd: true } },
+        select: { status: true },
+      },
+    },
   });
   return ok(rows.map((row) => {
     const countByStatus = new Map<string, number>();

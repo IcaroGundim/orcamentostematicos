@@ -65,10 +65,7 @@ export async function GET(req: NextRequest) {
   const vigenteImport =
     selectedYear == null
       ? null
-      : await prisma.budgetImport.findFirst({
-          where: { status: 'VIGENTE', year: selectedYear },
-          orderBy: { importedAt: 'desc' },
-        });
+      : await prisma.budgetImport.findUnique({ where: { year: selectedYear } });
 
   return ok({
     themes: ['OCAD', 'OSG', 'CLIMATICO'],

@@ -134,9 +134,11 @@ import {
 import type {
   BudgetAction,
   BudgetImport,
+  BudgetImportRevision,
   ExecutionStructure,
   GovernmentStructure,
   Metadata,
+  InactiveBudgetAction,
   QddPeriodType,
   StructureDiff,
   Summary,
@@ -173,9 +175,14 @@ type ImportPreview = {
   sampleActions: BudgetAction[];
 };
 
-type ReattachResult = {
-  reattachedAssignments: number;
-  unmatchedAssignments?: Array<{
+type ImportConfirmationResult = {
+  createdActions: number;
+  updatedActions: number;
+  inactivatedActions: number;
+  reactivatedActions: number;
+  deletedActions: number;
+  preservedAssignments: number;
+  inactiveActions: Array<{
     organizationCode: string; organizationName: string;
     unitCode: string; unitName: string; projectActivity: string; application: string;
   }>;
@@ -183,7 +190,6 @@ type ReattachResult = {
 
 type DeleteImportResult = {
   deleted: BudgetImport;
-  reattachedAssignments: number;
 };
 
 /**
@@ -411,6 +417,8 @@ function SeplanPageContent() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importComparisonOnly, setImportComparisonOnly] = useState(false);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
+  const [importRevisions, setImportRevisions] = useState<BudgetImportRevision[]>([]);
+  const [inactiveActions, setInactiveActions] = useState<InactiveBudgetAction[]>([]);
   const [executionStructure, setExecutionStructure] = useState<ExecutionStructure>({ organizations: [] });
   const [governmentStructure, setGovernmentStructure] = useState<GovernmentStructure>({ organizations: [] });
   const [structureDiff, setStructureDiff] = useState<StructureDiff | null>(null);
@@ -422,7 +430,6 @@ function SeplanPageContent() {
   const [isTriggeringSicaf, setIsTriggeringSicaf] = useState(false);
   const [isConfirmingImport, setIsConfirmingImport] = useState(false);
   const [deletingImportId, setDeletingImportId] = useState('');
-  const [isReattaching, setIsReattaching] = useState(false);
   const [isRemovingAssignment, setIsRemovingAssignment] = useState(false);
   const [removePopoverOpen, setRemovePopoverOpen] = useState(false);
   const [assignmentIdsPendingRemoval, setAssignmentIdsPendingRemoval] = useState<string[]>([]);
@@ -565,14 +572,26 @@ function SeplanPageContent() {
   async function load() {
     // `requestedYear` (e não `year`) para não recarregar quando o metadata chega.
     const q = exerciseQuery(requestedYear);
-    const [meta, summaryData, actionData, validationData, importsData, executionData, govStructure] =
+    const [
+      meta,
+      summaryData,
+      actionData,
+      validationData,
+      importsData,
+      revisionsData,
+      inactiveData,
+      executionData,
+      govStructure,
+    ] =
       await Promise.all([
         api<Metadata>(`/metadata${q}`),
         api<Summary>(`/reports/summary${q}`),
         api<BudgetAction[]>(`/budget-actions${q}`),
         api<ValidationItem[]>(`/validations/my${q}`),
-        // O histórico de importações é deliberadamente de TODOS os exercícios.
+        // Uma base por exercício; a auditoria detalhada vem das revisões leves.
         api<BudgetImport[]>('/imports/qdd'),
+        api<BudgetImportRevision[]>(`/imports/qdd/revisions${q}`).catch(() => []),
+        api<InactiveBudgetAction[]>(`/imports/qdd/inactive${q}`).catch(() => []),
         api<ExecutionStructure>(`/execution/structure${q}`).catch(() => ({ organizations: [] })),
         api<GovernmentStructure>(`/government-structure${q}`).catch(() => ({ organizations: [] })),
       ]);
@@ -581,6 +600,8 @@ function SeplanPageContent() {
     setActions(actionData);
     setValidations(validationData);
     setImportHistory(importsData);
+    setImportRevisions(revisionsData);
+    setInactiveActions(inactiveData);
     setExecutionStructure(executionData);
     setGovernmentStructure(govStructure);
     const firstAction = actionData[0]?.id ?? '';
@@ -682,7 +703,7 @@ function SeplanPageContent() {
     if (!preview || isConfirmingImport) return;
     setIsConfirmingImport(true);
     try {
-      const result = await api<ReattachResult>('/imports/qdd/confirm', {
+      const result = await api<ImportConfirmationResult>('/imports/qdd/confirm', {
         method: 'POST',
         body: JSON.stringify({ previewId: preview.previewId, comparisonOnly: importComparisonOnly }),
       });
@@ -692,10 +713,12 @@ function SeplanPageContent() {
       void loadSicafPending(); // a prévia do SICAF é consumida no confirm; ressincroniza o aviso
       toast.success(
         importComparisonOnly
-          ? 'QDD importado como exercício apenas comparativo.'
-          : 'QDD importado e registrado como vigente.',
+          ? 'Base comparativa do exercício atualizada.'
+          : result.updatedActions > 0
+            ? 'Base do exercício atualizada.'
+            : 'QDD importado como base do exercício.',
       );
-      reportReattach(result);
+      reportReplacement(result);
       await load();
       await loadStructureDiff('vigente');
     } catch (err) {
@@ -708,63 +731,46 @@ function SeplanPageContent() {
     }
   }
 
-  function reportReattach(result: ReattachResult) {
-    if (result.reattachedAssignments > 0) {
-      toast.success(`${result.reattachedAssignments} classificaç${result.reattachedAssignments === 1 ? 'ão religada' : 'ões religadas'} ao QDD vigente.`);
-    }
-    const unmatched = result.unmatchedAssignments ?? [];
-    if (unmatched.length > 0) {
+  function reportReplacement(result: ImportConfirmationResult) {
+    toast.success(
+      `${result.updatedActions} atualizada${result.updatedActions === 1 ? '' : 's'} · ` +
+      `${result.createdActions} nova${result.createdActions === 1 ? '' : 's'} · ` +
+      `${result.deletedActions} removida${result.deletedActions === 1 ? '' : 's'}.`,
+      {
+        description: `${result.preservedAssignments} classificação(ões) preservada(s).`,
+      },
+    );
+    if (result.inactivatedActions > 0) {
       toast.warning(
-        `${unmatched.length} classificaç${unmatched.length === 1 ? 'ão não pôde' : 'ões não puderam'} ser religada${unmatched.length === 1 ? '' : 's'} (ação ausente no QDD novo).`,
+        `${result.inactivatedActions} ação(ões) marcada(s) não aparece(m) no novo QDD e foi(ram) preservada(s) como inativa(s).`,
         {
-          description: unmatched
+          description: result.inactiveActions
             .slice(0, 8)
             .map((a) => `${a.organizationCode}/${a.unitCode} · ${a.projectActivity}`)
-            .join('\n') + (unmatched.length > 8 ? `\n… e mais ${unmatched.length - 8}.` : ''),
+            .join('\n') + (result.inactiveActions.length > 8 ? `\n… e mais ${result.inactiveActions.length - 8}.` : ''),
           duration: 12000,
         },
       );
     }
-  }
-
-  async function reattachAssignments() {
-    if (isReattaching) return;
-    setIsReattaching(true);
-    try {
-      const result = await api<ReattachResult>(
-        `/imports/qdd/reattach?year=${loadedYear ?? metadata?.currentYear ?? ''}`,
-        { method: 'POST' },
+    if (result.reactivatedActions > 0) {
+      toast.success(
+        `${result.reactivatedActions} ação(ões) reapareceu(ram) no QDD e foi(ram) reativada(s).`,
       );
-      if (result.reattachedAssignments === 0 && (result.unmatchedAssignments ?? []).length === 0) {
-        toast.success('Nenhuma classificação órfã encontrada — tudo já está vinculado ao QDD vigente.');
-      } else {
-        reportReattach(result);
-      }
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao recuperar as classificações.');
-    } finally {
-      setIsReattaching(false);
     }
   }
 
   async function deleteImport(importRecord: BudgetImport) {
     if (deletingImportId) return;
     const confirmed = window.confirm(
-      `Excluir a importação ${formatPeriod(importRecord.referenceMonth, importRecord.year, importRecord.periodType)}?\n\n` +
-      'As marcações e validações serão migradas para a ação equivalente em outro QDD. ' +
-      'Se alguma não tiver correspondente, a exclusão será cancelada para não perder dados.',
+      `Excluir toda a base do exercício ${importRecord.year}?\n\n` +
+      'A exclusão só será permitida se o exercício não possuir classificações nem validações.',
     );
     if (!confirmed) return;
 
     setDeletingImportId(importRecord.id);
     try {
       const result = await api<DeleteImportResult>(`/imports/qdd/${importRecord.id}`, { method: 'DELETE' });
-      toast.success(
-        result.reattachedAssignments > 0
-          ? `Importação excluída e ${result.reattachedAssignments} classificaç${result.reattachedAssignments === 1 ? 'ão preservada' : 'ões preservadas'}.`
-          : 'Importação excluída.',
-      );
+      toast.success(`Base do exercício ${result.deleted.year} excluída.`);
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao excluir a importação.');
@@ -2048,7 +2054,7 @@ function SeplanPageContent() {
                                 </div>
                               </div>
                               <div>
-                                <dt className="text-xs text-muted-foreground">Registrado em</dt>
+                                <dt className="text-xs text-muted-foreground">Atualizado em</dt>
                                 <dd>{new Date(vigenteImport.importedAt).toLocaleString('pt-BR')}</dd>
                               </div>
                             </dl>
@@ -2069,22 +2075,11 @@ function SeplanPageContent() {
                   </div>
 
                   <Card>
-                    <CardHeader className="flex flex-row items-start justify-between gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <CardTitle>Histórico de importações</CardTitle>
-                        <CardDescription>{importHistory.length} QDD{importHistory.length !== 1 ? 's' : ''} registrado{importHistory.length !== 1 ? 's' : ''}.</CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="shrink-0"
-                        disabled={isReattaching}
-                        title="Religa classificações órfãs de QDDs anteriores às ações do QDD vigente"
-                        onClick={() => void reattachAssignments()}
-                      >
-                        {isReattaching ? <RefreshCwIcon data-icon="inline-start" className="animate-spin" /> : <RefreshCwIcon data-icon="inline-start" />}
-                        {isReattaching ? 'Recuperando...' : 'Recuperar marcações'}
-                      </Button>
+                    <CardHeader>
+                      <CardTitle>Bases por exercício</CardTitle>
+                      <CardDescription>
+                        {importHistory.length} exercício{importHistory.length !== 1 ? 's' : ''} com base única de QDD.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       {importHistory.length === 0 ? (
@@ -2099,10 +2094,7 @@ function SeplanPageContent() {
                             <div key={imp.id} className="flex items-start justify-between gap-3 rounded-lg border p-3">
                               <div className="flex min-w-0 flex-col gap-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant={imp.status === 'VIGENTE' ? 'default' : 'secondary'} className="shrink-0">
-                                    {imp.status === 'VIGENTE' ? 'Vigente' : 'Histórico'}
-                                  </Badge>
-                                  {/* O exercício vem junto do selo porque há um vigente por ano. */}
+                                  <Badge className="shrink-0">Base única</Badge>
                                   <Badge variant="outline" className="shrink-0 tabular-nums">
                                     Exercício {imp.year}
                                   </Badge>
@@ -2119,8 +2111,8 @@ function SeplanPageContent() {
                                 size="icon"
                                 className="size-8 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 disabled={deletingImportId === imp.id}
-                                title="Excluir importação"
-                                aria-label="Excluir importação"
+                                title="Excluir base do exercício"
+                                aria-label="Excluir base do exercício"
                                 onClick={() => void deleteImport(imp)}
                               >
                                 {deletingImportId === imp.id ? (
@@ -2135,6 +2127,101 @@ function SeplanPageContent() {
                       )}
                     </CardContent>
                   </Card>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Atualizações da base</CardTitle>
+                        <CardDescription>
+                          Histórico leve do exercício selecionado, sem cópias das ações e linhas antigas.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {importRevisions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Nenhuma atualização registrada.</p>
+                        ) : (
+                          <ScrollArea className="max-h-80">
+                            <div className="flex flex-col gap-2 pr-3">
+                              {importRevisions.map((revision) => (
+                                <div key={revision.id} className="rounded-lg border p-3 text-sm">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge variant="outline">
+                                      {revision.source === 'SICAF'
+                                        ? 'SICAF'
+                                        : revision.source === 'MIGRATED'
+                                          ? 'Migrada'
+                                          : 'Manual'}
+                                    </Badge>
+                                    <span className="font-medium">
+                                      {formatPeriod(revision.referenceMonth, revision.year, revision.periodType)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(revision.createdAt).toLocaleString('pt-BR')}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 truncate text-xs text-muted-foreground" title={revision.filename}>
+                                    {revision.filename}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {revision.actionCount.toLocaleString('pt-BR')} ações ·{' '}
+                                    {revision.rowCount.toLocaleString('pt-BR')} linhas
+                                    {revision.updatedByName ? ` · ${revision.updatedByName}` : ''}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Ações ausentes no QDD atual</CardTitle>
+                        <CardDescription>
+                          Curadoria e entregas preservadas, fora dos totais e das telas operacionais.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {inactiveActions.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Nenhuma ação marcada está ausente da base atual.
+                          </p>
+                        ) : (
+                          <ScrollArea className="max-h-96">
+                            <div className="flex flex-col gap-2 pr-3">
+                              {inactiveActions.map((action) => {
+                                const deliveryCount = action.validations.reduce(
+                                  (total, validation) => total + validation.deliveries.length,
+                                  0,
+                                );
+                                return (
+                                  <div key={action.id} className="rounded-lg border border-amber-300 bg-amber-50/40 p-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline">Inativa</Badge>
+                                      <span className="font-medium tabular-nums">
+                                        {action.organizationCode}/{action.unitCode} · {action.projectActivity}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 text-sm">{action.application}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Ausente desde {new Date(action.inactiveAt).toLocaleDateString('pt-BR')} ·{' '}
+                                      {action.validations.length} validação(ões) · {deliveryCount} entrega(s)
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {action.assignments.map((assignment) => (
+                                        <ThemeBadge key={assignment.id} theme={assignment.theme} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </ScrollArea>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="executors">

@@ -14,9 +14,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const existing = await prisma.actionValidation.findUnique({
     where: { id },
-    include: { assignment: true },
+    include: {
+      assignment: true,
+      action: { select: { presentInCurrentQdd: true } },
+    },
   });
   if (!existing) return notFound('Validação não encontrada.');
+  if (!existing.action.presentInCurrentQdd) return notFound('Validação ativa não encontrada.');
 
   const deliveries = body.deliveries !== undefined ? body.deliveries : existing.deliveries;
   const classification = existing.assignment?.classification ?? '';

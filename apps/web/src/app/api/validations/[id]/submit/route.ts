@@ -12,9 +12,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const existing = await prisma.actionValidation.findUnique({
     where: { id },
-    select: { organizationCode: true, unitCode: true, action: { select: { year: true } } },
+    select: {
+      organizationCode: true,
+      unitCode: true,
+      action: { select: { year: true, presentInCurrentQdd: true } },
+    },
   });
   if (!existing) return notFound('Validação não encontrada.');
+  if (!existing.action.presentInCurrentQdd) return notFound('Validação ativa não encontrada.');
   if (existing.action.year !== (await getCurrentYear())) return forbidden();
   if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year))) {
     return forbidden();

@@ -5,9 +5,9 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { listGovernmentStructure } from './government-structure';
-import { actionLogicalKey } from './qdd-parser';
 import { prisma } from './prisma';
 import { buildVerifiedDeliveryExecutedMap, thematicBudgetContribution } from './classification-rules';
+import { planQddReplacement } from './qdd-replacement';
 
 export function createId(prefix: string) {
   return `${prefix}-${randomUUID()}`;
@@ -43,7 +43,6 @@ export async function getCurrentYear(): Promise<number | null> {
   if (flagged[0]) return flagged[0].year;
 
   const row = await prisma.budgetImport.findFirst({
-    where: { status: 'VIGENTE' },
     orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
     select: { year: true },
   });
@@ -67,28 +66,16 @@ export async function setCurrentYear(year: number): Promise<void> {
 }
 
 /**
- * Import vigente de um exercício; sem `year`, o do exercício corrente.
- *
- * A invariante é **um VIGENTE por ano** (antes era um único global). O `orderBy`
- * mantém a escolha determinística: sem ele, o `findFirst` poderia devolver imports
- * diferentes entre chamadas caso a invariante seja violada — o que faria uma
- * leitura eventual voltar ações/marcações vazias e "apagar" a tela até um F5.
+ * Importação única de um exercício; sem `year`, a do exercício corrente.
  */
 export async function getVigenteImportId(year?: number | null): Promise<string | null> {
   const targetYear = year ?? (await getCurrentYear());
   if (targetYear == null) return null;
-  const rows = await prisma.budgetImport.findMany({
-    where: { status: 'VIGENTE', year: targetYear },
-    orderBy: { importedAt: 'desc' },
+  const row = await prisma.budgetImport.findUnique({
+    where: { year: targetYear },
     select: { id: true },
   });
-  if (rows.length > 1) {
-    console.warn(
-      `[getVigenteImportId] Invariante violada: ${rows.length} imports VIGENTE simultâneos ` +
-        `no exercício ${targetYear} (${rows.map((r) => r.id).join(', ')}). Usando o mais recente.`,
-    );
-  }
-  return rows[0]?.id ?? null;
+  return row?.id ?? null;
 }
 
 export type ExerciseInfo = {
@@ -99,11 +86,10 @@ export type ExerciseInfo = {
   vigenteImportId: string;
 };
 
-/** Exercícios disponíveis: todo ano com QDD VIGENTE, do mais recente ao mais antigo. */
+/** Exercícios disponíveis: todo ano com uma base QDD, do mais recente ao mais antigo. */
 export async function listExercises(): Promise<ExerciseInfo[]> {
   const [imports, policies, currentYear] = await Promise.all([
     prisma.budgetImport.findMany({
-      where: { status: 'VIGENTE' },
       orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
       select: { id: true, year: true },
     }),
@@ -275,7 +261,11 @@ export async function listActions(user: ScopedUser, filters: {
   if (!vigenteId) return [];
 
   const scope = await scopeWhere(user, filters.year);
-  const where: Record<string, unknown> = { importId: vigenteId, ...scope };
+  const where: Record<string, unknown> = {
+    importId: vigenteId,
+    presentInCurrentQdd: true,
+    ...scope,
+  };
 
   if (user.role === 'SEPLAN_ADMIN') {
     if (filters.organizationCode) where['organizationCode'] = filters.organizationCode;
@@ -322,12 +312,17 @@ export async function getSummary(user: ScopedUser, year?: number | null) {
   const scope = scopeWhereFromAllowed(allowed);
   // Ciclos e validações também são por exercício: sem este recorte, o resumo de um
   // ano exibiria as contagens somadas de todos eles.
-  const yearScope = targetYear == null ? {} : { action: { year: targetYear } };
+  const yearScope = {
+    action: {
+      presentInCurrentQdd: true,
+      ...(targetYear == null ? {} : { year: targetYear }),
+    },
+  };
 
   const [actions, assignments, cycleCount, validations] = await Promise.all([
     vigenteId
       ? prisma.budgetAction.findMany({
-          where: { importId: vigenteId, ...scope },
+          where: { importId: vigenteId, presentInCurrentQdd: true, ...scope },
           select: { id: true, liquidated: true },
         })
       : Promise.resolve([] as Array<{ id: string; liquidated: number }>),
@@ -441,7 +436,10 @@ async function ensureMissingAssignmentValidations(year: number | null) {
   if (await isComparisonOnlyYear(year)) return;
 
   const missingAssignments = await prisma.thematicAssignment.findMany({
-    where: { validations: { none: {} }, action: { year } },
+    where: {
+      validations: { none: {} },
+      action: { year, presentInCurrentQdd: true },
+    },
     select: {
       id: true,
       actionId: true,
@@ -493,7 +491,10 @@ export async function listValidations(user: ScopedUser, year?: number | null) {
   const scope = await scopeWhere(user, targetYear);
   const where: Record<string, unknown> = {
     ...scope,
-    ...(targetYear == null ? {} : { action: { year: targetYear } }),
+    action: {
+      presentInCurrentQdd: true,
+      ...(targetYear == null ? {} : { year: targetYear }),
+    },
   };
   const rows = await prisma.actionValidation.findMany({
     where,
@@ -572,6 +573,8 @@ export function mapAction(row: any) {
     application: row.application,
     functionalProgram: row.functionalProgram,
     projectActivity: row.projectActivity,
+    presentInCurrentQdd: row.presentInCurrentQdd ?? true,
+    inactiveAt: row.inactiveAt instanceof Date ? row.inactiveAt.toISOString() : (row.inactiveAt ?? null),
     totals: {
       initialBudget: row.initialBudget,
       supplemented: row.supplemented,
@@ -698,7 +701,7 @@ export async function reconcileExecutorsForImport(
   });
 }
 
-// ── addImportedBudget ────────────────────────────────────────────────────────
+// ── QDD único por exercício ─────────────────────────────────────────────────
 
 /** Forma serializável de uma ação cuja marcação não pôde ser religada. */
 export type OrphanAction = {
@@ -706,263 +709,318 @@ export type OrphanAction = {
   unitCode: string; unitName: string; projectActivity: string; application: string;
 };
 
-/** Campos mínimos de uma ação para calcular a chave lógica e religar marcações. */
-type ActionKeyInfo = OrphanAction & { id: string; year: number };
+export type BudgetReplacementResult = {
+  importId: string;
+  createdActions: number;
+  updatedActions: number;
+  inactivatedActions: number;
+  reactivatedActions: number;
+  deletedActions: number;
+  preservedAssignments: number;
+  inactiveActions: OrphanAction[];
+};
 
-/**
- * Re-aponta `ThematicAssignment` (e o `ActionValidation` correspondente) das
- * `oldActions` para a ação equivalente do import vigente, casando pela chave
- * lógica. Retorna quantas marcações foram religadas e quais ações antigas não
- * encontraram correspondente (marcação preservada, mas órfã).
- */
-async function remapAssignments(
-  tx: any,
-  oldActions: ActionKeyInfo[],
-  newIdByKey: Map<string, string>,
-): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
-  let reattached = 0;
-  const unmatched: OrphanAction[] = [];
-  for (const old of oldActions) {
-    const newId = newIdByKey.get(actionLogicalKey(old));
-    if (!newId) {
-      const { id: _id, year: _year, ...rest } = old;
-      unmatched.push(rest);
-      continue;
-    }
-    if (newId === old.id) continue;
-    const res = await tx.thematicAssignment.updateMany({ where: { actionId: old.id }, data: { actionId: newId } });
-    await tx.actionValidation.updateMany({ where: { actionId: old.id }, data: { actionId: newId } });
-    reattached += res.count;
-  }
-  return { reattached, unmatched };
-}
+export class FiscalYearPolicyConflictError extends Error {}
 
-function findUnmatchedActions(
-  oldActions: ActionKeyInfo[],
-  newIdByKey: Map<string, string>,
-): OrphanAction[] {
-  return oldActions.flatMap((old) => {
-    if (newIdByKey.has(actionLogicalKey(old))) return [];
-    const { id: _id, year: _year, ...rest } = old;
-    return [rest];
+export async function deleteBudgetImportIfUncurated(importId: string) {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.budgetImport.findUnique({ where: { id: importId } });
+    if (!target) return { target: null, assignments: 0, validations: 0 };
+
+    const [assignments, validations] = await Promise.all([
+      tx.thematicAssignment.count({ where: { action: { importId } } }),
+      tx.actionValidation.count({ where: { action: { importId } } }),
+    ]);
+    if (assignments > 0 || validations > 0) return { target, assignments, validations };
+
+    await tx.validationCycle.deleteMany({ where: { year: target.year } });
+    await tx.exerciseUnitExecutor.deleteMany({ where: { year: target.year } });
+    await tx.exerciseOrganization.deleteMany({ where: { year: target.year } });
+    await tx.fiscalYear.deleteMany({ where: { year: target.year } });
+    await tx.budgetImport.delete({ where: { id: importId } });
+    return { target, assignments: 0, validations: 0 };
+  }, {
+    maxWait: 10000,
+    timeout: 60000,
   });
 }
 
-/**
- * Deletes a QDD while preserving its thematic assignments. Markers are moved to
- * the equivalent action in another QDD before deletion. If even one marker has
- * no equivalent action, the transaction makes no changes and cancels deletion.
- */
-export async function deleteBudgetImportPreservingAssignments(importId: string) {
+function actionWriteData(action: any) {
+  return {
+    year: action.year,
+    organizationCode: action.organizationCode,
+    organizationName: action.organizationName,
+    unitCode: action.unitCode,
+    unitName: action.unitName,
+    application: action.application,
+    functionalProgram: action.functionalProgram,
+    projectActivity: action.projectActivity,
+    initialBudget: action.totals.initialBudget,
+    supplemented: action.totals.supplemented,
+    updatedBudget: action.totals.updatedBudget,
+    committed: action.totals.committed,
+    liquidated: action.totals.liquidated,
+    paid: action.totals.paid,
+    available: action.totals.available,
+    presentInCurrentQdd: true,
+    inactiveAt: null,
+  };
+}
+
+function expenseLineWriteData(line: any, actionId: string) {
+  return {
+    id: line.id,
+    actionId,
+    organizationCode: line.organizationCode,
+    organizationName: line.organizationName,
+    unitCode: line.unitCode,
+    unitName: line.unitName,
+    application: line.application,
+    functionalProgram: line.functionalProgram,
+    projectActivity: line.projectActivity,
+    expenseAccount: line.expenseAccount,
+    expenseDescription: line.expenseDescription,
+    reduced: line.reduced,
+    source: line.source,
+    initialBudget: line.initialBudget,
+    supplemented: line.supplemented,
+    updatedBudget: line.updatedBudget,
+    committed: line.committed,
+    liquidated: line.liquidated,
+    payableToLiquidate: line.payableToLiquidate,
+    paid: line.paid,
+    payable: line.payable,
+    available: line.available,
+  };
+}
+
+async function updateActionsInBatches(tx: any, rows: Array<{ id: string; action: any }>, batchSize = 500) {
+  const sql = `
+    UPDATE "BudgetAction" AS target
+    SET "year" = incoming."year",
+        "organizationCode" = incoming."organizationCode",
+        "organizationName" = incoming."organizationName",
+        "unitCode" = incoming."unitCode",
+        "unitName" = incoming."unitName",
+        "application" = incoming."application",
+        "functionalProgram" = incoming."functionalProgram",
+        "projectActivity" = incoming."projectActivity",
+        "initialBudget" = incoming."initialBudget",
+        "supplemented" = incoming."supplemented",
+        "updatedBudget" = incoming."updatedBudget",
+        "committed" = incoming."committed",
+        "liquidated" = incoming."liquidated",
+        "paid" = incoming."paid",
+        "available" = incoming."available",
+        "presentInCurrentQdd" = TRUE,
+        "inactiveAt" = NULL
+    FROM jsonb_to_recordset($1::jsonb) AS incoming(
+      "id" text, "year" integer, "organizationCode" text, "organizationName" text,
+      "unitCode" text, "unitName" text, "application" text,
+      "functionalProgram" text, "projectActivity" text,
+      "initialBudget" double precision, "supplemented" double precision,
+      "updatedBudget" double precision, "committed" double precision,
+      "liquidated" double precision, "paid" double precision, "available" double precision
+    )
+    WHERE target."id" = incoming."id"
+  `;
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const batch = rows.slice(index, index + batchSize).map(({ id, action }) => ({
+      id,
+      ...actionWriteData(action),
+    }));
+    if (batch.length) await tx.$executeRawUnsafe(sql, JSON.stringify(batch));
+  }
+}
+
+export async function replaceImportedBudget(
+  importRecord: any,
+  actions: any[],
+  audit: { updatedBy: string; source: 'MANUAL' | 'SICAF'; confirmationKey: string },
+  comparisonOnly: boolean,
+): Promise<BudgetReplacementResult> {
   return prisma.$transaction(async (tx) => {
-    const target = await tx.budgetImport.findUnique({ where: { id: importId } });
-    if (!target) return { target: null, reattached: 0, unmatched: [] as OrphanAction[] };
-
-    const markedActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
-      where: { importId, assignments: { some: {} } },
-      select: {
-        id: true, year: true, organizationCode: true, organizationName: true,
-        unitCode: true, unitName: true, projectActivity: true, application: true,
-      },
-    });
-
-    // For a historical import, prefer the current QDD. When the current QDD is
-    // deleted, this picks the newest historical QDD, which is promoted below.
-    const survivingActions = await tx.budgetAction.findMany({
-      where: { importId: { not: importId }, year: target.year },
-      select: {
-        id: true, year: true, organizationCode: true, unitCode: true,
-        projectActivity: true, application: true,
-        import: { select: { status: true, importedAt: true } },
-      },
-    });
-    const preferredActionByKey = new Map<string, (typeof survivingActions)[number]>();
-    for (const action of survivingActions) {
-      const key = actionLogicalKey(action);
-      const current = preferredActionByKey.get(key);
-      if (
-        !current ||
-        (action.import.status === 'VIGENTE' && current.import.status !== 'VIGENTE') ||
-        (action.import.status === current.import.status && action.import.importedAt > current.import.importedAt)
-      ) {
-        preferredActionByKey.set(key, action);
-      }
-    }
-    const replacementIdByKey = new Map(
-      [...preferredActionByKey].map(([key, action]) => [key, action.id]),
+    // Uma única confirmação por exercício pode modificar a base por vez.
+    await tx.$queryRawUnsafe(
+      'SELECT pg_advisory_xact_lock($1::integer, $2::integer)::text AS lock_result',
+      20260828,
+      Number(importRecord.year),
     );
 
-    const unmatched = findUnmatchedActions(markedActions, replacementIdByKey);
-    if (unmatched.length > 0) {
-      return { target, reattached: 0, unmatched };
+    const existingPolicy = await tx.fiscalYear.findUnique({
+      where: { year: importRecord.year },
+      select: { comparisonOnly: true },
+    });
+    if (existingPolicy && existingPolicy.comparisonOnly !== comparisonOnly) {
+      throw new FiscalYearPolicyConflictError(
+        existingPolicy.comparisonOnly
+          ? `O exercício ${importRecord.year} já está registrado como apenas comparativo.`
+          : `O exercício ${importRecord.year} já está registrado como exercício completo.`,
+      );
     }
 
-    const { reattached } = await remapAssignments(tx, markedActions, replacementIdByKey);
-
-    // Validations that follow a marker were moved by remapAssignments. Any
-    // remaining validation belongs to data that is intentionally being deleted.
-    await tx.actionValidation.deleteMany({
-      where: { action: { importId } },
+    const alreadyConfirmed = await tx.budgetImportRevision.findUnique({
+      where: { confirmationKey: audit.confirmationKey },
+      select: { importId: true },
     });
-    await tx.budgetImport.delete({ where: { id: importId } });
+    if (alreadyConfirmed) {
+      return {
+        importId: alreadyConfirmed.importId,
+        createdActions: 0,
+        updatedActions: 0,
+        inactivatedActions: 0,
+        reactivatedActions: 0,
+        deletedActions: 0,
+        preservedAssignments: 0,
+        inactiveActions: [],
+      };
+    }
 
-    // A promoção é DENTRO DO MESMO EXERCÍCIO. Sem o recorte por ano, apagar o
-    // único VIGENTE de um exercício encontraria o VIGENTE de outro ano, o ramo
-    // abaixo não rodaria e o exercício ficaria sem nenhum vigente — sumindo por
-    // inteiro da aplicação.
-    const vigente = await tx.budgetImport.findFirst({
-      where: { status: 'VIGENTE', year: target.year },
-      orderBy: { importedAt: 'desc' },
+    const currentImport = await tx.budgetImport.findUnique({
+      where: { year: importRecord.year },
+      select: { id: true },
+    });
+    const existing = currentImport
+      ? await tx.budgetAction.findMany({
+          where: { importId: currentImport.id },
+          select: {
+            id: true,
+            year: true,
+            organizationCode: true,
+            organizationName: true,
+            unitCode: true,
+            unitName: true,
+            projectActivity: true,
+            application: true,
+            presentInCurrentQdd: true,
+            _count: { select: { assignments: true, validations: true } },
+          },
+        })
+      : [];
+
+    const plan = planQddReplacement(
+      existing.map((action: any) => ({
+        ...action,
+        hasAssignments: action._count.assignments > 0,
+        hasValidations: action._count.validations > 0,
+      })),
+      actions,
+    );
+
+    const base = await tx.budgetImport.upsert({
+      where: { year: importRecord.year },
+      create: {
+        id: importRecord.id,
+        filename: importRecord.filename,
+        year: importRecord.year,
+        referenceMonth: importRecord.referenceMonth,
+        periodType: importRecord.periodType,
+        importedAt: new Date(importRecord.importedAt),
+        rowCount: importRecord.rowCount,
+        actionCount: importRecord.actionCount,
+        status: 'VIGENTE',
+      },
+      update: {
+        filename: importRecord.filename,
+        referenceMonth: importRecord.referenceMonth,
+        periodType: importRecord.periodType,
+        importedAt: new Date(importRecord.importedAt),
+        rowCount: importRecord.rowCount,
+        actionCount: importRecord.actionCount,
+        status: 'VIGENTE',
+      },
       select: { id: true },
     });
 
-    if (!vigente) {
-      const nextImport = await tx.budgetImport.findFirst({
-        where: { year: target.year },
-        orderBy: { importedAt: 'desc' },
-      });
+    await tx.fiscalYear.upsert({
+      where: { year: importRecord.year },
+      create: { year: importRecord.year, comparisonOnly },
+      update: {},
+    });
 
-      if (nextImport) {
-        await tx.budgetImport.update({
-          where: { id: nextImport.id },
-          data: { status: 'VIGENTE' },
-        });
-      }
+    const incomingIdByIndex = new Map<number, string>();
+    for (const match of plan.matches) incomingIdByIndex.set(match.incomingIndex, match.existingId);
+    for (const index of plan.createIndexes) incomingIdByIndex.set(index, actions[index].id);
+
+    const matchedRows = plan.matches.map((match) => ({
+      id: match.existingId,
+      action: actions[match.incomingIndex],
+    }));
+    await updateActionsInBatches(tx, matchedRows);
+
+    await createInBatches(tx.budgetAction, plan.createIndexes.map((index) => ({
+      id: actions[index].id,
+      importId: base.id,
+      ...actionWriteData(actions[index]),
+    })));
+
+    if (plan.matches.length) {
+      await tx.expenseLine.deleteMany({
+        where: { actionId: { in: plan.matches.map((match) => match.existingId) } },
+      });
     }
 
-    return { target, reattached, unmatched };
-  }, {
-    maxWait: 10000,
-    timeout: 60000,
-  });
-}
-
-export async function addImportedBudget(importRecord: any, actions: any[]): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
-  return prisma.$transaction(async (tx) => {
-    // Captura as ações DO MESMO EXERCÍCIO que ainda têm marcações, para religá-las
-    // às novas ações (que receberão IDs novos). As ações recém-criadas deste import
-    // ainda não têm marcações, então isso cobre tanto o vigente anterior quanto
-    // eventuais marcações já órfãs de imports históricos — tornando a preservação
-    // automática no confirm, sem ação manual.
-    //
-    // O recorte por ano é essencial: `actionLogicalKey` começa pelo exercício, então
-    // marcações de outro ano nunca casariam e seriam reportadas como órfãs, fazendo
-    // a tela de importação anunciar uma perda que não aconteceu.
-    const oldMarkedActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
-      where: { year: importRecord.year, assignments: { some: {} } },
-      select: {
-        id: true, year: true, organizationCode: true, organizationName: true,
-        unitCode: true, unitName: true, projectActivity: true, application: true,
-      },
+    const lines = actions.flatMap((action, index) => {
+      const actionId = incomingIdByIndex.get(index);
+      if (!actionId) throw new Error('Falha ao resolver a ação da linha importada.');
+      return action.expenseLines.map((line: any) => expenseLineWriteData(line, actionId));
     });
-
-    // Rebaixa apenas o vigente DO MESMO EXERCÍCIO: os demais exercícios seguem
-    // intactos, cada um com o seu próprio vigente.
-    await tx.budgetImport.updateMany({
-      where: { status: 'VIGENTE', year: importRecord.year },
-      data: { status: 'HISTORICO' },
-    });
-    await tx.budgetImport.create({
-      data: {
-        id: importRecord.id, filename: importRecord.filename, year: importRecord.year,
-        referenceMonth: importRecord.referenceMonth, periodType: importRecord.periodType,
-        importedAt: new Date(importRecord.importedAt), rowCount: importRecord.rowCount,
-        actionCount: importRecord.actionCount, status: 'VIGENTE',
-      },
-    });
-
-    await createInBatches(tx.budgetAction, actions.map((action) => ({
-      id: action.id,
-      importId: importRecord.id,
-      year: action.year,
-      organizationCode: action.organizationCode,
-      organizationName: action.organizationName,
-      unitCode: action.unitCode,
-      unitName: action.unitName,
-      application: action.application,
-      functionalProgram: action.functionalProgram,
-      projectActivity: action.projectActivity,
-      initialBudget: action.totals.initialBudget,
-      supplemented: action.totals.supplemented,
-      updatedBudget: action.totals.updatedBudget,
-      committed: action.totals.committed,
-      liquidated: action.totals.liquidated,
-      paid: action.totals.paid,
-      available: action.totals.available,
-    })));
-
-    const lines = actions.flatMap((action) => action.expenseLines.map((line: any) => ({
-      id: line.id,
-      actionId: action.id,
-      organizationCode: line.organizationCode,
-      organizationName: line.organizationName,
-      unitCode: line.unitCode,
-      unitName: line.unitName,
-      application: line.application,
-      functionalProgram: line.functionalProgram,
-      projectActivity: line.projectActivity,
-      expenseAccount: line.expenseAccount,
-      expenseDescription: line.expenseDescription,
-      reduced: line.reduced,
-      source: line.source,
-      initialBudget: line.initialBudget,
-      supplemented: line.supplemented,
-      updatedBudget: line.updatedBudget,
-      committed: line.committed,
-      liquidated: line.liquidated,
-      payableToLiquidate: line.payableToLiquidate,
-      paid: line.paid,
-      payable: line.payable,
-      available: line.available,
-    })));
-
     await createInBatches(tx.expenseLine, lines);
 
-    // Religa as marcações das ações aposentadas às novas ações equivalentes.
-    const newIdByKey = new Map<string, string>(
-      actions.map((action) => [actionLogicalKey(action), action.id] as const),
+    const inactiveAt = new Date();
+    if (plan.inactivateIds.length) {
+      await tx.budgetAction.updateMany({
+        where: { id: { in: plan.inactivateIds } },
+        data: { presentInCurrentQdd: false, inactiveAt },
+      });
+    }
+    if (plan.deleteIds.length) {
+      await tx.budgetAction.deleteMany({ where: { id: { in: plan.deleteIds } } });
+    }
+
+    await tx.budgetImportRevision.create({
+      data: {
+        importId: base.id,
+        year: importRecord.year,
+        filename: importRecord.filename,
+        referenceMonth: importRecord.referenceMonth,
+        periodType: importRecord.periodType,
+        rowCount: importRecord.rowCount,
+        actionCount: importRecord.actionCount,
+        source: audit.source,
+        updatedBy: audit.updatedBy,
+        confirmationKey: audit.confirmationKey,
+        createdAt: new Date(importRecord.importedAt),
+      },
+    });
+
+    const inactiveRows = existing.filter((action: any) => plan.inactivateIds.includes(action.id));
+    const preservedAssignments = existing.reduce(
+      (total: number, action: any) => total + action._count.assignments,
+      0,
     );
-    return remapAssignments(tx, oldMarkedActions, newIdByKey);
+
+    return {
+      importId: base.id,
+      createdActions: plan.createIndexes.length,
+      updatedActions: plan.matches.length,
+      inactivatedActions: plan.inactivateIds.length,
+      reactivatedActions: plan.matches.filter((match) => match.reactivated).length,
+      deletedActions: plan.deleteIds.length,
+      preservedAssignments,
+      inactiveActions: inactiveRows.map((action: any) => ({
+        organizationCode: action.organizationCode,
+        organizationName: action.organizationName,
+        unitCode: action.unitCode,
+        unitName: action.unitName,
+        projectActivity: action.projectActivity,
+        application: action.application,
+      })),
+    };
   }, {
     maxWait: 10000,
     timeout: 60000,
   });
-}
-
-/**
- * Religa ao QDD vigente do exercício as marcações que ficaram órfãs em importações
- * anteriores (presas a ações HISTORICO). Idempotente.
- *
- * Opera dentro de um único exercício: como `actionLogicalKey` começa pelo ano, uma
- * marcação de outro exercício jamais casaria — varrer os demais só produziria ruído.
- */
-export async function reattachOrphanAssignmentsToVigente(
-  year?: number | null,
-): Promise<{ reattached: number; unmatched: OrphanAction[] }> {
-  const targetYear = year ?? (await getCurrentYear());
-  if (targetYear == null) return { reattached: 0, unmatched: [] };
-  const vigenteId = await getVigenteImportId(targetYear);
-  if (!vigenteId) return { reattached: 0, unmatched: [] };
-
-  return prisma.$transaction(async (tx) => {
-    const vigenteActions = await tx.budgetAction.findMany({
-      where: { importId: vigenteId },
-      select: { id: true, year: true, organizationCode: true, unitCode: true, projectActivity: true, application: true },
-    });
-    const newIdByKey = new Map<string, string>(
-      vigenteActions.map((a: any) => [actionLogicalKey(a), a.id] as const),
-    );
-
-    const orphanActions: ActionKeyInfo[] = await tx.budgetAction.findMany({
-      where: { importId: { not: vigenteId }, year: targetYear, assignments: { some: {} } },
-      select: {
-        id: true, year: true, organizationCode: true, organizationName: true,
-        unitCode: true, unitName: true, projectActivity: true, application: true,
-      },
-    });
-
-    return remapAssignments(tx, orphanActions, newIdByKey);
-  }, { maxWait: 10000, timeout: 60000 });
 }
 
 async function createInBatches(model: { createMany: (args: { data: any[] }) => Promise<unknown> }, data: any[], batchSize = 2000) {

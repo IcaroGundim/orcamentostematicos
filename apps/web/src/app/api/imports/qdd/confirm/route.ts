@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, notFound, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { syncStructureFromImport } from '@/lib/government-structure';
-import { addImportedBudget, reconcileExecutorsForImport } from '@/lib/store';
+import {
+  FiscalYearPolicyConflictError,
+  reconcileExecutorsForImport,
+  replaceImportedBudget,
+} from '@/lib/store';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -24,44 +28,45 @@ export async function POST(req: NextRequest) {
 
   const comparisonOnly = Boolean(body?.comparisonOnly);
 
-  // A política é do EXERCÍCIO, não da importação: quem manda é a primeira
-  // importação do ano. Divergir aqui trocaria o regime de entregas de um exercício
-  // inteiro sem que ninguém tivesse pedido — por isso recusamos em vez de aplicar.
-  const existingPolicy = await prisma.fiscalYear.findUnique({
-    where: { year },
-    select: { comparisonOnly: true },
-  });
-  if (existingPolicy && existingPolicy.comparisonOnly !== comparisonOnly) {
-    return badRequest(
-      existingPolicy.comparisonOnly
-        ? `O exercício ${year} já está registrado como apenas comparativo. Reimporte com essa opção marcada ou altere a política do exercício.`
-        : `O exercício ${year} já está registrado como exercício completo. Reimporte sem marcar "apenas para comparação" ou altere a política do exercício.`,
+  let replacement;
+  try {
+    replacement = await replaceImportedBudget(
+      parsed.importRecord,
+      parsed.actions,
+      {
+        updatedBy: user.id,
+        source: body.previewId.startsWith('sicafpreview-') ? 'SICAF' : 'MANUAL',
+        confirmationKey: body.previewId,
+      },
+      comparisonOnly,
     );
+  } catch (error) {
+    if (error instanceof FiscalYearPolicyConflictError) {
+      return badRequest(
+        `${error.message} Ajuste a opção da importação ou altere a política do exercício.`,
+      );
+    }
+    throw error;
   }
-
-  const reattach = await addImportedBudget(parsed.importRecord, parsed.actions);
-
-  // `create`-only: a política nasce na primeira importação do exercício e não é
-  // alterada por reimportação.
-  await prisma.fiscalYear.upsert({
-    where: { year },
-    create: { year, comparisonOnly },
-    update: {},
-  });
 
   // A estrutura é sincronizada no cadastro DO EXERCÍCIO, então importar um ano
   // nunca renomeia nem reativa órgãos/unidades de outro.
   await syncStructureFromImport(parsed.actions ?? [], year);
   await reconcileExecutorsForImport(year, parsed.actions ?? []);
-  await prisma.importPreview.delete({ where: { id: body.previewId } });
+  await prisma.importPreview.deleteMany({ where: { id: body.previewId } });
 
   return ok({
-    import: parsed.importRecord,
+    import: { ...parsed.importRecord, id: replacement.importId, status: 'VIGENTE' },
     comparisonOnly,
     organizationsCount: parsed.organizationsCount,
     unitsCount: parsed.unitsCount,
     actionsCount: parsed.actions.length,
-    reattachedAssignments: reattach.reattached,
-    unmatchedAssignments: reattach.unmatched,
+    createdActions: replacement.createdActions,
+    updatedActions: replacement.updatedActions,
+    inactivatedActions: replacement.inactivatedActions,
+    reactivatedActions: replacement.reactivatedActions,
+    deletedActions: replacement.deletedActions,
+    preservedAssignments: replacement.preservedAssignments,
+    inactiveActions: replacement.inactiveActions,
   });
 }

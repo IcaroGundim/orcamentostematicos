@@ -382,7 +382,7 @@ export async function loadDiffContext(
 
   // Uma consulta só serve às duas leituras: os pares saem das mesmas ações.
   const actions = await prisma.budgetAction.findMany({
-    where: { importId: vigenteId },
+    where: { importId: vigenteId, presentInCurrentQdd: true },
     select: {
       year: true, organizationCode: true, organizationName: true,
       unitCode: true, unitName: true, projectActivity: true, application: true,

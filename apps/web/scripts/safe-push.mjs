@@ -9,6 +9,7 @@
 //
 // Uso (em apps/web):  npm run db:push
 //   flags: --yes (pula a confirmação)  --allow-destructive (permite DROP)
+//          --schema=<arquivo> (schema alternativo, usado na fase 1 de migrações)
 //
 // Por que a detecção funciona: o Prisma 7 só diffa a datasource como destino, então
 // comparamos schema -> banco. Uma operação `CREATE TABLE`/`ADD COLUMN` nesse diff
@@ -19,26 +20,37 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { config } from 'dotenv';
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+const prismaCli = require.resolve('prisma/build/index.js');
+config({ path: path.resolve(webDir, '.env.local'), quiet: true });
+config({ path: path.resolve(webDir, '.env'), quiet: true });
+
 const args = process.argv.slice(2);
 const SKIP_CONFIRM = args.includes('--yes');
 const ALLOW_DESTRUCTIVE = args.includes('--allow-destructive');
+const schemaOption = args.find((arg) => arg.startsWith('--schema='));
+const SCHEMA_PATH = schemaOption
+  ? path.resolve(webDir, schemaOption.slice('--schema='.length))
+  : path.resolve(webDir, 'prisma', 'schema.prisma');
 
 if (!process.env.DATABASE_URL) { console.error('Defina DATABASE_URL.'); process.exit(1); }
 
 const run = (cmd, cmdArgs, opts = {}) =>
-  spawnSync(cmd, cmdArgs, { cwd: webDir, encoding: 'utf8', shell: process.platform === 'win32', ...opts });
+  spawnSync(cmd, cmdArgs, { cwd: webDir, encoding: 'utf8', ...opts });
 
 // 1) Backup obrigatório.
 console.log('▶ 1/4 Backup obrigatório…');
-const bkp = run('node', ['scripts/backup.mjs'], { stdio: 'inherit' });
+const bkp = run(process.execPath, ['scripts/backup.mjs'], { stdio: 'inherit' });
 if (bkp.status !== 0) { console.error('✖ Backup falhou — push abortado.'); process.exit(1); }
 
 // 2/3) Diff schema -> banco e detecção de perda de dados.
 console.log('\n▶ 2/4 Analisando diferenças schema × banco…');
-const diff = run('npx', ['--no-install', 'prisma', 'migrate', 'diff',
-  '--from-schema', './prisma/schema.prisma', '--to-config-datasource', './prisma.config.ts', '--script']);
+const diff = run(process.execPath, [prismaCli, 'migrate', 'diff',
+  '--from-schema', SCHEMA_PATH, '--to-config-datasource', './prisma.config.ts', '--script']);
 const script = (diff.stdout || '').trim();
 
 if (diff.status !== 0) {
@@ -80,7 +92,7 @@ async function confirm() {
 if (!(await confirm())) { console.log('Cancelado.'); process.exit(0); }
 
 console.log('\n▶ 4/4 Aplicando prisma db push…');
-const pushArgs = ['--no-install', 'prisma', 'db', 'push'];
+const pushArgs = [prismaCli, 'db', 'push', '--schema', SCHEMA_PATH];
 if (ALLOW_DESTRUCTIVE) pushArgs.push('--accept-data-loss');
-const push = run('npx', pushArgs, { stdio: 'inherit' });
+const push = run(process.execPath, pushArgs, { stdio: 'inherit' });
 process.exit(push.status ?? 0);

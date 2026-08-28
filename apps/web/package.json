@@ -7,9 +7,12 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
     "db:backup": "node scripts/backup.mjs",
     "db:push": "node scripts/safe-push.mjs",
     "db:diff": "prisma migrate diff --from-schema ./prisma/schema.prisma --to-config-datasource ./prisma.config.ts --script",
+    "db:consolidate-qdd": "node scripts/consolidate-qdd-imports.mjs",
+    "db:single-import:phase1": "node scripts/apply-single-import-phase1.mjs",
     "geo:acre": "npx --yes mapshaper@0.7.45 ../../shapefile/AC_Municipios_2025.shp -simplify 8% keep-shapes -filter-fields CD_MUN,NM_MUN -o force format=geojson precision=0.00001 public/maps/acre-municipalities-2025.geojson"
   },
   "dependencies": {
@@ -20,6 +23,7 @@
     "@tanstack/react-virtual": "^3.13.25",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
     "next": "latest",
@@ -48,6 +52,7 @@
     "@types/react-dom": "latest",
     "react-grab": "^0.1.37",
     "tailwindcss": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^3.2.4"
   }
 }

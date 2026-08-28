@@ -14,9 +14,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const existing = await prisma.actionValidation.findUnique({
     where: { id },
-    include: { assignment: true, action: { select: { year: true } } },
+    include: {
+      assignment: true,
+      action: { select: { year: true, presentInCurrentQdd: true } },
+    },
   });
   if (!existing) return notFound('Validação não encontrada.');
+  if (!existing.action.presentInCurrentQdd) return notFound('Validação ativa não encontrada.');
   // Entregas só existem no exercício corrente.
   if (existing.action.year !== (await getCurrentYear())) return forbidden();
   if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year))) {

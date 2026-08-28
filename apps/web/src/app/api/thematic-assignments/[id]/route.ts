@@ -16,10 +16,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.thematicAssignment.findUnique({
     where: { id },
     include: {
-      action: { select: { organizationCode: true, unitCode: true, year: true } },
+      action: {
+        select: {
+          organizationCode: true,
+          unitCode: true,
+          year: true,
+          presentInCurrentQdd: true,
+        },
+      },
     },
   });
   if (!existing) return notFound('Atribuição temática não encontrada.');
+  if (!existing.action.presentInCurrentQdd) {
+    return conflict('A classificação pertence a uma ação ausente no QDD atual.');
+  }
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
     // Secretaria atua somente no exercício corrente.
@@ -71,11 +81,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const row = await prisma.thematicAssignment.findUnique({
     where: { id },
     include: {
-      action: { select: { organizationCode: true, unitCode: true, year: true } },
+      action: {
+        select: {
+          organizationCode: true,
+          unitCode: true,
+          year: true,
+          presentInCurrentQdd: true,
+        },
+      },
     },
   });
 
   if (!row) return notFound('Atribuição temática não encontrada.');
+  if (!row.action.presentInCurrentQdd) {
+    return conflict('A classificação pertence a uma ação ausente no QDD atual.');
+  }
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
     if (row.action.year !== (await getCurrentYear())) return forbidden();

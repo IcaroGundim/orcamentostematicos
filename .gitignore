@@ -35,3 +35,4 @@ sicaf_acre_documentacao_completa.md
 
 # Respostas de depuração da coleta do SICAF (contêm dados brutos)
 apps/web/scripts/.sicaf-debug/
+apps/web/prisma/.single-import-phase1.prisma

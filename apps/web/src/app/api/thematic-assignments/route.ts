@@ -28,7 +28,9 @@ export async function GET(req: NextRequest) {
   const yearScope = year == null ? {} : { year };
   const rows = await prisma.thematicAssignment.findMany({
     where: {
-      action: user.role === 'SEPLAN_ADMIN' ? yearScope : { ...actionScope, ...yearScope },
+      action: user.role === 'SEPLAN_ADMIN'
+        ? { ...yearScope, presentInCurrentQdd: true }
+        : { ...actionScope, ...yearScope, presentInCurrentQdd: true },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -47,9 +49,16 @@ export async function POST(req: NextRequest) {
 
   const action = await prisma.budgetAction.findUnique({
     where: { id: body.actionId },
-    select: { organizationCode: true, unitCode: true, year: true, importId: true },
+    select: {
+      organizationCode: true,
+      unitCode: true,
+      year: true,
+      importId: true,
+      presentInCurrentQdd: true,
+    },
   });
   if (!action) return badRequest('Ação orçamentária não encontrada.');
+  if (!action.presentInCurrentQdd) return badRequest('A ação não está presente no QDD atual.');
 
   // A ação precisa pertencer ao QDD vigente do seu exercício. Sem esta amarração,
   // um id de ação de importação histórica seria aceito e a marcação nasceria presa

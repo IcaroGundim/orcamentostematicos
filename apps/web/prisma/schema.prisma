@@ -35,6 +35,12 @@ enum QddPeriodType {
   ACUMULADO_ANUAL
 }
 
+enum QddImportSource {
+  MANUAL
+  SICAF
+  MIGRATED
+}
+
 enum GovernmentEntityType {
   SECRETARIA
   AUTARQUIA
@@ -93,10 +99,11 @@ model User {
   lastSeenAt       DateTime?
   createdAt        DateTime  @default(now())
 
-  sessions            Session[]
-  assignments         ThematicAssignment[]
-  activityLogs        UserActivityLog[]
-  passwordResetTokens PasswordResetToken[]
+  sessions              Session[]
+  assignments           ThematicAssignment[]
+  activityLogs          UserActivityLog[]
+  passwordResetTokens   PasswordResetToken[]
+  budgetImportRevisions BudgetImportRevision[]
 }
 
 model UserActivityLog {
@@ -139,7 +146,7 @@ model PasswordResetToken {
 model BudgetImport {
   id             String        @id @default(cuid())
   filename       String
-  year           Int
+  year           Int           @unique
   referenceMonth Int
   periodType     QddPeriodType
   importedAt     DateTime      @default(now())
@@ -147,7 +154,33 @@ model BudgetImport {
   actionCount    Int
   status         String        @default("VIGENTE")
 
-  actions BudgetAction[]
+  actions   BudgetAction[]
+  revisions BudgetImportRevision[]
+}
+
+/// Auditoria leve das atualizações de uma base. Não replica ações nem linhas do QDD.
+model BudgetImportRevision {
+  id              String          @id @default(cuid())
+  importId        String
+  /// ID da antiga BudgetImport, usado para tornar a consolidação idempotente.
+  legacyImportId  String?         @unique
+  /// ID da prévia confirmada; impede duas confirmações concorrentes da mesma carga.
+  confirmationKey String?         @unique
+  year            Int
+  filename        String
+  referenceMonth  Int
+  periodType      QddPeriodType
+  rowCount        Int
+  actionCount     Int
+  source          QddImportSource @default(MANUAL)
+  updatedBy       String?
+  createdAt       DateTime        @default(now())
+
+  import BudgetImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  user   User?        @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([importId, createdAt])
+  @@index([year, createdAt])
 }
 
 model BudgetAction {
@@ -170,6 +203,11 @@ model BudgetAction {
   paid          Float @default(0)
   available     Float @default(0)
 
+  /// Presente na versão atual do QDD. Ações classificadas que desaparecem ficam
+  /// inativas para preservar curadoria, validações e entregas sem contaminar totais.
+  presentInCurrentQdd Boolean   @default(true)
+  inactiveAt          DateTime?
+
   import       BudgetImport         @relation(fields: [importId], references: [id], onDelete: Cascade)
   expenseLines ExpenseLine[]
   assignments  ThematicAssignment[]
@@ -177,6 +215,7 @@ model BudgetAction {
 
   @@index([importId])
   @@index([organizationCode])
+  @@index([year, presentInCurrentQdd])
 }
 
 model ExpenseLine {

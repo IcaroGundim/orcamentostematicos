@@ -15,7 +15,13 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { config } from 'dotenv';
 import * as XLSX from 'xlsx';
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // apps/web/scripts
+const webDir = path.resolve(scriptDir, '..');
+config({ path: path.resolve(webDir, '.env.local'), quiet: true });
+config({ path: path.resolve(webDir, '.env'), quiet: true });
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -23,7 +29,6 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // apps/web/scripts
 const repoRoot = path.resolve(scriptDir, '..', '..', '..');
 const stamp = new Date().toISOString().slice(0, 10); // AAAA-MM-DD (UTC)
 const outDir = path.join(repoRoot, 'backups', stamp);
@@ -35,6 +40,17 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATA
 const jsonReplacer = (_k, v) => (typeof v === 'bigint' ? Number(v) : v);
 const writeJson = (name, data) =>
   fs.writeFileSync(path.join(outDir, name), JSON.stringify(data, jsonReplacer, 2));
+
+async function optionalRaw(query, fallback = []) {
+  try {
+    return await prisma.$queryRawUnsafe(query);
+  } catch (error) {
+    // Permite que o backup obrigatório rode antes da fase 1 de uma expansão de
+    // schema. Tabelas/colunas ainda inexistentes são simplesmente omitidas.
+    console.warn(`[backup] consulta opcional indisponível: ${error.message}`);
+    return fallback;
+  }
+}
 
 function toCsv(rows, columns) {
   const esc = (v) => {
@@ -54,7 +70,7 @@ function toCsv(rows, columns) {
   // existe em nenhum outro lugar: unidades realocadas, tipo de entidade,
   // ativo/inativo e os mapeamentos de executor. Com a retenção de ~6h do Neon,
   // ficar de fora do backup significaria perda irreversível.
-  const [assignments, validations, cycles, imports, fiscalYears, exerciseOrgs, exerciseUnits, exerciseExecutors] =
+  const [assignments, validations, cycles, imports, revisions, fiscalYears, exerciseOrgs, exerciseUnits, exerciseExecutors] =
     await Promise.all([
       prisma.$queryRawUnsafe('SELECT * FROM "ThematicAssignment"'),
       prisma.$queryRawUnsafe('SELECT * FROM "ActionValidation"'),
@@ -62,6 +78,7 @@ function toCsv(rows, columns) {
       prisma.$queryRawUnsafe(
         'SELECT id, filename, year, "referenceMonth", "periodType", status, "actionCount", "importedAt" FROM "BudgetImport"',
       ),
+      optionalRaw('SELECT * FROM "BudgetImportRevision"'),
       prisma.$queryRawUnsafe('SELECT * FROM "FiscalYear"'),
       prisma.$queryRawUnsafe('SELECT * FROM "ExerciseOrganization"'),
       prisma.$queryRawUnsafe('SELECT * FROM "ExerciseUnit"'),
@@ -75,6 +92,7 @@ function toCsv(rows, columns) {
       actionValidations: validations.length,
       validationCycles: cycles.length,
       budgetImports: imports.length,
+      budgetImportRevisions: revisions.length,
       fiscalYears: fiscalYears.length,
       exerciseOrganizations: exerciseOrgs.length,
       exerciseUnits: exerciseUnits.length,
@@ -84,6 +102,7 @@ function toCsv(rows, columns) {
     actionValidations: validations,
     validationCycles: cycles,
     budgetImports: imports,
+    budgetImportRevisions: revisions,
     fiscalYears,
     exerciseOrganizations: exerciseOrgs,
     exerciseUnits: exerciseUnits,
@@ -91,22 +110,38 @@ function toCsv(rows, columns) {
   });
 
   // 2) Marcações denormalizadas (chave lógica) — o artefato de restore.
-  const marcacoes = await prisma.$queryRawUnsafe(`
+  let marcacoes = await optionalRaw(`
     SELECT ta.id, ta.theme, ta.axis, ta.classification, ta."weightingFactor",
            ta.justification, ta.status, ta."createdBy", ta."createdAt",
            ba.year, ba."organizationCode", ba."organizationName",
            ba."unitCode", ba."unitName", ba."projectActivity", ba.application,
+           ba."presentInCurrentQdd", ba."inactiveAt",
            bi.status AS "importStatus"
     FROM "ThematicAssignment" ta
     JOIN "BudgetAction" ba ON ba.id = ta."actionId"
     JOIN "BudgetImport" bi ON bi.id = ba."importId"
     ORDER BY ta.theme, ba."organizationCode", ba."unitCode", ba."projectActivity"
   `);
+  if (marcacoes.length === 0 && assignments.length > 0) {
+    marcacoes = await prisma.$queryRawUnsafe(`
+      SELECT ta.id, ta.theme, ta.axis, ta.classification, ta."weightingFactor",
+             ta.justification, ta.status, ta."createdBy", ta."createdAt",
+             ba.year, ba."organizationCode", ba."organizationName",
+             ba."unitCode", ba."unitName", ba."projectActivity", ba.application,
+             TRUE AS "presentInCurrentQdd", NULL::timestamp AS "inactiveAt",
+             bi.status AS "importStatus"
+      FROM "ThematicAssignment" ta
+      JOIN "BudgetAction" ba ON ba.id = ta."actionId"
+      JOIN "BudgetImport" bi ON bi.id = ba."importId"
+      ORDER BY ta.theme, ba."organizationCode", ba."unitCode", ba."projectActivity"
+    `);
+  }
 
   const columns = [
     'theme', 'axis', 'classification', 'weightingFactor', 'justification', 'status',
     'year', 'organizationCode', 'organizationName', 'unitCode', 'unitName',
-    'projectActivity', 'application', 'importStatus', 'createdBy', 'createdAt', 'id',
+    'projectActivity', 'application', 'presentInCurrentQdd', 'inactiveAt',
+    'importStatus', 'createdBy', 'createdAt', 'id',
   ];
 
   writeJson('marcacoes.json', marcacoes);
@@ -125,7 +160,10 @@ function toCsv(rows, columns) {
   for (const m of marcacoes) byTheme[m.theme] = (byTheme[m.theme] || 0) + 1;
   console.log(`[backup] ${outDir}`);
   console.log(`  marcações: ${marcacoes.length}`, JSON.stringify(byTheme));
-  console.log(`  validações: ${validations.length} | ciclos: ${cycles.length} | imports: ${imports.length}`);
+  console.log(
+    `  validações: ${validations.length} | ciclos: ${cycles.length} | ` +
+      `imports: ${imports.length} | revisões: ${revisions.length}`,
+  );
   console.log(
     `  estrutura por exercício: ${exerciseOrgs.length} órgãos | ${exerciseUnits.length} unidades | ` +
       `${exerciseExecutors.length} executores | ${fiscalYears.length} políticas de exercício`,

@@ -7,7 +7,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
   const { id } = await params;
-  const cycle = await prisma.validationCycle.findUnique({ where: { id }, include: { validations: true } });
+  const cycle = await prisma.validationCycle.findUnique({
+    where: { id },
+    include: { validations: { where: { action: { presentInCurrentQdd: true } } } },
+  });
   if (!cycle) return notFound('Ciclo não encontrado.');
   return ok({ ...mapCycle(cycle), validations: cycle.validations });
 }

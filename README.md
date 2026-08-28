@@ -126,4 +126,23 @@ vigente por exercício** — importar 2025 não afeta 2026.
 
 O sistema permite importar manualmente um QDD em `.xls` ou `.xlsx` pela interface da SEPLAN. A prévia consolida as linhas do QDD em ações orçamentárias e mostra o **exercício detectado** (e de onde ele foi lido: cabeçalho da planilha, nome do arquivo ou, em último caso, o ano atual — que merece conferência). Ao confirmar, o QDD é registrado como base vigente daquele exercício, preservando órgãos, unidades, aplicações programadas, funções programáticas, projetos/atividades, contas de despesa, descrições, fontes e valores.
 
-Ao registrar um novo QDD, apenas as importações vigentes **do mesmo exercício** são marcadas como histórico.
+Cada exercício possui **uma única `BudgetImport`**. Uma nova confirmação atualiza essa
+mesma base e as ações equivalentes em lugar, preservando IDs, marcações, validações e
+entregas. Ações classificadas que deixam de aparecer no arquivo ficam inativas, fora dos
+totais, e são reativadas automaticamente se reaparecerem. O histórico guarda somente os
+metadados leves de cada atualização.
+
+### Implantação da importação única em banco já existente
+
+Execute em janela controlada, sem confirmar novos QDDs durante o processo:
+
+```bash
+cd apps/web
+npm run db:single-import:phase1       # backup + campos/tabela, ainda sem índice único
+npm run db:consolidate-qdd            # prévia somente leitura; resolva conflitos se houver
+npm run db:consolidate-qdd -- --apply # novo backup + consolidação
+npm run db:push                       # aplica BudgetImport.year UNIQUE
+```
+
+O consolidado escolhe o `VIGENTE` mais recente de cada exercício, converte os imports
+antigos em revisões leves e preserva ações marcadas sem correspondente como inativas.

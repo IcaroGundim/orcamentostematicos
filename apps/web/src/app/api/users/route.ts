@@ -46,7 +46,11 @@ export async function GET(req: NextRequest) {
   // pendingCuration: ThematicAssignment com status RASCUNHO criados pelo usuário.
   const curationGroups = await prisma.thematicAssignment.groupBy({
     by: ['createdBy'],
-    where: { createdBy: { in: userIds }, status: 'RASCUNHO' },
+    where: {
+      createdBy: { in: userIds },
+      status: 'RASCUNHO',
+      action: { presentInCurrentQdd: true },
+    },
     _count: { _all: true },
   });
   const pendingCuration = new Map<string, number>(
@@ -61,7 +65,10 @@ export async function GET(req: NextRequest) {
   const orgCounts = orgsInPlay.length
     ? await prisma.actionValidation.groupBy({
         by: ['organizationCode', 'status'],
-        where: { organizationCode: { in: orgsInPlay } },
+        where: {
+          organizationCode: { in: orgsInPlay },
+          action: { presentInCurrentQdd: true },
+        },
         _count: { _all: true },
       })
     : [];

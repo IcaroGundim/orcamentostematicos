@@ -2,6 +2,7 @@ export type UserRole = 'SEPLAN_ADMIN' | 'SECRETARIA_REPRESENTANTE';
 export type ThemeBudget = 'OCAD' | 'OSG' | 'CLIMATICO';
 export type ValidationStatus = 'RASCUNHO' | 'ENVIADO' | 'DEVOLVIDO' | 'APROVADO';
 export type QddPeriodType = 'MES_ISOLADO' | 'ACUMULADO_ANUAL';
+export type QddImportSource = 'MANUAL' | 'SICAF' | 'MIGRATED';
 
 export type GovernmentEntityType =
   | 'SECRETARIA'
@@ -124,6 +125,21 @@ export interface BudgetImport {
   status: 'VIGENTE' | 'HISTORICO';
 }
 
+export interface BudgetImportRevision {
+  id: string;
+  importId: string;
+  year: number;
+  filename: string;
+  referenceMonth: number;
+  periodType: QddPeriodType;
+  rowCount: number;
+  actionCount: number;
+  source: QddImportSource;
+  updatedBy?: string | null;
+  updatedByName?: string | null;
+  createdAt: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -182,6 +198,8 @@ export interface BudgetAction {
   application: string;
   functionalProgram: string;
   projectActivity: string;
+  presentInCurrentQdd?: boolean;
+  inactiveAt?: string | null;
   totals: {
     initialBudget: number;
     supplemented: number;
@@ -194,6 +212,21 @@ export interface BudgetAction {
   expenseLinesCount: number;
   expenseLines?: ExpenseLine[];
   assignments: ThematicAssignment[];
+}
+
+export interface InactiveBudgetAction extends BudgetAction {
+  presentInCurrentQdd: false;
+  inactiveAt: string;
+  validations: Array<{
+    id: string;
+    theme: ThemeBudget;
+    status: ValidationStatus;
+    deliveries: DeliveryReport[];
+    realizedDescription?: string;
+    informedExecutedValue?: number;
+    observations?: string;
+    reviewerComment?: string;
+  }>;
 }
 
 export interface ExpenseLine {

@@ -51,9 +51,9 @@ O fluxo principal pensado para o projeto é:
 - A unidade principal de validação é a ação consolidada, não cada linha individual do QDD.
 - As linhas do QDD continuam preservadas como detalhamento consultivo da ação.
 - A estrutura vigente do MVP é criada e atualizada pela importação manual de QDD.
-- A importação manual de QDD funciona como atualização/substituição da base vigente
-  **daquele exercício**: o sistema mantém vários exercícios simultâneos, com um QDD
-  vigente por ano.
+- A importação manual de QDD atualiza a base única **daquele exercício**: o sistema
+  mantém vários exercícios simultâneos, mas somente uma `BudgetImport` por ano. Ações
+  equivalentes conservam seus IDs e sua curadoria; ações marcadas ausentes ficam inativas.
 - Um exercício pode ser carregado **apenas para comparação**: recebe execução e
   classificação temática, mas não abre ciclos de validação nem recebe entregas das
   secretarias, e fica visível somente para a SEPLAN.
