@@ -719,14 +719,6 @@ function OrcamentoPageContent() {
             />
             <Button
               variant="secondary"
-              className="hidden rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100 lg:inline-flex"
-              onClick={() => router.push('/seplan')}
-            >
-              <BanknoteIcon data-icon="inline-start" />
-              Orçamentos Temáticos
-            </Button>
-            <Button
-              variant="secondary"
               className="rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100"
               onClick={() => void load()}
               disabled={isLoading}
@@ -972,6 +964,20 @@ function OrcamentoPageContent() {
               </Button>
             </PopoverContent>
           </Popover>
+          {/*
+            Retorno ao painel dos orçamentos temáticos. Verde escuro (identidade do
+            módulo), no heading ao lado do Exportar: é a rota de fuga do módulo e
+            precisa ser achada de imediato, sem competir com os contornos discretos
+            do restante da linha.
+          */}
+          <Button
+            size="sm"
+            className="shrink-0 rounded-sm border border-black/70 bg-green-900 text-white shadow-none hover:bg-green-950"
+            onClick={() => router.push('/seplan')}
+          >
+            <BanknoteIcon data-icon="inline-start" />
+            Voltar a Orçamentos Temáticos
+          </Button>
         </div>
         ) : null}
 
