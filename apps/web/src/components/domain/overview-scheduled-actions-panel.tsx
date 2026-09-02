@@ -77,6 +77,11 @@ type Props = {
   variant?: 'thematic' | 'execution';
   /** Estágio selecionado no monitor de execução, destacado como na aba Tabela. */
   executionMetric?: ExecutionMetric;
+  /**
+   * assignmentId → executado somado nas entregas de validações aprovadas. Alimenta as
+   * categorias por entrega (OSG Cat. 2, Climático Indireta) na exportação da visão geral.
+   */
+  deliveryExecutedByAssignment?: Map<string, number>;
 };
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -281,6 +286,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   lockedScopeLabel,
   variant = 'thematic',
   executionMetric,
+  deliveryExecutedByAssignment,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
@@ -676,7 +682,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     if (exportThemes.size === 0 || displayedActions.length === 0) return;
     try {
       const { buildOverviewRows, exportOverview } = await import('@/lib/overview-export');
-      const rows = buildOverviewRows(displayedActions, exportThemes);
+      const rows = buildOverviewRows(displayedActions, exportThemes, deliveryExecutedByAssignment);
       if (rows.length === 0) {
         toast.error('Nenhuma ação com tema selecionado para exportar.');
         return;
@@ -687,7 +693,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao exportar.');
     }
-  }, [displayedActions, exportThemes, exportFormat]);
+  }, [deliveryExecutedByAssignment, displayedActions, exportThemes, exportFormat]);
 
   return (
     <Card

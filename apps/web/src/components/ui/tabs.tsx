@@ -78,6 +78,13 @@ type HoverTabsListItem = {
   value: string
   content: React.ReactNode
   className?: string
+  /**
+   * Classe de fundo da pílula quando este item está em destaque (mouse/foco) ou
+   * selecionado — ex.: cores dos orçamentos temáticos. Ausente = `bg-primary`.
+   */
+  pillClassName?: string
+  /** Classes de cor do texto quando o item está fora de destaque. */
+  idleClassName?: string
 }
 
 /**
@@ -181,6 +188,7 @@ function HoverTabsList({
   className?: string
 }) {
   const { listRef, pill, highlightValue, highlight, resetHighlight } = useHoverPill(activeValue)
+  const highlightedItem = items.find((item) => item.value === highlightValue)
 
   return (
     <TabsList
@@ -192,8 +200,9 @@ function HoverTabsList({
         aria-hidden
         className={cn(
           'pointer-events-none absolute top-[3px] z-0 h-[calc(100%-6px)] rounded-md bg-primary shadow-md',
-          'transition-[left,width] duration-500 ease-out',
+          'transition-[left,width,background-color] duration-500 ease-out',
           pill.ready ? 'opacity-100' : 'opacity-0',
+          highlightedItem?.pillClassName,
         )}
         style={{ left: pill.left, width: pill.width }}
       />
@@ -211,7 +220,10 @@ function HoverTabsList({
               'data-active:bg-transparent data-active:shadow-none',
               highlighted
                 ? 'text-white data-active:text-white hover:text-white'
-                : 'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
+                : cn(
+                    'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
+                    item.idleClassName,
+                  ),
               item.className,
             )}
           >

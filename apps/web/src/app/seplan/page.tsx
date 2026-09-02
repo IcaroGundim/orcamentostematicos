@@ -87,14 +87,14 @@ import { HoverTabsList, Tabs, TabsContent } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { StatusBadge, ThemeBadge } from '@/components/domain/badges';
+import { StatusBadge, ThemeBadge, themePillClasses, themeTabIdleClasses } from '@/components/domain/badges';
 import { RemoveClassificationPopover } from '@/components/domain/remove-classification-popover';
 import { SourceBreakdownTable } from '@/components/domain/source-breakdown-table';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FunctionalProgramLine } from '@/components/domain/functional-program-line';
 import { AdminDeliveryWorkspace } from '@/components/domain/admin-delivery-workspace';
-import { api, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
+import { api, classificationLabels, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import { exerciseQuery, useExercise } from '@/lib/use-exercise';
 import { ExerciseSelect } from '@/components/domain/exercise-select';
 import {
@@ -105,6 +105,7 @@ import {
   resolveWeightingFactor,
   shouldHideWeightingFactor,
   thematicBudgetContribution,
+  validationThematicTotals,
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
 import {
@@ -460,6 +461,8 @@ function SeplanPageContent() {
   const [expandedResultRows, setExpandedResultRows] = useState<Set<string>>(new Set());
   const [reportsViewTab, setReportsViewTab] = useState<'overview' | 'by-axis'>('overview');
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
+  const [resultsThemeTab, setResultsThemeTab] = useState<ThemeBudget>('OSG');
+  const [resultsCategoryFilter, setResultsCategoryFilter] = useState<string>('ALL');
 
   // Setas ← → alternam as subabas de "Informações Gerais". Fica no window (fase de
   // bubble) para funcionar sem depender de qual elemento está com foco; ignora campos
@@ -1383,6 +1386,8 @@ function SeplanPageContent() {
     [validations],
   );
 
+  // Mantido ativo mesmo com o mapa oculto na seção Resultados (aside comentado),
+  // para que a reativação futura seja apenas descomentar o bloco.
   const municipalityDeliverySummaries = useMemo(
     () => ({
       ALL: aggregateApprovedDeliveriesByMunicipality(validations),
@@ -1399,27 +1404,11 @@ function SeplanPageContent() {
     const themes: ThemeBudget[] = ['OSG', 'OCAD', 'CLIMATICO'];
     return themes.map((theme) => {
       const items = approvedValidations.filter((v) => v.theme === theme);
-      const actions = new Set<string>();
-      const orgs = new Set<string>();
-      let executed = 0;
-      let liquidated = 0;
-      let deliveriesCount = 0;
-      for (const v of items) {
-        actions.add(v.actionId);
-        orgs.add(v.organizationCode || v.action?.organizationCode || '');
-        executed += v.informedExecutedValue ?? 0;
-        liquidated += v.action?.totals?.liquidated ?? 0;
-        deliveriesCount += v.deliveries?.length ?? 0;
-      }
       return {
         theme,
         label: themeLabels[theme] ?? theme,
         items,
-        actionCount: actions.size,
-        orgCount: orgs.size,
-        executed,
-        liquidated,
-        deliveriesCount,
+        ...summarizeResultItems(items),
       };
     });
   }, [approvedValidations]);
@@ -1690,6 +1679,7 @@ function SeplanPageContent() {
                 organizations={organizations}
                 relocatedUnitKeys={relocatedUnitKeys}
                 vigenteImport={vigenteImport}
+                deliveryExecutedByAssignment={executedByAssignment}
               />
             </div>
           ) : null}
@@ -2475,52 +2465,11 @@ function SeplanPageContent() {
           ) : null}
 
           {activeSection === 'results' ? (
-            <section className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
-              <Card>
-                <CardHeader className="bg-transparent text-card-foreground [&_[data-slot=card-title]]:text-card-foreground [&_[data-slot=card-description]]:text-muted-foreground">
-                  <CardTitle>Resultados finais dos Orçamentos Temáticos</CardTitle>
-                  <CardDescription>
-                    Programas classificados, com entregas registradas e validações aprovadas — encerramento do ciclo de curadoria, validação e revisão.
-                  </CardDescription>
-                  <CardAction>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button disabled={approvedValidations.length === 0}>
-                          <FileDownIcon data-icon="inline-start" />
-                          Exportar
-                          <ChevronDownIcon className="ml-1 size-4 opacity-70" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" side="bottom" className="w-56 p-2">
-                        <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                          Formato do relatório
-                        </p>
-                        <button
-                          type="button"
-                          onClick={handleExportXlsx}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
-                        >
-                          <FileSpreadsheetIcon className="size-4 text-muted-foreground" />
-                          <span className="flex-1 text-left">XLSX</span>
-                          <span className="text-xs text-muted-foreground">Planilha</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleExportCsv}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
-                        >
-                          <FileDownIcon className="size-4 text-muted-foreground" />
-                          <span className="flex-1 text-left">CSV</span>
-                          <span className="text-xs text-muted-foreground">Texto</span>
-                        </button>
-                      </PopoverContent>
-                    </Popover>
-                  </CardAction>
-                </CardHeader>
-              </Card>
-
-              <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]">
-                <div className="order-2 flex min-w-0 flex-col gap-5 xl:order-1">
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {/* Coluna única enquanto o mapa de entregas está oculto (ver aside comentado abaixo).
+                  Ao reativar o mapa, voltar para grid items-start xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)]. */}
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="order-2 flex min-h-0 min-w-0 flex-1 flex-col xl:order-1">
                   {approvedValidations.length === 0 ? (
                     <Empty>
                       <EmptyHeader>
@@ -2532,34 +2481,133 @@ function SeplanPageContent() {
                       </EmptyHeader>
                     </Empty>
                   ) : (
-                    resultsByTheme.map((entry) => {
-                      const hasItems = entry.items.length > 0;
-                      return (
-                    <Card key={entry.theme}>
-                      <CardHeader>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ThemeBadge theme={entry.theme} />
+                    <Tabs
+                      value={resultsThemeTab}
+                      onValueChange={(value) => {
+                        setResultsThemeTab(value as ThemeBudget);
+                        setResultsCategoryFilter('ALL');
+                      }}
+                      className="min-h-0 flex-1"
+                    >
+                      {resultsByTheme.map((entry) => {
+                        const hasItems = entry.items.length > 0;
+                        const filteredItems =
+                          resultsCategoryFilter === 'ALL'
+                            ? entry.items
+                            : entry.items.filter(
+                                (v) => (v.assignment?.classification ?? '') === resultsCategoryFilter,
+                              );
+                        const filteredSummary = summarizeResultItems(filteredItems);
+                        const categoryOptions = [
+                          ...new Set(
+                            entry.items
+                              .map((v) => v.assignment?.classification ?? '')
+                              .filter((cls) => cls !== ''),
+                          ),
+                        ].sort((a, b) =>
+                          (classificationLabels[a] ?? a).localeCompare(
+                            classificationLabels[b] ?? b,
+                            'pt-BR',
+                          ),
+                        );
+                        return (
+                      <TabsContent key={entry.theme} value={entry.theme} className="flex min-h-0 flex-col">
+                      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <CardHeader className="shrink-0 items-center py-3">
+                        <div className="flex flex-wrap items-baseline gap-x-3">
+                          <CardTitle>{entry.label}</CardTitle>
+                          <CardDescription>
+                            {hasItems
+                              ? `${entry.actionCount} aç${entry.actionCount !== 1 ? 'ões' : 'ão'} validada${entry.actionCount !== 1 ? 's' : ''} em ${entry.orgCount} secretaria${entry.orgCount !== 1 ? 's' : ''}.`
+                              : 'Sem validações aprovadas para este tema.'}
+                          </CardDescription>
                         </div>
-                        <CardTitle className="mt-2">{entry.label}</CardTitle>
-                        <CardDescription>
-                          {hasItems
-                            ? `${entry.actionCount} aç${entry.actionCount !== 1 ? 'ões' : 'ão'} validada${entry.actionCount !== 1 ? 's' : ''} em ${entry.orgCount} secretaria${entry.orgCount !== 1 ? 's' : ''}.`
-                            : 'Sem validações aprovadas para este tema.'}
-                        </CardDescription>
-                        <CardAction>
-                          <Badge variant={hasItems ? 'default' : 'secondary'}>
-                            {entry.items.length} validaç{entry.items.length !== 1 ? 'ões' : 'ão'}
-                          </Badge>
+                        <CardAction className="row-span-1 self-center">
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={resultsCategoryFilter}
+                              onValueChange={setResultsCategoryFilter}
+                            >
+                              <SelectTrigger
+                                className="h-8 w-[11.5rem]"
+                                aria-label="Filtrar por categoria"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent position="popper">
+                                <SelectItem value="ALL">Todas as categorias</SelectItem>
+                                {categoryOptions.map((cls) => (
+                                  <SelectItem key={cls} value={cls}>
+                                    {classificationLabels[cls] ?? cls}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <HoverTabsList
+                              activeValue={resultsThemeTab}
+                              className="w-fit"
+                              items={resultsByTheme.map((tabEntry) => ({
+                                value: tabEntry.theme,
+                                className: 'gap-1.5',
+                                pillClassName: themePillClasses[tabEntry.theme],
+                                idleClassName: themeTabIdleClasses[tabEntry.theme],
+                                content: (
+                                  <>
+                                    {themeLabels[tabEntry.theme]}
+                                    <span className="rounded-full border border-current px-1.5 text-[11px] leading-4 tabular-nums opacity-80">
+                                      {tabEntry.items.length}
+                                    </span>
+                                  </>
+                                ),
+                              }))}
+                            />
+                            <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950"
+                              >
+                                <FileDownIcon data-icon="inline-start" />
+                                Exportar
+                                <ChevronDownIcon className="ml-1 size-4 opacity-70" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" side="bottom" className="w-56 p-2">
+                              <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                Formato do relatório
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleExportXlsx}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
+                              >
+                                <FileSpreadsheetIcon className="size-4 text-muted-foreground" />
+                                <span className="flex-1 text-left">XLSX</span>
+                                <span className="text-xs text-muted-foreground">Planilha</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleExportCsv}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted hover:text-foreground transition-colors"
+                              >
+                                <FileDownIcon className="size-4 text-muted-foreground" />
+                                <span className="flex-1 text-left">CSV</span>
+                                <span className="text-xs text-muted-foreground">Texto</span>
+                              </button>
+                            </PopoverContent>
+                          </Popover>
+                          </div>
                         </CardAction>
                       </CardHeader>
-                      <CardContent className="flex flex-col gap-4">
-                        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                      <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+                        <div className="grid shrink-0 grid-cols-2 gap-3 md:grid-cols-6">
                           {[
-                            { label: 'Ações validadas', value: entry.actionCount.toLocaleString('pt-BR') },
-                            { label: 'Secretarias', value: entry.orgCount.toLocaleString('pt-BR') },
-                            { label: 'Entregas', value: entry.deliveriesCount.toLocaleString('pt-BR') },
-                            { label: 'Valor liquidado', value: formatMoney(entry.liquidated) },
-                            { label: 'Valor executado', value: formatMoney(entry.executed) },
+                            { label: 'Ações validadas', value: filteredSummary.actionCount.toLocaleString('pt-BR') },
+                            { label: 'Secretarias', value: filteredSummary.orgCount.toLocaleString('pt-BR') },
+                            { label: 'Entregas', value: filteredSummary.deliveriesCount.toLocaleString('pt-BR') },
+                            { label: 'Planejado ponderado', value: formatMoney(filteredSummary.planned) },
+                            { label: 'Liquidado temático', value: formatMoney(filteredSummary.liquidated) },
+                            { label: 'Valor executado', value: formatMoney(filteredSummary.executed) },
                           ].map((kpi) => (
                             <div key={kpi.label} className="min-w-0 rounded-lg border bg-muted/30 p-3">
                               <p className="text-xs uppercase tracking-wide text-muted-foreground">{kpi.label}</p>
@@ -2568,9 +2616,9 @@ function SeplanPageContent() {
                           ))}
                         </div>
 
-                        {hasItems ? (
-                          <div className="min-w-0 overflow-hidden rounded-lg border">
-                            <ScrollArea className="w-full">
+                        {filteredItems.length > 0 ? (
+                          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+                            <ScrollArea className="h-full w-full">
                               <Table className="min-w-[60rem]">
                                 <TableHeader>
                                   <TableRow>
@@ -2582,15 +2630,23 @@ function SeplanPageContent() {
                                     <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Classificação</TableHead>
                                     <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Pond.</TableHead>
                                     <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Entregas</TableHead>
-                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Liquidado</TableHead>
+                                    <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Liquidado temático</TableHead>
                                     <TableHead className="h-9 text-right text-xs uppercase tracking-[0.12em] text-muted-foreground">Executado</TableHead>
                                     <TableHead className="h-9 text-xs uppercase tracking-[0.12em] text-muted-foreground">Ciclo</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                  {entry.items.map((v) => {
+                                  {filteredItems.map((v) => {
                                     const isExpanded = expandedResultRows.has(v.id);
                                     const hasDeliveries = (v.deliveries?.length ?? 0) > 0;
+                                    const thematicTotals = validationThematicTotals({
+                                      theme: v.theme,
+                                      classification: v.assignment?.classification,
+                                      weightingFactor: v.assignment?.weightingFactor,
+                                      initialBudget: v.action?.totals?.initialBudget,
+                                      liquidated: v.action?.totals?.liquidated,
+                                      deliveries: v.deliveries,
+                                    });
                                     return (
                                     <Fragment key={v.id}>
                                     <TableRow>
@@ -2629,7 +2685,7 @@ function SeplanPageContent() {
                                         {v.deliveries?.length ?? 0}
                                       </TableCell>
                                       <TableCell className="py-2 text-right align-top text-sm tabular-nums">
-                                        {formatMoney(v.action?.totals?.liquidated ?? 0)}
+                                        {formatMoney(thematicTotals.liquidated)}
                                       </TableCell>
                                       <TableCell className="py-2 text-right align-top text-sm tabular-nums">
                                         {formatMoney(v.informedExecutedValue ?? 0)}
@@ -2663,27 +2719,44 @@ function SeplanPageContent() {
                                   })}
                                   <TableRow className="bg-muted/40 font-semibold">
                                     <TableCell />
-                                    <TableCell className="py-2 text-sm" colSpan={6}>Total do tema</TableCell>
-                                    <TableCell className="py-2 text-right text-sm tabular-nums">{entry.deliveriesCount}</TableCell>
-                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(entry.liquidated)}</TableCell>
-                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(entry.executed)}</TableCell>
+                                    <TableCell className="py-2 text-sm" colSpan={6}>
+                                      {resultsCategoryFilter === 'ALL' ? 'Total do tema' : 'Total filtrado'}
+                                    </TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{filteredSummary.deliveriesCount}</TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(filteredSummary.liquidated)}</TableCell>
+                                    <TableCell className="py-2 text-right text-sm tabular-nums">{formatMoney(filteredSummary.executed)}</TableCell>
                                     <TableCell />
                                   </TableRow>
                                 </TableBody>
                               </Table>
                             </ScrollArea>
                           </div>
+                        ) : hasItems ? (
+                          <Empty>
+                            <EmptyHeader>
+                              <EmptyMedia variant="icon"><FileBarChart2Icon /></EmptyMedia>
+                              <EmptyTitle>Nenhuma validação nesta categoria</EmptyTitle>
+                              <EmptyDescription>
+                                Selecione outra categoria ou volte para "Todas as categorias".
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
                         ) : null}
                       </CardContent>
                     </Card>
-                      );
-                    })
+                      </TabsContent>
+                        );
+                      })}
+                    </Tabs>
                   )}
                 </div>
 
-                <aside className="order-1 min-w-0 xl:sticky xl:top-4 xl:order-2" aria-label="Mapa de entregas por município">
-                  <AcreDeliveriesMap summaries={municipalityDeliverySummaries} />
-                </aside>
+              {/* Mapa oculto por decisão de produto (mantido para retorno futuro).
+                  Ao reativar, voltar também o grid abaixo para duas colunas:
+                  xl:grid-cols-[minmax(0,2fr)_minmax(22rem,1fr)] */}
+              {/* <aside className="order-1 min-w-0 xl:sticky xl:top-4 xl:order-2" aria-label="Mapa de entregas por município">
+                <AcreDeliveriesMap summaries={municipalityDeliverySummaries} />
+              </aside> */}
               </div>
             </section>
           ) : null}
@@ -2800,12 +2873,14 @@ function SeplanPageContent() {
                             return {
                               value: theme,
                               className: 'gap-1.5',
+                              pillClassName: themePillClasses[theme],
+                              idleClassName: themeTabIdleClasses[theme],
                               content: (
                                 <>
                                   {themeLabels[theme]}
                                   {tabTotals.actionsCount > 0 ? (
                                     <span
-                                      className="size-1.5 shrink-0 rounded-full bg-primary"
+                                      className={cn('size-1.5 shrink-0 rounded-full', themePillClasses[theme])}
                                       aria-hidden
                                     />
                                   ) : null}
@@ -3139,6 +3214,45 @@ function OrgaoCombobox({
       ]}
     />
   );
+}
+
+
+/**
+ * Agrega os KPIs temáticos de um conjunto de validações aprovadas — mesma metodologia
+ * do gauge (liquidado × ponderador; categorias por entrada contam o executado das entregas).
+ * Usada pelos totais por tema e pelo recorte filtrado por categoria em Resultados.
+ */
+function summarizeResultItems(items: ValidationItem[]): {
+  actionCount: number;
+  orgCount: number;
+  executed: number;
+  liquidated: number;
+  planned: number;
+  deliveriesCount: number;
+} {
+  const actions = new Set<string>();
+  const orgs = new Set<string>();
+  let executed = 0;
+  let liquidated = 0;
+  let planned = 0;
+  let deliveriesCount = 0;
+  for (const v of items) {
+    actions.add(v.actionId);
+    orgs.add(v.organizationCode || v.action?.organizationCode || '');
+    executed += v.informedExecutedValue ?? 0;
+    const totals = validationThematicTotals({
+      theme: v.theme,
+      classification: v.assignment?.classification,
+      weightingFactor: v.assignment?.weightingFactor,
+      initialBudget: v.action?.totals?.initialBudget,
+      liquidated: v.action?.totals?.liquidated,
+      deliveries: v.deliveries,
+    });
+    liquidated += totals.liquidated;
+    planned += totals.planned;
+    deliveriesCount += v.deliveries?.length ?? 0;
+  }
+  return { actionCount: actions.size, orgCount: orgs.size, executed, liquidated, planned, deliveriesCount };
 }
 
 

@@ -164,14 +164,16 @@ orcamento-page-root (h-svh w-full overflow-hidden)
   exercício **limpa órgão, unidade, fonte, função, subfunção e busca**, porque a
   estrutura do QDD difere entre anos. Não usa `useHoverPill`: a seção 4.4 vale
   para abas/pílulas, não para `Select`.
-- quatro botões à direita, todos `variant="secondary"` com a receita visual
+- dois botões à direita, todos `variant="secondary"` com a receita visual
   `rounded-sm border-black/50 bg-white text-foreground shadow-none
   hover:bg-stone-100`:
-  - **Orçamentos Temáticos** → `router.push('/seplan')` (`hidden lg:inline-flex`);
   - **Atualizar** → re-executa `load()`; ícone `RefreshCwIcon` ganha
     `animate-spin` enquanto `isLoading`; rótulo `hidden lg:inline`;
   - **Sair** → `clearStoredSession()` + `router.push('/login')`, com trava
     `isSigningOut`.
+
+  O retorno a **Orçamentos Temáticos** mora no heading do conteúdo (seção
+  3.3), não aqui.
 
 ### 3.2 Trilha lateral (não-executiva)
 
@@ -280,6 +282,12 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
 `orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between
 border-t border-black/70 bg-white` (`page.tsx:1016-1113`):
 
+- **Voltar a Orçamentos Temáticos**: no heading, à direita do Exportar. Verde
+  escuro
+  (`bg-green-900 text-white`, hover `green-950`, `rounded-sm border-black/70
+  shadow-none`), `router.push('/seplan')`, sempre visível (some só com o
+  heading nas visões executivas). É a rota de fuga do módulo — o verde escuro,
+  idêntico aos cabeçalhos de painel, o faz notável sem cor fora da paleta.
 - **Anterior/Próxima**: `variant="ghost" size="sm"`, `h-auto rounded-none`,
   borda `border-r/border-l border-black/20`, `aria-label` +
   `aria-disabled`; no primeiro/último item, `pointer-events-none opacity-40`.
@@ -490,6 +498,12 @@ próprias e na folha centralizada da SEAD" em três casos (`page.tsx:455-527`):
   dos orçamentos temáticos, que medem sobre a **inicial**
   (`thematicBudgetContribution`, `src/lib/classification-rules.ts`). As duas
   taxas não são comparáveis; não "unificar".
+  Nas categorias por entrega (OSG Cat. 2, Climático Indireta) a contribuição
+  temática vale o **executado informado nas entregas de validações aprovadas**
+  (`deliveryExecutedValue`), não um percentual do orçamento — inclusive na
+  exportação da visão geral (`overview-export.ts`), que o recebe pela prop
+  `deliveryExecutedByAssignment` do painel. Sem o mapa, essas linhas saem
+  zeradas — não é aceitável.
 - **`ExecutionMetric`**: exatamente `initialBudget`, `updatedBudget`,
   `committed`, `liquidated`, `paid`, nessa ordem (ciclo da despesa:
   dotação → empenho → liquidação → pagamento). `available` existe em

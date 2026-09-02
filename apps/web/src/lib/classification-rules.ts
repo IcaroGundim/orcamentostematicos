@@ -209,3 +209,29 @@ export function resolveInformedExecutedValue(params: {
   const value = Number(params.informedExecutedValue);
   return Number.isFinite(value) ? value : 0;
 }
+
+/**
+ * Totais temáticos (planejado e liquidado) de uma validação, na MESMA metodologia
+ * do gauge de Informações Gerais e dos relatórios por eixo/classificação:
+ * liquidado (ou dotação inicial) da ação × ponderador. Categorias por entrega
+ * (OSG Cat. 2, Climático Indireta) contam o executado informado nas entregas.
+ * Toda tela que somar "liquidado temático" deve usar esta função — inclusive
+ * Resultados e exportações — para que os totais batam entre si.
+ */
+export function validationThematicTotals(params: {
+  theme: ThemeBudget | string;
+  classification?: string | null;
+  weightingFactor?: number | null;
+  initialBudget?: number | null;
+  liquidated?: number | null;
+  deliveries?: Array<{ executedValue?: number | null | unknown }> | null;
+}): { planned: number; liquidated: number } {
+  return thematicBudgetContribution({
+    theme: params.theme,
+    classification: params.classification ?? '',
+    weightingFactor: params.weightingFactor,
+    initialBudget: params.initialBudget ?? 0,
+    liquidated: params.liquidated ?? 0,
+    deliveryExecutedValue: sumDeliveryExecutedValues(params.deliveries ?? []),
+  });
+}

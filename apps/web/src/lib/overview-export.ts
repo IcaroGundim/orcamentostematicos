@@ -80,15 +80,21 @@ const HEADERS: Record<keyof OverviewExportRow, string> = {
   observacao: 'Observação',
 };
 
-const DELIVERY_NOTE = 'Valor por entregas validadas (não disponível na Visão Geral)';
+const DELIVERY_NOTE =
+  'Categoria por entrega: valor = executado informado nas entregas das validações aprovadas.';
 
 /**
  * Gera uma linha por (ação × tema atribuído), aplicando o ponderador aos valores
  * orçamentários. Apenas atribuições cujo tema está em `selectedThemes` entram.
+ *
+ * `deliveryExecutedByAssignment` mapeia assignmentId → executado somado nas entregas
+ * de validações aprovadas; é o que alimenta as categorias por entrega (OSG Cat. 2,
+ * Climático Indireta) — sem ele essas linhas sairiam zeradas.
  */
 export function buildOverviewRows(
   actions: BudgetAction[],
   selectedThemes: Set<ThemeBudget>,
+  deliveryExecutedByAssignment?: Map<string, number>,
 ): OverviewExportRow[] {
   const rows: OverviewExportRow[] = [];
   for (const action of actions) {
@@ -98,13 +104,15 @@ export function buildOverviewRows(
       const byDelivery = usesDeliveryValues(a.theme, a.classification);
       // Planejado ponderado é sobre a dotação inicial (planejado). A coluna de orçamento
       // atualizado ponderado (abaixo) é que usa o updatedBudget. O `liquidated` independe da
-      // base orçamentária (é liquidado × ponderador), e as categorias por entrega são mantidas.
+      // base orçamentária (é liquidado × ponderador); nas categorias por entrega, ambos
+      // valem o executado informado nas entregas das validações aprovadas.
       const { planned, liquidated } = thematicBudgetContribution({
         theme: a.theme,
         classification: a.classification,
         weightingFactor: a.weightingFactor,
         initialBudget: action.totals.initialBudget,
         liquidated: action.totals.liquidated,
+        deliveryExecutedValue: deliveryExecutedByAssignment?.get(a.id),
       });
 
       const ponderador = byDelivery

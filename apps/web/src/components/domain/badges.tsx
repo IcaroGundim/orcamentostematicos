@@ -10,6 +10,20 @@ const themeBadgeClasses: Record<ThemeBudget, string> = {
   CLIMATICO: 'border-[#065f46] bg-[#065f46] text-white',
 };
 
+/** Cor sólida da pílula de seleção por tema (HoverTabsList) — mesma família do ThemeBadge, em tom escuro. */
+export const themePillClasses: Record<ThemeBudget, string> = {
+  OSG: 'bg-[#2e1065]',
+  OCAD: 'bg-[#0e7490]',
+  CLIMATICO: 'bg-[#065f46]',
+};
+
+/** Cor do texto do item de seleção fora de destaque, por tema. */
+export const themeTabIdleClasses: Record<ThemeBudget, string> = {
+  OSG: 'text-[#1e0a3c] data-active:text-[#1e0a3c] hover:text-[#1e0a3c]',
+  OCAD: 'text-[#164e63] data-active:text-[#164e63] hover:text-[#164e63]',
+  CLIMATICO: 'text-[#065f46] data-active:text-[#065f46] hover:text-[#065f46]',
+};
+
 export function ThemeBadge({ theme, className }: { theme: ThemeBudget; className?: string }) {
   const Icon = theme === 'OCAD' ? GraduationCapIcon : theme === 'OSG' ? VenusIcon : CloudSunIcon;
   return (
