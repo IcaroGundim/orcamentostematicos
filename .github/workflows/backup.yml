@@ -35,6 +35,7 @@ jobs:
       # falhando 65 vezes seguidas, desde a primeira execução. Mesmo passo do folha.yml.
       - name: Gerar Prisma Client
         run: npx prisma generate
+        working-directory: apps/web
 
       - name: Gerar backup
         env:

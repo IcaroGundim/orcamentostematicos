@@ -59,6 +59,7 @@ jobs:
 
       - name: Gerar Prisma Client
         run: npx prisma generate
+        working-directory: apps/web
 
       # Rede de segurança da escrita automática. Não roda no --dry-run, que não toca
       # no banco. Se o backup falhar, o job PARA aqui e nada é publicado: publicar sem
