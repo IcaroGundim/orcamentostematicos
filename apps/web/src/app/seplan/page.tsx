@@ -200,6 +200,15 @@ type DeleteImportResult = {
 const EARLIEST_IMPORT_YEAR = 2025;
 
 /**
+ * Quantas atualizações da base o painel mostra antes de exigir "Ver todas". As
+ * revisões nascem a cada confirmação de import (`store.ts`) e o SICAF produz uma
+ * prévia confirmável todo dia útil, então a lista cresce sozinha — mostrar tudo
+ * fazia o painel virar uma pilha. O histórico completo continua a um clique: ele é
+ * o rastro de quando a base mudou e por quem, e não deve sumir da tela.
+ */
+const VISIBLE_REVISIONS = 3;
+
+/**
  * Exercícios oferecidos na importação: do próximo ano (para carregar o QDD antes de
  * o exercício começar) até `EARLIEST_IMPORT_YEAR`. O limite superior vem do relógio
  * para não exigir manutenção anual.
@@ -419,6 +428,7 @@ function SeplanPageContent() {
   const [importComparisonOnly, setImportComparisonOnly] = useState(false);
   const [importHistory, setImportHistory] = useState<BudgetImport[]>([]);
   const [importRevisions, setImportRevisions] = useState<BudgetImportRevision[]>([]);
+  const [showAllRevisions, setShowAllRevisions] = useState(false);
   const [inactiveActions, setInactiveActions] = useState<InactiveBudgetAction[]>([]);
   const [executionStructure, setExecutionStructure] = useState<ExecutionStructure>({ organizations: [] });
   const [governmentStructure, setGovernmentStructure] = useState<GovernmentStructure>({ organizations: [] });
@@ -1093,6 +1103,23 @@ function SeplanPageContent() {
     }
   }
 
+  // Ao selecionar uma ação na curadoria, o card de classificação salta direto para o
+  // tema em que a ação já está classificada; se o tema em uso já a classificar,
+  // permanece nele. Ações sem classificação mantêm o tema corrente (a escolha cabe
+  // ao usuário). O efeito de sincronização abaixo repõe os campos gravados desse tema.
+  const handleCurationSelectAction = useCallback((id: string) => {
+    setSelectedActionId(id);
+    setAssignment((current) => {
+      const action = actions.find((a) => a.id === id);
+      const hasCurrentTheme = action?.assignments.some((a) => a.theme === current.theme) ?? false;
+      const nextTheme =
+        !hasCurrentTheme && action?.assignments.length
+          ? action.assignments[0].theme
+          : current.theme;
+      return { ...current, actionId: id, theme: nextTheme };
+    });
+  }, [actions]);
+
   const columns = useMemo<ColumnDef<BudgetAction>[]>(
     () => [
       {
@@ -1134,8 +1161,7 @@ function SeplanPageContent() {
           <button
             className="max-w-xl text-left text-sm font-medium text-primary hover:underline"
             onClick={() => {
-              setSelectedActionId(row.original.id);
-              setAssignment((current) => ({ ...current, actionId: row.original.id }));
+              handleCurationSelectAction(row.original.id);
               setActiveSection('curation');
             }}
           >
@@ -1183,7 +1209,7 @@ function SeplanPageContent() {
           ),
       },
     ],
-    [expandedActionId],
+    [expandedActionId, handleCurationSelectAction],
   );
 
   const tableColumnFilters = useMemo<ColumnFiltersState>(() => {
@@ -1482,11 +1508,6 @@ function SeplanPageContent() {
       justification: existing?.justification ?? '',
     }));
   }, [selectedActionId, assignment.theme, actions]);
-
-  const handleCurationSelectAction = useCallback((id: string) => {
-    setSelectedActionId(id);
-    setAssignment((current) => ({ ...current, actionId: id }));
-  }, []);
 
   const handleCurationAssignmentChange = useCallback((next: AssignmentForm) => {
     setAssignment((current) => ({ ...current, ...next }));
@@ -2130,37 +2151,53 @@ function SeplanPageContent() {
                         {importRevisions.length === 0 ? (
                           <p className="text-sm text-muted-foreground">Nenhuma atualização registrada.</p>
                         ) : (
-                          <ScrollArea className="max-h-80">
-                            <div className="flex flex-col gap-2 pr-3">
-                              {importRevisions.map((revision) => (
-                                <div key={revision.id} className="rounded-lg border p-3 text-sm">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge variant="outline">
-                                      {revision.source === 'SICAF'
-                                        ? 'SICAF'
-                                        : revision.source === 'MIGRATED'
-                                          ? 'Migrada'
-                                          : 'Manual'}
-                                    </Badge>
-                                    <span className="font-medium">
-                                      {formatPeriod(revision.referenceMonth, revision.year, revision.periodType)}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(revision.createdAt).toLocaleString('pt-BR')}
-                                    </span>
+                          <>
+                            <ScrollArea className="max-h-80">
+                              <div className="flex flex-col gap-2 pr-3">
+                                {importRevisions
+                                  .slice(0, showAllRevisions ? undefined : VISIBLE_REVISIONS)
+                                  .map((revision) => (
+                                  <div key={revision.id} className="rounded-lg border p-3 text-sm">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline">
+                                        {revision.source === 'SICAF'
+                                          ? 'SICAF'
+                                          : revision.source === 'MIGRATED'
+                                            ? 'Migrada'
+                                            : 'Manual'}
+                                      </Badge>
+                                      <span className="font-medium">
+                                        {formatPeriod(revision.referenceMonth, revision.year, revision.periodType)}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {new Date(revision.createdAt).toLocaleString('pt-BR')}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 truncate text-xs text-muted-foreground" title={revision.filename}>
+                                      {revision.filename}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {revision.actionCount.toLocaleString('pt-BR')} ações ·{' '}
+                                      {revision.rowCount.toLocaleString('pt-BR')} linhas
+                                      {revision.updatedByName ? ` · ${revision.updatedByName}` : ''}
+                                    </p>
                                   </div>
-                                  <p className="mt-1 truncate text-xs text-muted-foreground" title={revision.filename}>
-                                    {revision.filename}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {revision.actionCount.toLocaleString('pt-BR')} ações ·{' '}
-                                    {revision.rowCount.toLocaleString('pt-BR')} linhas
-                                    {revision.updatedByName ? ` · ${revision.updatedByName}` : ''}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                            {importRevisions.length > VISIBLE_REVISIONS ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-2"
+                                onClick={() => setShowAllRevisions((current) => !current)}
+                              >
+                                {showAllRevisions
+                                  ? 'Ver menos'
+                                  : `Ver todas (${importRevisions.length.toLocaleString('pt-BR')})`}
+                              </Button>
+                            ) : null}
+                          </>
                         )}
                       </CardContent>
                     </Card>
