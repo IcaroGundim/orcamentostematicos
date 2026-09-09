@@ -43,6 +43,20 @@ export async function POST(req: NextRequest) {
     return badRequest(err?.message ?? 'Erro ao processar o arquivo.');
   }
 
+  // Prévia de upload manual guarda o QDD inteiro (~1 MB de JSON) e só é apagada
+  // pelo `confirm`. Prévia aberta e abandonada ficava para sempre: 7 órfãs, a mais
+  // antiga de 4 meses, foram encontradas em produção. Aqui a limpeza é por IDADE,
+  // não por prefixo como em `from-sicaf`: aquele caminho é um slot único de máquina,
+  // enquanto duas SEPLAN podem legitimamente ter prévias abertas ao mesmo tempo —
+  // e não há coluna de dono em `ImportPreview` para restringir por usuário.
+  const PREVIEW_TTL_MS = 24 * 60 * 60 * 1000;
+  await prisma.importPreview.deleteMany({
+    where: {
+      id: { startsWith: 'preview-' },
+      createdAt: { lt: new Date(Date.now() - PREVIEW_TTL_MS) },
+    },
+  });
+
   const previewId = createId('preview');
   await prisma.importPreview.create({ data: { id: previewId, data: parsed as any } });
 
