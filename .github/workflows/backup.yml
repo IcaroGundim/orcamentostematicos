@@ -30,6 +30,12 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      # Sem este passo o runner não tem o client gerado e o backup.mjs morre em
+      # "Named export 'PrismaClient' not found" — foi o que manteve este workflow
+      # falhando 65 vezes seguidas, desde a primeira execução. Mesmo passo do folha.yml.
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+
       - name: Gerar backup
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
