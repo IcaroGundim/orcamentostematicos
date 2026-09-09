@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { planQddReplacement, type ExistingReplacementAction } from './qdd-replacement';
+import {
+  assessAutoPublish,
+  MAX_AUTO_INACTIVATE,
+  planQddReplacement,
+  type ExistingReplacementAction,
+  type QddReplacementPlan,
+} from './qdd-replacement';
 
 function action(overrides: Partial<ExistingReplacementAction> = {}): ExistingReplacementAction {
   return {
@@ -62,5 +68,67 @@ describe('planQddReplacement', () => {
     const duplicate = action({ id: 'action-2' });
     expect(() => planQddReplacement([action(), duplicate], [])).toThrow(/duplicadas/);
     expect(() => planQddReplacement([], [action(), duplicate])).toThrow(/duplicadas/);
+  });
+});
+
+function plan(overrides: Partial<QddReplacementPlan> = {}): QddReplacementPlan {
+  return { matches: [], createIndexes: [], inactivateIds: [], deleteIds: [], ...overrides };
+}
+
+describe('assessAutoPublish', () => {
+  it('libera a coleta diária típica, que só acrescenta linhas', () => {
+    const verdict = assessAutoPublish({
+      plan: plan(),
+      currentActionCount: 1730,
+      incomingActionCount: 1730,
+    });
+    expect(verdict).toEqual({ safe: true });
+  });
+
+  it('libera crescimento da base', () => {
+    const verdict = assessAutoPublish({
+      plan: plan({ createIndexes: [0, 1] }),
+      currentActionCount: 1730,
+      incomingActionCount: 1732,
+    });
+    expect(verdict.safe).toBe(true);
+  });
+
+  it('barra quando ações com curadoria sumiriam em massa', () => {
+    const verdict = assessAutoPublish({
+      plan: plan({ inactivateIds: Array.from({ length: MAX_AUTO_INACTIVATE + 1 }, (_, i) => `a${i}`) }),
+      currentActionCount: 1730,
+      incomingActionCount: 1730,
+    });
+    expect(verdict.safe).toBe(false);
+    expect(verdict.safe === false && verdict.reason).toMatch(/curadoria/);
+  });
+
+  it('tolera churn pontual dentro do limite', () => {
+    const verdict = assessAutoPublish({
+      plan: plan({ inactivateIds: ['a1'] }),
+      currentActionCount: 1730,
+      incomingActionCount: 1729,
+    });
+    expect(verdict.safe).toBe(true);
+  });
+
+  it('barra exportação parcial do SICAF', () => {
+    const verdict = assessAutoPublish({
+      plan: plan(),
+      currentActionCount: 1730,
+      incomingActionCount: 200,
+    });
+    expect(verdict.safe).toBe(false);
+    expect(verdict.safe === false && verdict.reason).toMatch(/parcial/);
+  });
+
+  it('não aplica o piso quando ainda não há base vigente', () => {
+    const verdict = assessAutoPublish({
+      plan: plan(),
+      currentActionCount: 0,
+      incomingActionCount: 1730,
+    });
+    expect(verdict.safe).toBe(true);
   });
 });

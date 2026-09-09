@@ -836,7 +836,10 @@ async function updateActionsInBatches(tx: any, rows: Array<{ id: string; action:
 export async function replaceImportedBudget(
   importRecord: any,
   actions: any[],
-  audit: { updatedBy: string; source: 'MANUAL' | 'SICAF'; confirmationKey: string },
+  // `updatedBy` é nulo quando quem atualiza é o job de coleta, não uma pessoa: a
+  // publicação automática diária não tem usuário por trás. O painel de revisões já
+  // trata a ausência de nome, e a coluna é nullable no schema.
+  audit: { updatedBy: string | null; source: 'MANUAL' | 'SICAF'; confirmationKey: string },
   comparisonOnly: boolean,
 ): Promise<BudgetReplacementResult> {
   return prisma.$transaction(async (tx) => {

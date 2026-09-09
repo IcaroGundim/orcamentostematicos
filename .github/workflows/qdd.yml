@@ -2,8 +2,17 @@ name: Coleta do QDD (SICAF)
 
 # Puxa o QDD "Saldo Retroativo — Execução" (vTIPOREL=2) do SICAF/SEFAZ, baixa o Excel
 # nativo e o entrega à rota /imports/qdd/from-sicaf do app, que o processa com o MESMO
-# parser do upload manual e grava uma PRÉVIA. Nada entra no orçamento sem a SEPLAN
-# confirmar na tela — ver docs/ingestao-qdd-sicaf.md.
+# parser do upload manual e grava uma PRÉVIA. Em seguida pede a publicação automática
+# (/imports/qdd/auto-publish), para o painel ficar atualizado sem intervenção.
+#
+# A publicação é CONDICIONAL: exercício ainda sem base, QDD encolhendo ou curadoria
+# sumindo em massa fazem a rota recusar e deixar a prévia para a SEPLAN confirmar na
+# tela. Ver docs/ingestao-qdd-sicaf.md.
+#
+# O BACKUP roda ANTES da coleta, e não só no backup.yml noturno: esta é uma escrita não
+# vigiada em produção, num banco cuja retenção point-in-time é de ~6h. Sem o dump do dia
+# imediatamente antes, um QDD ruim publicado às 05:00 só seria notado horas depois, já
+# fora da janela de recuperação.
 #
 # Roda no Actions (não na Vercel) porque a raspagem depende de sessão GeneXus e do TLS
 # da SEFAZ, como a coleta da folha. É idempotente: cada execução substitui a prévia do
@@ -25,6 +34,10 @@ on:
         required: false
         default: 'false'
 
+# Necessário para commitar o backup que precede a publicação.
+permissions:
+  contents: write
+
 concurrency:
   group: coleta-qdd
   cancel-in-progress: false
@@ -43,6 +56,49 @@ jobs:
 
       - name: Instalar dependências
         run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+
+      # Rede de segurança da escrita automática. Não roda no --dry-run, que não toca
+      # no banco. Se o backup falhar, o job PARA aqui e nada é publicado: publicar sem
+      # ponto de retorno é exatamente o que causou a perda de curadoria no passado.
+      - name: Backup antes de publicar
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node apps/web/scripts/backup.mjs
+
+      # Não basta o script sair com 0: o que a publicação precisa é do dump EXISTINDO.
+      # `backup.mjs` grava em backups/<AAAA-MM-DD> com a data em UTC (toISOString), a
+      # mesma que `date -u` produz aqui. Sem esta conferência, a promessa de "não publica
+      # sem backup" ficaria valendo só por confiança no exit code.
+      - name: Conferir que o dump existe
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          dump="backups/$(date -u +%Y-%m-%d)/curadoria.json"
+          if [ ! -s "$dump" ]; then
+            echo "::error::Backup ausente ou vazio em $dump — nada será publicado."
+            exit 1
+          fi
+          echo "Backup conferido: $dump ($(wc -c < "$dump") bytes)."
+
+      # `backup.yml` (06:00 UTC) e este job (10:00 UTC) escrevem no mesmo backups/<data>/,
+      # então o push precisa tolerar que o outro tenha commitado antes — sem o rebase,
+      # o segundo do dia falharia como non-fast-forward e travaria a coleta.
+      - name: Commit do backup
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backups/
+          if git diff --staged --quiet; then
+            echo "Backup do dia já versionado."
+          else
+            git commit -m "chore(backup): antes da coleta do QDD $(date -u +%Y-%m-%d)"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+            git push
+          fi
 
       - name: Coletar QDD do SICAF
         env:

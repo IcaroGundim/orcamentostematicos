@@ -1,7 +1,12 @@
 // Coleta o QDD "Saldo Retroativo — Execução" (vTIPOREL=2) do SICAF/SEFAZ-AC e
-// entrega o Excel nativo à rota /imports/qdd/from-sicaf do app. A rota usa o mesmo
-// parser do upload manual e cria somente uma PRÉVIA, ainda sujeita à confirmação da
-// SEPLAN.
+// entrega o Excel nativo à rota /imports/qdd/from-sicaf do app, que usa o mesmo parser
+// do upload manual e cria uma PRÉVIA. Em seguida chama /imports/qdd/auto-publish, que
+// publica essa prévia quando o delta é inofensivo — é o que mantém o painel atualizado
+// sem ninguém clicar.
+//
+// A publicação automática NÃO é incondicional: exercício inédito, QDD encolhendo ou
+// ações com curadoria sumindo em massa fazem a rota recusar e devolver a decisão à
+// SEPLAN, com a prévia intacta. Ver docs/ingestao-qdd-sicaf.md.
 //
 // Uso:
 //   SICAF_CPF=... SICAF_SENHA=... SICAF_JOB_TOKEN=... APP_URL=https://... \
@@ -554,9 +559,52 @@ async function enviarAoApp({ nome, buffer }) {
   }
   console.log(
     `  prévia criada: ${json.actionCount ?? '?'} ações, ` +
-      `${json.organizationsCount ?? '?'} órgãos (exercício ${json.year}). ` +
-      'Confirme na tela da SEPLAN.',
+      `${json.organizationsCount ?? '?'} órgãos (exercício ${json.year}).`,
   );
+}
+
+/**
+ * Segundo passo: pede ao app que publique a prévia, se o delta for inofensivo.
+ *
+ * Chamada separada de propósito. A rota `from-sicaf` gasta boa parte dos 60s da
+ * Vercel baixando e parseando ~7 mil linhas; somar a gravação na mesma invocação
+ * estoura o limite. São duas janelas de 60s, como no fluxo humano (prévia, confirma).
+ *
+ * Uma recusa NÃO derruba o job: a prévia continua de pé e a SEPLAN confirma na tela.
+ * Falhar aqui só geraria alarme vermelho para um caso em que a decisão certa é
+ * justamente um humano olhar.
+ */
+async function publicarNoApp() {
+  console.log('• Pedindo a publicação automática…');
+  const res = await fetch(`${APP_URL}/api/imports/qdd/auto-publish`, {
+    method: 'POST',
+    headers: { 'x-job-token': JOB_TOKEN, 'content-type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  const texto = await res.text();
+  if (!res.ok) {
+    dumpDebug('app-recusou-publicacao', texto);
+    throw new Error(`App falhou ao publicar (HTTP ${res.status}): ${texto.slice(0, 400)}`);
+  }
+  let json;
+  try {
+    json = JSON.parse(texto);
+  } catch {
+    throw new Error('O app respondeu a publicação com um corpo inválido.');
+  }
+
+  if (json.published) {
+    console.log(
+      `  publicado: ${json.updatedActions ?? 0} ações atualizadas, ` +
+        `${json.createdActions ?? 0} criadas, ${json.inactivatedActions ?? 0} inativadas, ` +
+        `${json.reactivatedActions ?? 0} reativadas (exercício ${json.year}).`,
+    );
+    return;
+  }
+
+  console.log(`  NÃO publicado — ${json.reason}`);
+  console.log('  A prévia segue pendente para a SEPLAN conferir na tela.');
 }
 
 async function main() {
@@ -575,6 +623,7 @@ async function main() {
 
   if (INSECURE_TLS) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   await enviarAoApp(excel);
+  await publicarNoApp();
   console.log('\n✓ Coleta concluída.');
 }
 

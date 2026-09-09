@@ -1,26 +1,72 @@
 # Ingestão automática do QDD a partir do SICAF
 
 Automatiza a alimentação do QDD ("Saldo Retroativo — Execução") no Orçamentos Temáticos,
-para que a SEPLAN **não precise mais exportar e enviar o arquivo** manualmente. A gravação
-no banco continua sob **confirmação humana** — nada entra no orçamento sozinho.
+para que a SEPLAN **não precise mais exportar e enviar o arquivo** manualmente. Desde
+setembro/2026 a coleta também **publica sozinha** quando o delta é inofensivo, para o
+painel refletir a execução do dia sem ninguém clicar.
+
+Publicar sozinho não é publicar às cegas: a rota mede o que a gravação faria e **recusa**
+os casos perigosos, devolvendo a decisão à SEPLAN com a prévia intacta. Ver
+[Quando a publicação é automática](#quando-a-publicação-é-automática).
 
 ## Como funciona
 
 ```
-GitHub Actions (.github/workflows/qdd.yml)
+GitHub Actions (.github/workflows/qdd.yml)  — dias úteis, 10:00 UTC
+  ├─ backup.mjs → confere que backups/<data>/curadoria.json existe → commit + push
+  │     qualquer um dos três falhando PARA o job, antes de qualquer escrita
   └─ node apps/web/scripts/fetch-sicaf-qdd.mjs
        1. login no SICAF (app.sicaf) com SICAF_CPF / SICAF_SENHA
        2. confirma/troca o exercício no seletor GeneXus do SICAF
        3. abre app.quadrodetalhadodespesa e dispara DOEXCEL (vTIPOREL=2)
        4. baixa o Excel e confere formato, cabeçalho, exercício e linhas
-       5. POST multipart → APP_URL/api/imports/qdd/from-sicaf  (header x-job-token)
+       5. POST multipart → APP_URL/api/imports/qdd/from-sicaf   (header x-job-token)
+       6. POST           → APP_URL/api/imports/qdd/auto-publish (header x-job-token)
                                    │
 Vercel (app)                       ▼
-  /api/imports/qdd/from-sicaf → parseQdd (o MESMO do upload) → ImportPreview "sicafpreview-…"
+  /imports/qdd/from-sicaf   → parseQdd (o MESMO do upload) → ImportPreview "sicafpreview-…"
+  /imports/qdd/auto-publish → planQddReplacement → assessAutoPublish
                                    │
-Tela da SEPLAN                     ▼
-  banner "Prévia do SICAF pronta" → Revisar → reconciliação → Confirmar (/imports/qdd/confirm)
+                    ┌──────────────┴──────────────┐
+              delta limpo                    delta suspeito
+                    │                              │
+       replaceImportedBudget                 prévia preservada
+       + syncStructureFromImport                   │
+       + reconcileExecutors            banner "Prévia do SICAF pronta" na tela
+       (prévia apagada)                → Revisar → Confirmar (/imports/qdd/confirm)
 ```
+
+**Por que duas chamadas e não uma.** A rota `from-sicaf` já gasta boa parte dos 60 s de
+`maxDuration` da Vercel baixando e parseando ~7 mil linhas. Somar a gravação na mesma
+invocação estoura o limite. Duas chamadas = duas janelas de 60 s, espelhando o que o
+fluxo humano sempre fez (prévia, depois confirmação).
+
+**Por que uma rota nova e não o `confirm`.** O `confirm` é a porta da SEPLAN, guardada por
+sessão e papel. Afrouxá-lo para aceitar um token de job alargaria uma fronteira de
+autorização humana para todos os chamadores. `auto-publish` tem autorização própria e
+escopo restrito.
+
+## Quando a publicação é automática
+
+`assessAutoPublish` (`src/lib/qdd-replacement.ts`, coberto por testes) decide. Ela **não**
+repete o que já está garantido em outro lugar — `planQddReplacement` nunca apaga ação com
+curadoria, `syncStructureFromImport` só faz upsert e o `fiscalYear.upsert` não altera a
+política de um exercício existente. O que sobra de perigoso é o QDD **encolher**.
+
+Recusa, e devolve à SEPLAN, quando:
+
+| Condição | Limite | Por quê |
+|---|---|---|
+| Ações **com curadoria** sumiriam do QDD | > 5 (`MAX_AUTO_INACTIVATE`) | Inativar ação marcada a tira de todos os painéis e totais. Em operação normal esse número é **zero**. |
+| Contagem de ações despenca | < 90% da base (`MIN_ACTION_COUNT_RATIO`) | Exportação parcial do SICAF passa na checagem de "não vazio" do coletor, mas inativaria a curadoria em massa. |
+| Exercício ainda **sem base vigente** | qualquer | A primeira importação do ano define `comparisonOnly`, decisão reservada à SEPLAN. |
+| Chave lógica duplicada no arquivo | qualquer | Defeito do arquivo; `planQddReplacement` aborta. |
+
+Recusa **não** derruba o job: responde `200` com `published: false` e o motivo, e a prévia
+segue pendente. Falhar o job por um QDD suspeito só produziria alarme vermelho para o caso
+em que a decisão certa é justamente um humano olhar.
+
+Ajustar os limites: as duas constantes ficam no topo de `assessAutoPublish`.
 
 **Por que baixar o Excel em vez de ler um JSON do SICAF?** O único trecho do sistema
 validado contra dados reais é o `parseQdd` (ver `docs/automacao-execucao-transparencia.md`
@@ -31,8 +77,17 @@ fora essa garantia.
 **Por que Actions e não Vercel?** A raspagem depende de sessão GeneXus e do TLS da SEFAZ,
 como a coleta da folha (`folha.yml`). O serverless da Vercel não é o lugar para isso.
 
-**Por que confirmação humana?** O banco é produção com retenção de ~6h e já teve perda
-silenciosa de curadoria (ver `CLAUDE.md`). A prévia é barata e reversível; a escrita, não.
+**Por que backup antes de publicar?** O banco é produção com retenção point-in-time de
+~6h e já teve perda silenciosa de curadoria (ver `CLAUDE.md`). Enquanto a confirmação era
+humana, a pessoa que clicava era a rede. Sem ela, o dump commitado em `backups/<data>/`
+logo antes da coleta passa a ser a única — por isso o job **para** se o dump não for
+gerado, não existir em disco ou não for para o repositório, em vez de publicar assim
+mesmo. Um QDD ruim publicado às 05:00 (Rio Branco) só seria notado horas depois, muito
+além da janela de recuperação do Neon.
+
+Parar nesse ponto é seguro por construção: nada foi escrito ainda, então perder o dump
+com o runner não custa nada — o job simplesmente não publica naquele dia e o GitHub
+avisa da falha.
 
 ## Segredos a configurar
 
