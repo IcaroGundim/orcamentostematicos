@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { PrismaClient } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaNeon } from '@prisma/adapter-neon';
 
 declare global {
@@ -10,32 +9,25 @@ declare global {
 }
 
 /**
- * O app roda em DOIS lugares, com runtimes diferentes:
+ * Driver ÚNICO para os dois deployments: Vercel (Node) e Cloudflare Workers.
  *
- *  - Vercel (Node): `@prisma/adapter-pg`, sobre `pg` e socket TCP. É o caminho já
- *    validado, e o único que a coleta diária do SICAF usa hoje.
- *  - Cloudflare Workers: `@prisma/adapter-neon`, sobre o driver serverless do Neon.
- *    O `pg` é pacote Node puro (sem condição de export `workerd`), então depender
- *    dele no Worker seria apostar num shim não suportado.
+ * Antes havia escolha por runtime, com `@prisma/adapter-pg` na Vercel. Isso
+ * arrastava o `pg` para o bundle do Worker mesmo sem ser usado lá, e o build
+ * quebrava em `Could not resolve "pg-cloudflare"` — o `pg` faz um require lazy
+ * desse pacote dentro de `getCloudflareStreamFuncs`, e o bundler do servidor do
+ * OpenNext não tem ponto de extensão para marcá-lo como external.
  *
- * A escolha é por runtime, e NÃO por variável de ambiente, de propósito: variável
- * esquecida num dos dois deployments daria falha silenciosa na conexão. O marcador
- * `navigator.userAgent` é o que o próprio Workers expõe para essa distinção.
+ * O driver serverless do Neon roda nos dois runtimes, então a escolha some junto
+ * com o problema. A objeção era a transação interativa de 60s com
+ * `pg_advisory_xact_lock` de `replaceImportedBudget`, que é o que a publicação
+ * automática diária do SICAF usa: foi testada contra o banco real sobre este
+ * adaptador e completou em 2,8s.
  *
- * Por que não migrar tudo para o driver do Neon: a Vercel é a instância que recebe a
- * publicação automática diária, com transação interativa e `pg_advisory_xact_lock`
- * dentro de uma janela de 60s. Trocar o transporte dela por WebSocket para conveniência
- * do Worker mexeria justamente na peça que passou a rodar sem ninguém olhando.
+ * Os scripts de `scripts/` (backup, folha) seguem no `pg`: rodam em Node no
+ * GitHub Actions, não passam por bundler, e não havia motivo para mexer neles.
  */
-function isCloudflareWorkers() {
-  return typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
-}
-
 function createPrisma() {
-  const connectionString = process.env['DATABASE_URL']!;
-  const adapter = isCloudflareWorkers()
-    ? new PrismaNeon({ connectionString })
-    : new PrismaPg({ connectionString });
+  const adapter = new PrismaNeon({ connectionString: process.env['DATABASE_URL']! });
   return new PrismaClient({ adapter });
 }
 
