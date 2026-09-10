@@ -13,21 +13,27 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const alvo = resolve(webDir, 'src/lib/prisma-client.ts');
-const variante = resolve(webDir, 'src/lib/prisma-client.workerd.ts');
+// Pares [arquivo versionado (Node), variante workerd].
+const trocas = [
+  ['src/lib/prisma-client.ts', 'src/lib/prisma-client.workerd.ts'],
+  ['src/lib/prisma.ts', 'src/lib/prisma.workerd.ts'],
+].map(([alvo, variante]) => ({
+  alvo: resolve(webDir, alvo),
+  variante: resolve(webDir, variante),
+}));
 
-const original = readFileSync(alvo, 'utf8');
+const originais = trocas.map(({ alvo }) => readFileSync(alvo, 'utf8'));
 let code = 1;
 try {
-  copyFileSync(variante, alvo);
-  console.log('[cf-build] prisma-client.ts -> variante workerd (@prisma/client/edge)');
+  for (const { alvo, variante } of trocas) copyFileSync(variante, alvo);
+  console.log('[cf-build] prisma-client.ts + prisma.ts -> variantes workerd');
   code = spawnSync('opennextjs-cloudflare', ['build'], {
     cwd: webDir,
     stdio: 'inherit',
     shell: true,
   }).status ?? 1;
 } finally {
-  writeFileSync(alvo, original);
-  console.log('[cf-build] prisma-client.ts restaurado para a variante de Node');
+  trocas.forEach(({ alvo }, i) => writeFileSync(alvo, originais[i]));
+  console.log('[cf-build] arquivos restaurados para as variantes de Node');
 }
 process.exit(code);
