@@ -12,8 +12,8 @@
     "build": "npm run build -w apps/web",
     "start": "npm run start -w apps/web",
     "lint": "npm run lint -w apps/web",
-    "cf:build": "npm run cf:build -w apps/web",
-    "cf:deploy": "npm run cf:deploy -w apps/web"
+    "proxy:dev": "wrangler dev --config workers/proxy/wrangler.jsonc",
+    "proxy:deploy": "wrangler deploy --config workers/proxy/wrangler.jsonc"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-darwin-arm64": "^4.3.0",

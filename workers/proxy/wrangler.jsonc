@@ -1,0 +1,16 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"main": "index.ts",
+	"name": "orcamentostematicos",
+	"compatibility_date": "2026-09-10",
+
+	// Sem `nodejs_compat`: este Worker só usa fetch, Request, Response e URL, que
+	// são APIs do próprio runtime. Quanto menos superfície, menos CPU no cold start.
+	"vars": {
+		"ORIGEM": "https://orcamentostematicos.vercel.app"
+	},
+
+	"observability": {
+		"enabled": true
+	}
+}
