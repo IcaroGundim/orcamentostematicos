@@ -19,7 +19,6 @@ export type ResultsExportRow = {
   entregas: number;
   valorPlanejadoPonderado: number;
   valorLiquidadoTematico: number;
-  valorExecutado: number;
   ciclo: string;
   ano: number;
 };
@@ -52,7 +51,6 @@ const HEADERS: Record<keyof ResultsExportRow, string> = {
   entregas: 'Entregas',
   valorPlanejadoPonderado: 'Planejado ponderado',
   valorLiquidadoTematico: 'Liquidado temático',
-  valorExecutado: 'Valor executado informado',
   ciclo: 'Ciclo',
   ano: 'Ano',
 };
@@ -72,7 +70,6 @@ const COLUMN_ORDER: (keyof ResultsExportRow)[] = [
   'entregas',
   'valorPlanejadoPonderado',
   'valorLiquidadoTematico',
-  'valorExecutado',
   'ciclo',
   'ano',
 ];
@@ -105,7 +102,6 @@ export function buildResultsRows(validations: ValidationItem[]): ResultsExportRo
       entregas: v.deliveries?.length ?? 0,
       valorPlanejadoPonderado: totals.planned,
       valorLiquidadoTematico: totals.liquidated,
-      valorExecutado: v.informedExecutedValue ?? 0,
       ciclo: v.cycle?.name ?? '',
       ano: v.cycle?.year ?? v.action?.year ?? 0,
     };
@@ -142,8 +138,7 @@ const FLAT_HEADERS = [
   'Ano',
   'Planejado ponderado',
   'Liquidado temático',
-  'Valor executado da entrega',
-  'Valor executado informado',
+  'Planejado da Entrega',
   'Total de entregas',
   'Entrega (nome)',
   'Descrição da entrega',
@@ -170,13 +165,11 @@ export function buildFlatRows(validations: ValidationItem[]): FlatRow[] {
     const validationTotals = {
       'Planejado ponderado': totals.planned,
       'Liquidado temático': totals.liquidated,
-      'Valor executado informado': v.informedExecutedValue ?? 0,
       'Total de entregas': v.deliveries?.length ?? 0,
     };
     const blankTotals = {
       'Planejado ponderado': null,
       'Liquidado temático': null,
-      'Valor executado informado': null,
       'Total de entregas': null,
     };
     const base: FlatRow = {
@@ -200,7 +193,7 @@ export function buildFlatRows(validations: ValidationItem[]): FlatRow[] {
       out.push({
         ...base,
         ...validationTotals,
-        'Valor executado da entrega': null,
+        'Planejado da Entrega': null,
         'Entrega (nome)': '',
         'Descrição da entrega': '',
         Quantidade: null,
@@ -212,7 +205,7 @@ export function buildFlatRows(validations: ValidationItem[]): FlatRow[] {
         out.push({
           ...base,
           ...(index === 0 ? validationTotals : blankTotals),
-          'Valor executado da entrega': typeof d.executedValue === 'number' ? d.executedValue : null,
+          'Planejado da Entrega': typeof d.executedValue === 'number' ? d.executedValue : null,
           'Entrega (nome)': d.name?.trim() ?? '',
           'Descrição da entrega': d.description ?? '',
           Quantidade: d.quantity ?? 0,
