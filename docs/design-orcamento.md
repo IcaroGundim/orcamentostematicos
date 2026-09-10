@@ -344,13 +344,15 @@ telas pequenas que a justifique — não por preferência estética.
 | Fundo de cabeçalho de tabela | `bg-stone-50` |
 | Texto secundário | `text-muted-foreground` |
 | Base das barras de participação | `bg-muted` / `bg-stone-100` |
+| Botão "Limpar filtros" com filtro ativo | `variant="destructive"` (`--destructive`, `oklch(0.55 0.18 28)`) |
 
 Os três tipos de visualização novos (seção 7.7) usam exatamente as mesmas 5 cores
 da execução — nunca cores novas fora desta tabela.
 
 Regra: **nenhuma cor fora desta paleta** — em especial nada de azul/roxo/vermelho
 de frameworks, nada de `text-primary`/`bg-primary` do tema em elementos de
-destaque do módulo.
+destaque do módulo. A **única** exceção de vermelho é o botão "Limpar filtros"
+quando há filtro ativo (seção 9, item 24); não estendê-la a outros elementos.
 
 ### 4.2 Tipografia e números
 
@@ -999,6 +1001,13 @@ documentar aqui.
 23. **Leituras toleram exercício inexistente, escritas não.** Um link antigo com
     `?exercicio=` de um ano que não existe abre no corrente em vez de quebrar; uma
     rota de escrita sem exercício, ou com um inexistente, é recusada com 400.
+24. **"Limpar filtros" fica vermelho com filtro ativo.** É a única cor fora da
+    paleta verde/bege do módulo, pedida pelo dono do produto em 2026-09-10 — não
+    é slop, não reverter. Usa `variant="destructive"` do `Button` (não uma classe
+    `bg-red-*` ad hoc) e alterna com `hasFilters`, o mesmo predicado que já
+    governa o `disabled`. Assim o vermelho nunca aparece no estado desabilitado,
+    que continuaria `outline` e sairia rosa-lavado sob `disabled:opacity-50`. O
+    botão segue sempre montado para o bloco de filtros não mudar de altura.
 
 ## 10. Proibições explícitas (anti-slop)
 
@@ -1008,7 +1017,7 @@ Violação de qualquer item é motivo para rejeitar a mudança:
    escrita neste documento. Recharts é a única biblioteca de gráficos do módulo.
 2. **Nenhuma cor fora da paleta da seção 4.1.** Em especial: nada de azul/roxo/
    vermelho "SaaS", nada de `text-primary`/`bg-primary` do tema em elementos de
-   destaque.
+   destaque. Única exceção de vermelho: "Limpar filtros" ativo (seção 9, item 24).
 3. **Nenhum arredondamento ou sombra** nos painéis (`rounded-none`,
    `shadow-none`); nenhum `border-radius` novo em cards do módulo.
 4. **Nenhuma moda de UI**: gradientes, glassmorphism, blur, animações de

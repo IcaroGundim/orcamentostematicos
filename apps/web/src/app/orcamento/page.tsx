@@ -862,8 +862,12 @@ function OrcamentoPageContent() {
               desabilitado quando não há nada a limpar.
             */}
             <Button
-              variant="outline"
+              variant={hasFilters ? 'destructive' : 'outline'}
               size="sm"
+              // A variante `destructive` não sobrescreve o `border-transparent` da
+              // base do Button — só a `outline` o faz. Sem isto a borda preta
+              // (`--border`, seção 4.1) some justamente no estado ativo.
+              className="border-border"
               onClick={clearFilters}
               disabled={!hasFilters}
             >

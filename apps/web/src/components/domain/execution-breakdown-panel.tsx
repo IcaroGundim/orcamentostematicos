@@ -509,10 +509,40 @@ export const CycleStackedBarChart = memo(function CycleStackedBarChart({
                 />
               }
             />
-            <Bar dataKey="paid" stackId="cycle" fill="#5f8f70" radius={0} />
-            <Bar dataKey="liquidatedNotPaid" stackId="cycle" fill="#8fa873" radius={0} />
-            <Bar dataKey="committedNotLiquidated" stackId="cycle" fill="#b8b477" radius={0} />
-            <Bar dataKey="notCommitted" stackId="cycle" fill="#c8c89f" radius={0} />
+            {/*
+              `name` é obrigatório: o tooltip do ciclo é próprio (CycleTooltipContent)
+              e lê `item.name`, que sem isto cai no `dataKey` e imprime a chave crua
+              em inglês ("paid", "notCommitted"). O rótulo sai do mesmo `config`
+              acima, que continua a fonte única.
+            */}
+            <Bar
+              dataKey="paid"
+              name={config.paid.label}
+              stackId="cycle"
+              fill="#5f8f70"
+              radius={0}
+            />
+            <Bar
+              dataKey="liquidatedNotPaid"
+              name={config.liquidatedNotPaid.label}
+              stackId="cycle"
+              fill="#8fa873"
+              radius={0}
+            />
+            <Bar
+              dataKey="committedNotLiquidated"
+              name={config.committedNotLiquidated.label}
+              stackId="cycle"
+              fill="#b8b477"
+              radius={0}
+            />
+            <Bar
+              dataKey="notCommitted"
+              name={config.notCommitted.label}
+              stackId="cycle"
+              fill="#c8c89f"
+              radius={0}
+            />
           </BarChart>
         </ChartContainer>
       </CardContent>

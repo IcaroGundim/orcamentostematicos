@@ -11,6 +11,9 @@ uploads
 
 # Artefatos de build
 *.tsbuildinfo
+# Saída do adaptador da Cloudflare (35 MB, regerada por `npm run cf:build`)
+.open-next
+.wrangler
 
 # Ferramentas locais do editor/agente
 .claude/

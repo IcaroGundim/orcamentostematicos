@@ -1,0 +1,25 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "orcamentostematicos",
+	"compatibility_date": "2026-09-10",
+
+	// `nodejs_compat` é OBRIGATÓRIO aqui, não opcional: o app usa `node:crypto`
+	// (timingSafeEqual na autenticação do job do SICAF) e o driver do Postgres
+	// depende de APIs de Node. Sem esta flag o Worker nem sobe.
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+
+	// As variáveis NÃO ficam aqui — este arquivo é versionado. DATABASE_URL,
+	// SICAF_JOB_TOKEN, GITHUB_DISPATCH_TOKEN, GITHUB_REPO, GITHUB_WORKFLOW_REF e
+	// RESEND_API_KEY entram como secrets:
+	//     npx wrangler secret put DATABASE_URL
+	// ou pelo painel da Cloudflare, em Settings → Variables and Secrets.
+	"observability": {
+		"enabled": true
+	}
+}
