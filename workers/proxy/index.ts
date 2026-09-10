@@ -19,7 +19,26 @@
  * O QUE TORNA O REPASSE SIMPLES. A sessão do app vive em `localStorage` e viaja no
  * header `Authorization: Bearer`, não em cookie. Não há domínio de cookie para
  * reescrever — só o `Location` das redireções.
+ *
+ * CACHE. O salto extra custa ~200-400 ms, e a página de login sozinha puxa 28
+ * arquivos estáticos — é a multiplicação, não a latência isolada, que pesa. Os
+ * assets do Next são imutáveis (o próprio caminho diz `/immutable/`), então ficam
+ * no cache da borda e param de ir à Vercel. Rota de API e HTML NUNCA entram: são
+ * dinâmicos e dependem do `Authorization`.
  */
+
+/** Só GET destes caminhos entra no cache da borda. */
+function podeCachear(request: Request, url: URL): boolean {
+  if (request.method !== 'GET') return false;
+  // Payload de RSC muda com a navegação e não é asset.
+  if (url.searchParams.has('_rsc')) return false;
+  if (url.pathname.startsWith('/api/')) return false;
+
+  if (url.pathname.startsWith('/_next/static/')) return true;
+  if (url.pathname.startsWith('/_next/image')) return true;
+  return /\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg|ico|geojson|map)$/i.test(url.pathname);
+}
+
 interface Env {
   ORIGEM: string;
 }
@@ -38,7 +57,12 @@ export default {
     // `manual`: quem decide seguir a redireção é o navegador, não este Worker.
     // Sem isto, uma redireção seria seguida aqui dentro e o usuário nunca veria
     // a mudança de URL.
-    const resposta = await fetch(repassada, { redirect: 'manual' });
+    // `cacheEverything` respeita o Cache-Control da origem — e o Next marca os
+    // assets como `immutable, max-age=31536000`. Não inventamos TTL aqui.
+    const resposta = await fetch(repassada, {
+      redirect: 'manual',
+      ...(podeCachear(request, entrada) ? { cf: { cacheEverything: true } } : {}),
+    });
 
     const location = resposta.headers.get('location');
     if (!location) return resposta;
