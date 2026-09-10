@@ -27,16 +27,43 @@
  * dinâmicos e dependem do `Authorization`.
  */
 
-/** Só GET destes caminhos entra no cache da borda. */
-function podeCachear(request: Request, url: URL): boolean {
-  if (request.method !== 'GET') return false;
-  // Payload de RSC muda com a navegação e não é asset.
-  if (url.searchParams.has('_rsc')) return false;
-  if (url.pathname.startsWith('/api/')) return false;
+/**
+ * Política de cache da borda, por tipo de recurso.
+ *
+ *  - `imutavel`: asset com hash no nome. Respeita o Cache-Control da origem, que
+ *    já diz `immutable, max-age=31536000`.
+ *  - `pagina`: HTML. A Vercel manda `max-age=0, must-revalidate`, então
+ *    `cacheEverything` sozinho NÃO cacheia e toda visita viaja até São Paulo.
+ *    Aqui o TTL é forçado, porque TODAS as telas deste app são estáticas no build
+ *    (`○` na saída do Next) — são cascas; os dados chegam depois via `/api`. O
+ *    HTML só muda em deploy, e 60 s é o atraso máximo para a versão nova aparecer.
+ *  - `nenhum`: dinâmico ou dependente do `Authorization`.
+ */
+type Politica = { tipo: 'imutavel' } | { tipo: 'pagina' } | { tipo: 'nenhum' };
 
-  if (url.pathname.startsWith('/_next/static/')) return true;
-  if (url.pathname.startsWith('/_next/image')) return true;
-  return /\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg|ico|geojson|map)$/i.test(url.pathname);
+function politica(request: Request, url: URL): Politica {
+  if (request.method !== 'GET') return { tipo: 'nenhum' };
+  // Payload de RSC muda com a navegação e não é página nem asset.
+  if (url.searchParams.has('_rsc')) return { tipo: 'nenhum' };
+  if (url.pathname.startsWith('/api/')) return { tipo: 'nenhum' };
+
+  if (url.pathname.startsWith('/_next/static/')) return { tipo: 'imutavel' };
+  if (url.pathname.startsWith('/_next/image')) return { tipo: 'imutavel' };
+  if (/\.(?:js|css|woff2?|png|jpe?g|webp|avif|svg|ico|geojson|map)$/i.test(url.pathname)) {
+    return { tipo: 'imutavel' };
+  }
+  // Sem extensão = rota de página do Next.
+  if (!/\.[a-z0-9]+$/i.test(url.pathname)) return { tipo: 'pagina' };
+  return { tipo: 'nenhum' };
+}
+
+function opcoesDeCache(request: Request, url: URL): RequestInit {
+  const p = politica(request, url);
+  if (p.tipo === 'imutavel') return { cf: { cacheEverything: true } } as RequestInit;
+  if (p.tipo === 'pagina') {
+    return { cf: { cacheEverything: true, cacheTtl: 60 } } as RequestInit;
+  }
+  return {};
 }
 
 interface Env {
@@ -61,7 +88,7 @@ export default {
     // assets como `immutable, max-age=31536000`. Não inventamos TTL aqui.
     const resposta = await fetch(repassada, {
       redirect: 'manual',
-      ...(podeCachear(request, entrada) ? { cf: { cacheEverything: true } } : {}),
+      ...opcoesDeCache(request, entrada),
     });
 
     const location = resposta.headers.get('location');
