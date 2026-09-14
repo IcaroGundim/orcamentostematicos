@@ -222,8 +222,11 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
 ### 3.3 Coluna de conteúdo
 
 - **Heading** (`page.tsx:802-819`): botão de colapso (`PanelLeftCloseIcon`/
-  `PanelLeftOpenIcon`, `hidden xl:inline-flex`), `h1` "Monitoramento da execução
-  orçamentária" (`font-heading text-xl font-bold tracking-tight`) e contagem
+  `PanelLeftOpenIcon`, `hidden xl:inline-flex`), `h1` com o **nome do recorte**
+  (`headingTitle`): `{código} — {nome}` da unidade quando há uma selecionada na
+  trilha, senão o do órgão, senão o genérico "Monitoramento da execução
+  orçamentária"; em Emendas parlamentares recebe o sufixo " — Emendas
+  parlamentares" (`font-heading text-xl font-bold tracking-tight`) e contagem
   `{N} ação(ões)` à direita com `border-l border-black/40 pl-3` (ou "Carregando
   dados do QDD vigente…" enquanto `isLoading`). Na extremidade direita da linha
   (`ml-auto`), botão **Exportar** (`variant="outline" size="sm"`, receita
@@ -280,7 +283,7 @@ vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
 ### 3.4 Rodapé de navegação
 
 `orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between
-border-t border-black/70 bg-white` (`page.tsx:1016-1113`):
+border-t border-black/70 bg-white` (`page.tsx:1214-1311`):
 
 - **Voltar a Orçamentos Temáticos**: no heading, à direita do Exportar. Verde
   escuro
@@ -385,6 +388,36 @@ quando há filtro ativo (seção 9, item 24); não estendê-la a outros elemento
   no cabeçalho e nas células).
 - **Botões do cabeçalho do app**: `rounded-sm border-black/50 bg-white
   text-foreground shadow-none hover:bg-stone-100`.
+- **Campos de filtro e dropdowns**: retos, sem exceção. Os componentes
+  compartilhados (`components/ui/select.tsx`, `input.tsx`, `popover.tsx`,
+  `domain/searchable-combobox.tsx`) e a receita comum
+  `components/ui/dropdown-styles.ts` nascem arredondados porque servem também a
+  `/seplan` e `/secretaria`; o módulo os aplaina por CSS, **sem** alterar o
+  componente compartilhado. Duas regras em `src/app/globals.css`:
+  - `.orcamento-main [data-slot='button'|'input'|'select-trigger'|
+    'searchable-combobox-trigger'|'empty'|'empty-icon']` →
+    `border-radius: 0; box-shadow: none`, para tudo que está **dentro do
+    `<main>`**: trilha de filtros e coluna de conteúdo. O escopo é `main`, e não
+    a trilha, porque as visões executivas (`Órgão`, `Folha`) não têm trilha —
+    limitar à trilha deixava os seletores de secretaria/unidade e os botões
+    `Apresentar` / `Imprimir` da visão `Órgão` arredondados. O cabeçalho do app
+    fica fora do `<main>` e por isso não é alcançado, que é o comportamento
+    desejado (seção 3.1);
+  - `body:has(.orcamento-page-root) …` → para os **painéis abertos**.
+    `SelectContent`, `PopoverContent` e o menu do `SearchableCombobox` são
+    portados para o `<body>`, fora de `orcamento-page-root`, então nenhum
+    seletor descendente da rota os alcança. O gancho é o `:has()`: a raiz da
+    rota só está no DOM enquanto `/orcamento` está montada, e os painéis
+    portados são irmãos dela sob o mesmo `<body>`. É CSS puro — **não** usar
+    classe no `<body>` via `useEffect` para isso (foi a primeira tentativa e
+    não pegou). As declarações levam `!important` porque disputam com
+    utilitários Tailwind no próprio elemento. Ao criar um dropdown novo no
+    módulo, conferir se ele cai numa dessas duas regras; se não cair, estender
+    a regra, nunca arredondar o campo.
+
+  Os botões do cabeçalho do app e o `ExerciseSelect` seguem em `rounded-sm`
+  (2px), conforme a seção 3.1 — é a única receita do módulo que não é reta, e
+  mudá-la exige editar aquela seção antes.
 - **Estados vazios**: `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/
   `EmptyDescription` com texto concreto ("Nenhum dado para exibir", "Não há
   registros correspondentes aos filtros aplicados." etc.). Proibido lorem ipsum e
@@ -397,7 +430,7 @@ quando há filtro ativo (seção 9, item 24); não estendê-la a outros elemento
 
 ### 4.4 Interação (pílula de hover)
 
-O padrão `useHoverPill` (`src/components/ui/tabs.tsx:97-172`) é compartilhado
+O padrão `useHoverPill` (`src/components/ui/tabs.tsx:104-211`) é compartilhado
 com os orçamentos temáticos e deve ser **literalmente o mesmo**:
 
 - cada item carrega `data-hover-tab-value`; o container é `relative` e recebe
@@ -405,7 +438,16 @@ com os orçamentos temáticos e deve ser **literalmente o mesmo**:
 - `pill` segue o mouse/foco (500ms); `activePill` só se move quando a seleção
   muda (300ms) — é isso que faz o marcador deslizar entre itens em vez de saltar;
 - `onMouseLeave={resetHighlight}` volta a pílula para o item ativo;
-- `ResizeObserver` no container + `window.resize` re-medem as pílulas.
+- `ResizeObserver` no container + `window.resize` re-medem as pílulas;
+- `listRef` é **ref de callback** e guarda o nó em estado, porque o container
+  pode montar *depois* do hook — em `/orcamento` o `useHoverPill` do rodapé fica
+  antes do `return null` de sessão ausente. Com `useRef`, o `useLayoutEffect`
+  rodava uma única vez com o ref vazio, a medição se perdia em silêncio e nunca
+  mais voltava (o `ResizeObserver` também ficava sem ligar);
+- a cor clara do texto vem de `isHighlighted(value)`, que exige `pill.ready`.
+  **Não** decidir `text-white` comparando `highlightValue` direto: sem a
+  pílula medida atrás, o rótulo fica branco sobre branco — foi assim que a aba
+  Ações sumiu do rodapé na primeira carga de `/orcamento`.
 
 Não substituir por fundos estáticos (`bg-green-900` fixo no item ativo) nem por
 `TabsTrigger` puro do Radix nos casos onde hoje se usa o hook — a animação é a

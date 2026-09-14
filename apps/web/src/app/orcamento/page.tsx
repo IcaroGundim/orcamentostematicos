@@ -184,7 +184,7 @@ function ExecutionViewNavigation({
       />
       {VIEWS.map((item) => {
         const Icon = item.icon;
-        const highlighted = pill.highlightValue === item.id;
+        const highlighted = pill.isHighlighted(item.id);
         return (
           <button
             key={item.id}
@@ -503,6 +503,20 @@ function OrcamentoPageContent() {
     () => organizations.find((organization) => organization.code === organizationCode),
     [organizations, organizationCode],
   );
+  // O heading nomeia o recorte da trilha: a unidade quando há uma escolhida, senão o
+  // órgão, senão o título genérico do módulo.
+  const headingTitle = useMemo(() => {
+    if (unitFilter !== allValue) {
+      const unitAction = actions.find(
+        (action) => `${action.organizationCode}|${action.unitCode}` === unitFilter,
+      );
+      if (unitAction) return `${unitAction.unitCode} — ${unitAction.unitName}`;
+    }
+    if (selectedOrganization) {
+      return `${selectedOrganization.code} — ${selectedOrganization.name}`;
+    }
+    return 'Monitoramento da execução orçamentária';
+  }, [actions, selectedOrganization, unitFilter]);
   const fiscalPayrollHeadcount = useMemo(
     () =>
       payrollHeadcountForQddScope(
@@ -914,7 +928,7 @@ function OrcamentoPageContent() {
             {sidebarCollapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
           </Button>
           <h1 className="font-heading text-xl font-bold tracking-tight">
-            Monitoramento da execução orçamentária
+            {headingTitle}
             {isAmendmentsDimension ? ' — Emendas parlamentares' : ''}
           </h1>
           <p className="border-l border-black/40 pl-3 text-sm text-muted-foreground">
@@ -1269,7 +1283,7 @@ function OrcamentoPageContent() {
             />
             {CONTENT_VIEWS.map((item) => {
               const active = contentView === item.id;
-              const highlighted = contentViewPill.highlightValue === item.id;
+              const highlighted = contentViewPill.isHighlighted(item.id);
               return (
                 <button
                   key={item.id}

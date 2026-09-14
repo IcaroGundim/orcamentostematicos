@@ -102,7 +102,21 @@ type HoverTabsListItem = {
 const EMPTY_BOX = { left: 0, top: 0, width: 0, height: 0, ready: false }
 
 function useHoverPill(activeValue: string) {
-  const listRef = React.useRef<HTMLDivElement>(null)
+  /*
+    Ref de callback, e não `useRef`: o container pode montar *depois* do hook.
+    Em `/orcamento` o rodapé das visualizações só existe quando a sessão chega, e a
+    página devolve `null` até lá. Com `useRef`, o `useLayoutEffect` abaixo rodava
+    uma única vez — com o ref ainda vazio —, `measure` falhava em silêncio e as
+    pílulas ficavam presas em `EMPTY_BOX`: a aba ativa aparecia com texto branco
+    sobre branco (e o `ResizeObserver` nunca chegava a ser ligado) até o primeiro
+    hover. Guardar o nó em estado faz os dois efeitos re-rodarem quando ele existe.
+  */
+  const listNodeRef = React.useRef<HTMLDivElement | null>(null)
+  const [listNode, setListNode] = React.useState<HTMLDivElement | null>(null)
+  const listRef = React.useCallback((node: HTMLDivElement | null) => {
+    listNodeRef.current = node
+    setListNode(node)
+  }, [])
   const highlightRef = React.useRef(activeValue)
   const [highlightValue, setHighlightValue] = React.useState(activeValue)
   const [pill, setPill] = React.useState(EMPTY_BOX)
@@ -114,7 +128,7 @@ function useHoverPill(activeValue: string) {
   // Mede a caixa inteira (e não só o eixo horizontal) para o mesmo hook servir tanto
   // a listas em linha quanto em coluna: cada consumidor usa os lados que interessam.
   const measure = React.useCallback((value: string) => {
-    const list = listRef.current
+    const list = listNodeRef.current
     if (!list) return null
     const target = list.querySelector<HTMLElement>(`[data-hover-tab-value="${value}"]`)
     if (!target) return null
@@ -155,12 +169,16 @@ function useHoverPill(activeValue: string) {
   const resetHighlight = React.useCallback(() => highlight(activeValue), [activeValue, highlight])
 
   React.useLayoutEffect(() => {
+    // `listNode` entra só como dependência: `measure` lê o ref, que já está
+    // preenchido no commit. Assim a medição normal continua acontecendo no próprio
+    // mount, e ainda se refaz quando a lista monta depois do hook.
+    void listNode
     highlight(activeValue)
     updateActivePill(activeValue)
-  }, [activeValue, highlight, updateActivePill])
+  }, [activeValue, highlight, updateActivePill, listNode])
 
   React.useEffect(() => {
-    const list = listRef.current
+    const list = listNode
     if (!list) return
     const onResize = () => {
       updatePill(highlightRef.current)
@@ -173,9 +191,24 @@ function useHoverPill(activeValue: string) {
       resizeObserver.disconnect()
       window.removeEventListener('resize', onResize)
     }
-  }, [updatePill, updateActivePill, activeValue])
+  }, [updatePill, updateActivePill, activeValue, listNode])
 
-  return { listRef, pill, activePill, highlightValue, highlight, resetHighlight }
+  /**
+   * Um item só recebe o texto claro quando a pílula está medida *e* atrás dele.
+   * As duas condições andam juntas de propósito: separá-las (cor pelo
+   * `highlightValue`, fundo pelo `ready`) é o que produzia o rótulo invisível.
+   */
+  const isHighlighted = (value: string) => pill.ready && highlightValue === value
+
+  return {
+    listRef,
+    pill,
+    activePill,
+    highlightValue,
+    isHighlighted,
+    highlight,
+    resetHighlight,
+  }
 }
 
 function HoverTabsList({
@@ -187,7 +220,8 @@ function HoverTabsList({
   items: readonly HoverTabsListItem[]
   className?: string
 }) {
-  const { listRef, pill, highlightValue, highlight, resetHighlight } = useHoverPill(activeValue)
+  const { listRef, pill, highlightValue, isHighlighted, highlight, resetHighlight } =
+    useHoverPill(activeValue)
   const highlightedItem = items.find((item) => item.value === highlightValue)
 
   return (
@@ -207,7 +241,7 @@ function HoverTabsList({
         style={{ left: pill.left, width: pill.width }}
       />
       {items.map((item) => {
-        const highlighted = highlightValue === item.value
+        const highlighted = isHighlighted(item.value)
         return (
           <TabsTrigger
             key={item.value}

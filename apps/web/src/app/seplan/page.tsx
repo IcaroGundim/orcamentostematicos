@@ -402,10 +402,18 @@ const initialAssignment = {
   justification: '',
 };
 
+/**
+ * Cor do arco do velocimetro de execucao, em 6 faixas.
+ * A rampa (--gauge-1..6) vai de vermelho a verde escuro e esta definida nos dois
+ * temas em globals.css; nao trocar por --chart-* , que sao acromaticos no escuro.
+ */
 function gaugeColor(pct: number): string {
-  if (pct >= 75) return 'var(--color-chart-1)';
-  if (pct >= 40) return 'var(--color-chart-3)';
-  return 'var(--color-chart-4)';
+  if (pct >= 90) return 'var(--color-gauge-6)';
+  if (pct >= 75) return 'var(--color-gauge-5)';
+  if (pct >= 60) return 'var(--color-gauge-4)';
+  if (pct >= 40) return 'var(--color-gauge-3)';
+  if (pct >= 20) return 'var(--color-gauge-2)';
+  return 'var(--color-gauge-1)';
 }
 
 // Contagem por status "de exibição": DEVOLVIDO é mostrado junto de RASCUNHO.

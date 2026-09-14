@@ -28,6 +28,14 @@
   --chart-3: oklch(0.68 0.16 55);
   --chart-4: oklch(0.54 0.16 30);
   --chart-5: oklch(0.48 0.1 235);
+  /* Rampa do velocimetro de execucao (seplan/page.tsx, gaugeColor):
+     6 degraus de vermelho a verde escuro, ancorados em --chart-4/3/2/1. */
+  --gauge-1: oklch(0.54 0.16 30);
+  --gauge-2: oklch(0.62 0.16 45);
+  --gauge-3: oklch(0.68 0.16 55);
+  --gauge-4: oklch(0.7 0.14 110);
+  --gauge-5: oklch(0.52 0.14 150);
+  --gauge-6: oklch(0.34 0.12 165);
   --radius: 0.625rem;
   --sidebar: oklch(0.23 0.07 165);
   --sidebar-foreground: oklch(0.97 0 0);
@@ -57,6 +65,12 @@ textarea {
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-gauge-6: var(--gauge-6);
+  --color-gauge-5: var(--gauge-5);
+  --color-gauge-4: var(--gauge-4);
+  --color-gauge-3: var(--gauge-3);
+  --color-gauge-2: var(--gauge-2);
+  --color-gauge-1: var(--gauge-1);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -113,6 +127,13 @@ textarea {
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  /* Mesmos matizes da rampa clara, clareados para contrastar com o fundo escuro. */
+  --gauge-1: oklch(0.62 0.17 30);
+  --gauge-2: oklch(0.68 0.16 45);
+  --gauge-3: oklch(0.75 0.15 55);
+  --gauge-4: oklch(0.78 0.14 110);
+  --gauge-5: oklch(0.68 0.14 150);
+  --gauge-6: oklch(0.58 0.13 165);
   --sidebar: oklch(0.18 0.04 165);
   --sidebar-foreground: oklch(0.97 0 0);
   --sidebar-primary: oklch(0.34 0.12 165);
@@ -195,11 +216,39 @@ textarea {
   display: none;
 }
 
-.orcamento-sidebar [data-slot='button'],
-.orcamento-sidebar [data-slot='input'],
-.orcamento-sidebar [data-slot='select-trigger'] {
-  border-radius: 2px;
+/* Secao 10.3 do contrato (docs/design-orcamento.md): o modulo e plano, sem
+   cantos arredondados. O escopo e .orcamento-main, ou seja, a area de conteudo
+   inteira (trilha de filtros + coluna de conteudo), e nao so a trilha: a visao
+   Orgao (fiscal-secretariat-view.tsx) nao tem trilha e ficava de fora.
+   O cabecalho do app esta fora de <main> e por isso nao e alcancado — a secao
+   3.1 documenta rounded-sm para os botoes dele e para o ExerciseSelect. */
+.orcamento-main [data-slot='button'],
+.orcamento-main [data-slot='input'],
+.orcamento-main [data-slot='select-trigger'],
+.orcamento-main [data-slot='searchable-combobox-trigger'],
+.orcamento-main [data-slot='empty'],
+.orcamento-main [data-slot='empty-icon'] {
+  border-radius: 0 !important;
   box-shadow: none;
+}
+
+/* Os paineis abertos (Select, Popover e o menu do SearchableCombobox) sao
+   portados para o <body>, fora de .orcamento-page-root, entao nenhum seletor
+   descendente da rota os alcanca. O gancho e o :has(): a raiz da rota so esta
+   no DOM enquanto /orcamento esta montada, e os paineis portados sao irmaos
+   dela sob o mesmo <body>. Sem JavaScript e sem prop nova nos componentes
+   compartilhados, que seguem arredondados em /seplan e /secretaria.
+   Os botoes do cabecalho do app ficam de fora de proposito: a secao 3.1 do
+   contrato documenta rounded-sm para eles. */
+body:has(.orcamento-page-root) [data-slot='select-content'],
+body:has(.orcamento-page-root) [data-slot='select-item'],
+body:has(.orcamento-page-root) [data-slot='popover-content'],
+body:has(.orcamento-page-root) [data-slot='popover-content'] [data-slot='button'],
+body:has(.orcamento-page-root) [data-slot='popover-content'] [data-slot='input'],
+body:has(.orcamento-page-root) [data-slot='popover-content'] [data-slot='select-trigger'],
+body:has(.orcamento-page-root) [data-slot='searchable-combobox-content'],
+body:has(.orcamento-page-root) [data-slot='searchable-combobox-content'] button {
+  border-radius: 0 !important;
 }
 
 .orcamento-main {

@@ -15,6 +15,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -626,6 +627,21 @@ function ContractTypeTable({ rows }: { rows: PayrollGroupDto[] }) {
     () => [...rows].sort((a, b) => b.grossTotal - a.grossTotal),
     [rows],
   );
+  // Soma das linhas exibidas — fecha com o total geral da folha porque cada vínculo
+  // aparece em exatamente um grupo desta dimensão.
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (acc, row) => ({
+          headcount: acc.headcount + row.headcount,
+          grossTotal: acc.grossTotal + row.grossTotal,
+          deductionsTotal: acc.deductionsTotal + row.deductionsTotal,
+          netTotal: acc.netTotal + row.netTotal,
+        }),
+        { headcount: 0, grossTotal: 0, deductionsTotal: 0, netTotal: 0 },
+      ),
+    [rows],
+  );
 
   return (
     <div className="min-w-0 overflow-auto border">
@@ -658,6 +674,25 @@ function ContractTypeTable({ rows }: { rows: PayrollGroupDto[] }) {
             </TableRow>
           ))}
         </TableBody>
+        {rows.length > 0 ? (
+          <TableFooter className="bg-stone-50 font-semibold">
+            <TableRow className="border-t border-black/70 hover:bg-transparent">
+              <TableCell>Total</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {totals.headcount.toLocaleString('pt-BR')}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatMoney(totals.grossTotal)}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatMoney(totals.deductionsTotal)}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {formatMoney(totals.netTotal)}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        ) : null}
       </Table>
     </div>
   );
