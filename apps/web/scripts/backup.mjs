@@ -18,6 +18,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { config } from 'dotenv';
 import * as XLSX from 'xlsx';
 
+// A distribuição ESM do SheetJS exige acesso explícito ao filesystem.
+XLSX.set_fs(fs);
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url)); // apps/web/scripts
 const webDir = path.resolve(scriptDir, '..');
 config({ path: path.resolve(webDir, '.env.local'), quiet: true });

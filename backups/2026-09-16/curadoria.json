@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-09-16T14:35:26.234Z",
+  "generatedAt": "2026-09-16T20:13:12.234Z",
   "counts": {
     "thematicAssignments": 259,
     "actionValidations": 259,
     "validationCycles": 3,
     "budgetImports": 1,
-    "budgetImportRevisions": 5,
+    "budgetImportRevisions": 6,
     "fiscalYears": 1,
     "exerciseOrganizations": 33,
     "exerciseUnits": 130,
@@ -9954,13 +9954,13 @@
   "budgetImports": [
     {
       "id": "import-6f15a801-1325-4869-8e9c-30d085deeb58",
-      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20260915.xls",
+      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20260916.xls",
       "year": 2026,
       "referenceMonth": 9,
       "periodType": "ACUMULADO_ANUAL",
       "status": "VIGENTE",
       "actionCount": 1731,
-      "importedAt": "2026-09-15T14:38:51.055Z"
+      "importedAt": "2026-09-16T14:36:08.695Z"
     }
   ],
   "budgetImportRevisions": [
@@ -10038,6 +10038,21 @@
       "source": "SICAF",
       "updatedBy": null,
       "createdAt": "2026-09-15T14:38:51.055Z"
+    },
+    {
+      "id": "cmu47egfa000004jp9ivxrbkc",
+      "importId": "import-6f15a801-1325-4869-8e9c-30d085deeb58",
+      "legacyImportId": null,
+      "confirmationKey": "sicafpreview-bf7a0be1-9fc4-453f-aa83-42298279f74e",
+      "year": 2026,
+      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20260916.xls",
+      "referenceMonth": 9,
+      "periodType": "ACUMULADO_ANUAL",
+      "rowCount": 7120,
+      "actionCount": 1731,
+      "source": "SICAF",
+      "updatedBy": null,
+      "createdAt": "2026-09-16T14:36:08.695Z"
     }
   ],
   "fiscalYears": [
@@ -10052,30 +10067,12 @@
   "exerciseOrganizations": [
     {
       "year": 2026,
-      "code": "722",
-      "name": "SECRETARIA EXTRAORDINÁRIA DOS POVOS INDÍGENAS - SEPI",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.538Z"
-    },
-    {
-      "year": 2026,
-      "code": "744",
-      "name": "SECRETARIA DE ESTADO DE HABITAÇÃO E URBANISMO - SEHURB",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.543Z"
-    },
-    {
-      "year": 2026,
       "code": "753",
       "name": "SECRETARIA DE ESTADO DE AGRICULTURA - SEAGRI",
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.548Z"
+      "updatedAt": "2026-09-16T14:36:16.951Z"
     },
     {
       "year": 2026,
@@ -10084,7 +10081,7 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.552Z"
+      "updatedAt": "2026-09-16T14:36:16.956Z"
     },
     {
       "year": 2026,
@@ -10093,7 +10090,7 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.556Z"
+      "updatedAt": "2026-09-16T14:36:16.960Z"
     },
     {
       "year": 2026,
@@ -10102,7 +10099,7 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.561Z"
+      "updatedAt": "2026-09-16T14:36:16.965Z"
     },
     {
       "year": 2026,
@@ -10111,214 +10108,7 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.566Z"
-    },
-    {
-      "year": 2026,
-      "code": "101",
-      "name": "ASSEMBLÉIA LEGISLATIVA",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.414Z"
-    },
-    {
-      "year": 2026,
-      "code": "102",
-      "name": "TRIBUNAL DE CONTAS",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.420Z"
-    },
-    {
-      "year": 2026,
-      "code": "203",
-      "name": "TRIBUNAL DE JUSTIÇA",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.425Z"
-    },
-    {
-      "year": 2026,
-      "code": "304",
-      "name": "MINISTÉRIO PÚBLICO",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.430Z"
-    },
-    {
-      "year": 2026,
-      "code": "305",
-      "name": "DEFENSORIA PÚBLICA DO ESTADO DO ACRE",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.435Z"
-    },
-    {
-      "year": 2026,
-      "code": "444",
-      "name": "REPRESENTAÇÃO DO GOVERNO EM BRASÍLIA",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.440Z"
-    },
-    {
-      "year": 2026,
-      "code": "445",
-      "name": "SECRETARIA DE ESTADO DE GOVERNO - SEGOV",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.445Z"
-    },
-    {
-      "year": 2026,
-      "code": "446",
-      "name": "SECRETARIA DE ESTADO DA CASA CIVIL",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.450Z"
-    },
-    {
-      "year": 2026,
-      "code": "447",
-      "name": "CASA MILITAR",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.454Z"
-    },
-    {
-      "year": 2026,
-      "code": "448",
-      "name": "CONTROLADORIA-GERAL DO ESTADO - CGE",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.459Z"
-    },
-    {
-      "year": 2026,
-      "code": "450",
-      "name": "GABINETE DA VICE GOVERNADORA",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.464Z"
-    },
-    {
-      "year": 2026,
-      "code": "451",
-      "name": "POLÍCIA CIVIL DO ESTADO DO ACRE - PCAC",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.469Z"
-    },
-    {
-      "year": 2026,
-      "code": "452",
-      "name": "COORDENADORIA ESTADUAL DE PROTEÇÃO E DEFESA CIVIL",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.474Z"
-    },
-    {
-      "year": 2026,
-      "code": "510",
-      "name": "PROCURADORIA GERAL DO ESTADO - PGE",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.479Z"
-    },
-    {
-      "year": 2026,
-      "code": "608",
-      "name": "POLÍCIA MILITAR DO ESTADO DO ACRE - PMAC",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.484Z"
-    },
-    {
-      "year": 2026,
-      "code": "609",
-      "name": "CORPO DE BOMBEIROS MILITAR DO ESTADO DO ACRE - CBMAC",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.489Z"
-    },
-    {
-      "year": 2026,
-      "code": "711",
-      "name": "SECRETARIA DE ESTADO DE COMUNICAÇÃO - SECOM",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.494Z"
-    },
-    {
-      "year": 2026,
-      "code": "713",
-      "name": "SECRETARIA DE ESTADO DE PLANEJAMENTO - SEPLAN",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.499Z"
-    },
-    {
-      "year": 2026,
-      "code": "714",
-      "name": "SECRETARIA DE ESTADO DE ADMINISTRAÇÃO - SEAD",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.504Z"
-    },
-    {
-      "year": 2026,
-      "code": "715",
-      "name": "SECRETARIA DE ESTADO DA FAZENDA - SEFAZ",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.509Z"
-    },
-    {
-      "year": 2026,
-      "code": "717",
-      "name": "SECRETARIA DE ESTADO DA EDUCAÇÃO, CULTURA E ESPORTES - SEE",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.513Z"
-    },
-    {
-      "year": 2026,
-      "code": "718",
-      "name": "SECRETARIA EXTRAORDINÁRIA DE ESPOR- TE E LAZER - SEEL",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.517Z"
-    },
-    {
-      "year": 2026,
-      "code": "719",
-      "name": "SECRETARIA DE ESTADO DA JUSTIÇA E SEGURANÇA PÚBLICA - SEJUSP",
-      "type": "SECRETARIA",
-      "active": true,
-      "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.522Z"
+      "updatedAt": "2026-09-16T14:36:16.970Z"
     },
     {
       "year": 2026,
@@ -10327,7 +10117,214 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.571Z"
+      "updatedAt": "2026-09-16T14:36:16.974Z"
+    },
+    {
+      "year": 2026,
+      "code": "101",
+      "name": "ASSEMBLÉIA LEGISLATIVA",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.734Z"
+    },
+    {
+      "year": 2026,
+      "code": "102",
+      "name": "TRIBUNAL DE CONTAS",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.750Z"
+    },
+    {
+      "year": 2026,
+      "code": "203",
+      "name": "TRIBUNAL DE JUSTIÇA",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.770Z"
+    },
+    {
+      "year": 2026,
+      "code": "304",
+      "name": "MINISTÉRIO PÚBLICO",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.782Z"
+    },
+    {
+      "year": 2026,
+      "code": "305",
+      "name": "DEFENSORIA PÚBLICA DO ESTADO DO ACRE",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.790Z"
+    },
+    {
+      "year": 2026,
+      "code": "444",
+      "name": "REPRESENTAÇÃO DO GOVERNO EM BRASÍLIA",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.797Z"
+    },
+    {
+      "year": 2026,
+      "code": "445",
+      "name": "SECRETARIA DE ESTADO DE GOVERNO - SEGOV",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.838Z"
+    },
+    {
+      "year": 2026,
+      "code": "446",
+      "name": "SECRETARIA DE ESTADO DA CASA CIVIL",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.850Z"
+    },
+    {
+      "year": 2026,
+      "code": "447",
+      "name": "CASA MILITAR",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.856Z"
+    },
+    {
+      "year": 2026,
+      "code": "448",
+      "name": "CONTROLADORIA-GERAL DO ESTADO - CGE",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.861Z"
+    },
+    {
+      "year": 2026,
+      "code": "450",
+      "name": "GABINETE DA VICE GOVERNADORA",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.872Z"
+    },
+    {
+      "year": 2026,
+      "code": "451",
+      "name": "POLÍCIA CIVIL DO ESTADO DO ACRE - PCAC",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.877Z"
+    },
+    {
+      "year": 2026,
+      "code": "452",
+      "name": "COORDENADORIA ESTADUAL DE PROTEÇÃO E DEFESA CIVIL",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.881Z"
+    },
+    {
+      "year": 2026,
+      "code": "510",
+      "name": "PROCURADORIA GERAL DO ESTADO - PGE",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.886Z"
+    },
+    {
+      "year": 2026,
+      "code": "608",
+      "name": "POLÍCIA MILITAR DO ESTADO DO ACRE - PMAC",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.891Z"
+    },
+    {
+      "year": 2026,
+      "code": "609",
+      "name": "CORPO DE BOMBEIROS MILITAR DO ESTADO DO ACRE - CBMAC",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.896Z"
+    },
+    {
+      "year": 2026,
+      "code": "711",
+      "name": "SECRETARIA DE ESTADO DE COMUNICAÇÃO - SECOM",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.900Z"
+    },
+    {
+      "year": 2026,
+      "code": "713",
+      "name": "SECRETARIA DE ESTADO DE PLANEJAMENTO - SEPLAN",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.904Z"
+    },
+    {
+      "year": 2026,
+      "code": "714",
+      "name": "SECRETARIA DE ESTADO DE ADMINISTRAÇÃO - SEAD",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.908Z"
+    },
+    {
+      "year": 2026,
+      "code": "715",
+      "name": "SECRETARIA DE ESTADO DA FAZENDA - SEFAZ",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.913Z"
+    },
+    {
+      "year": 2026,
+      "code": "717",
+      "name": "SECRETARIA DE ESTADO DA EDUCAÇÃO, CULTURA E ESPORTES - SEE",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.917Z"
+    },
+    {
+      "year": 2026,
+      "code": "718",
+      "name": "SECRETARIA EXTRAORDINÁRIA DE ESPOR- TE E LAZER - SEEL",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.922Z"
+    },
+    {
+      "year": 2026,
+      "code": "719",
+      "name": "SECRETARIA DE ESTADO DA JUSTIÇA E SEGURANÇA PÚBLICA - SEJUSP",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.927Z"
     },
     {
       "year": 2026,
@@ -10336,7 +10333,7 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.528Z"
+      "updatedAt": "2026-09-16T14:36:16.932Z"
     },
     {
       "year": 2026,
@@ -10345,20 +10342,28 @@
       "type": "SECRETARIA",
       "active": true,
       "createdAt": "2026-05-21T18:22:55.497Z",
-      "updatedAt": "2026-09-15T14:38:59.533Z"
+      "updatedAt": "2026-09-16T14:36:16.937Z"
+    },
+    {
+      "year": 2026,
+      "code": "722",
+      "name": "SECRETARIA EXTRAORDINÁRIA DOS POVOS INDÍGENAS - SEPI",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.941Z"
+    },
+    {
+      "year": 2026,
+      "code": "744",
+      "name": "SECRETARIA DE ESTADO DE HABITAÇÃO E URBANISMO - SEHURB",
+      "type": "SECRETARIA",
+      "active": true,
+      "createdAt": "2026-05-21T18:22:55.497Z",
+      "updatedAt": "2026-09-16T14:36:16.946Z"
     }
   ],
   "exerciseUnits": [
-    {
-      "year": 2026,
-      "organizationCode": "203",
-      "code": "641",
-      "name": "FUNDO ESPECIAL REGISTRAL DE REGULAR . FUNDIÁRIA DE INTERESSE SOCIAL",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.643Z"
-    },
     {
       "year": 2026,
       "organizationCode": "304",
@@ -10367,7 +10372,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.648Z"
+      "updatedAt": "2026-09-16T14:36:17.050Z"
     },
     {
       "year": 2026,
@@ -10377,7 +10382,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.653Z"
+      "updatedAt": "2026-09-16T14:36:17.054Z"
     },
     {
       "year": 2026,
@@ -10387,7 +10392,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.658Z"
+      "updatedAt": "2026-09-16T14:36:17.058Z"
     },
     {
       "year": 2026,
@@ -10397,7 +10402,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.666Z"
+      "updatedAt": "2026-09-16T14:36:17.067Z"
     },
     {
       "year": 2026,
@@ -10407,7 +10412,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.670Z"
+      "updatedAt": "2026-09-16T14:36:17.072Z"
     },
     {
       "year": 2026,
@@ -10417,7 +10422,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.675Z"
+      "updatedAt": "2026-09-16T14:36:17.076Z"
     },
     {
       "year": 2026,
@@ -10427,7 +10432,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.683Z"
+      "updatedAt": "2026-09-16T14:36:17.085Z"
     },
     {
       "year": 2026,
@@ -10437,7 +10442,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.688Z"
+      "updatedAt": "2026-09-16T14:36:17.089Z"
     },
     {
       "year": 2026,
@@ -10447,7 +10452,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.692Z"
+      "updatedAt": "2026-09-16T14:36:17.095Z"
     },
     {
       "year": 2026,
@@ -10457,7 +10462,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.697Z"
+      "updatedAt": "2026-09-16T14:36:17.099Z"
     },
     {
       "year": 2026,
@@ -10467,7 +10472,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.702Z"
+      "updatedAt": "2026-09-16T14:36:17.104Z"
     },
     {
       "year": 2026,
@@ -10477,7 +10482,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.706Z"
+      "updatedAt": "2026-09-16T14:36:17.109Z"
     },
     {
       "year": 2026,
@@ -10487,7 +10492,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.712Z"
+      "updatedAt": "2026-09-16T14:36:17.114Z"
     },
     {
       "year": 2026,
@@ -10497,7 +10502,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.717Z"
+      "updatedAt": "2026-09-16T14:36:17.118Z"
     },
     {
       "year": 2026,
@@ -10507,7 +10512,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.721Z"
+      "updatedAt": "2026-09-16T14:36:17.123Z"
     },
     {
       "year": 2026,
@@ -10517,7 +10522,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.731Z"
+      "updatedAt": "2026-09-16T14:36:17.131Z"
     },
     {
       "year": 2026,
@@ -10527,7 +10532,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.737Z"
+      "updatedAt": "2026-09-16T14:36:17.136Z"
     },
     {
       "year": 2026,
@@ -10537,7 +10542,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.741Z"
+      "updatedAt": "2026-09-16T14:36:17.141Z"
     },
     {
       "year": 2026,
@@ -10547,7 +10552,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.746Z"
+      "updatedAt": "2026-09-16T14:36:17.145Z"
     },
     {
       "year": 2026,
@@ -10557,7 +10562,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.751Z"
+      "updatedAt": "2026-09-16T14:36:17.150Z"
     },
     {
       "year": 2026,
@@ -10567,7 +10572,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.756Z"
+      "updatedAt": "2026-09-16T14:36:17.153Z"
     },
     {
       "year": 2026,
@@ -10577,7 +10582,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.761Z"
+      "updatedAt": "2026-09-16T14:36:17.158Z"
     },
     {
       "year": 2026,
@@ -10587,7 +10592,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.766Z"
+      "updatedAt": "2026-09-16T14:36:17.163Z"
     },
     {
       "year": 2026,
@@ -10597,7 +10602,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.771Z"
+      "updatedAt": "2026-09-16T14:36:17.168Z"
     },
     {
       "year": 2026,
@@ -10607,7 +10612,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.775Z"
+      "updatedAt": "2026-09-16T14:36:17.172Z"
     },
     {
       "year": 2026,
@@ -10617,7 +10622,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.790Z"
+      "updatedAt": "2026-09-16T14:36:17.187Z"
     },
     {
       "year": 2026,
@@ -10627,7 +10632,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.794Z"
+      "updatedAt": "2026-09-16T14:36:17.191Z"
     },
     {
       "year": 2026,
@@ -10637,7 +10642,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.799Z"
+      "updatedAt": "2026-09-16T14:36:17.196Z"
     },
     {
       "year": 2026,
@@ -10647,7 +10652,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.803Z"
+      "updatedAt": "2026-09-16T14:36:17.201Z"
     },
     {
       "year": 2026,
@@ -10657,7 +10662,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.809Z"
+      "updatedAt": "2026-09-16T14:36:17.206Z"
     },
     {
       "year": 2026,
@@ -10667,7 +10672,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.813Z"
+      "updatedAt": "2026-09-16T14:36:17.211Z"
     },
     {
       "year": 2026,
@@ -10677,7 +10682,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.818Z"
+      "updatedAt": "2026-09-16T14:36:17.215Z"
     },
     {
       "year": 2026,
@@ -10687,7 +10692,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.823Z"
+      "updatedAt": "2026-09-16T14:36:17.220Z"
     },
     {
       "year": 2026,
@@ -10697,7 +10702,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.828Z"
+      "updatedAt": "2026-09-16T14:36:17.223Z"
     },
     {
       "year": 2026,
@@ -10707,7 +10712,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.832Z"
+      "updatedAt": "2026-09-16T14:36:17.228Z"
     },
     {
       "year": 2026,
@@ -10717,7 +10722,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.836Z"
+      "updatedAt": "2026-09-16T14:36:17.232Z"
     },
     {
       "year": 2026,
@@ -10727,7 +10732,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.846Z"
+      "updatedAt": "2026-09-16T14:36:17.241Z"
     },
     {
       "year": 2026,
@@ -10737,7 +10742,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.851Z"
+      "updatedAt": "2026-09-16T14:36:17.246Z"
     },
     {
       "year": 2026,
@@ -10747,7 +10752,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.856Z"
+      "updatedAt": "2026-09-16T14:36:17.251Z"
     },
     {
       "year": 2026,
@@ -10757,7 +10762,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.866Z"
+      "updatedAt": "2026-09-16T14:36:17.259Z"
     },
     {
       "year": 2026,
@@ -10767,7 +10772,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.870Z"
+      "updatedAt": "2026-09-16T14:36:17.264Z"
     },
     {
       "year": 2026,
@@ -10777,7 +10782,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.875Z"
+      "updatedAt": "2026-09-16T14:36:17.268Z"
     },
     {
       "year": 2026,
@@ -10787,7 +10792,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.880Z"
+      "updatedAt": "2026-09-16T14:36:17.273Z"
     },
     {
       "year": 2026,
@@ -10797,7 +10802,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.889Z"
+      "updatedAt": "2026-09-16T14:36:17.282Z"
     },
     {
       "year": 2026,
@@ -10807,7 +10812,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.894Z"
+      "updatedAt": "2026-09-16T14:36:17.287Z"
     },
     {
       "year": 2026,
@@ -10817,7 +10822,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.898Z"
+      "updatedAt": "2026-09-16T14:36:17.291Z"
     },
     {
       "year": 2026,
@@ -10827,7 +10832,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.902Z"
+      "updatedAt": "2026-09-16T14:36:17.296Z"
     },
     {
       "year": 2026,
@@ -10837,7 +10842,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.908Z"
+      "updatedAt": "2026-09-16T14:36:17.300Z"
     },
     {
       "year": 2026,
@@ -10847,7 +10852,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.912Z"
+      "updatedAt": "2026-09-16T14:36:17.306Z"
     },
     {
       "year": 2026,
@@ -10857,7 +10862,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.916Z"
+      "updatedAt": "2026-09-16T14:36:17.311Z"
     },
     {
       "year": 2026,
@@ -10867,7 +10872,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.921Z"
+      "updatedAt": "2026-09-16T14:36:17.315Z"
     },
     {
       "year": 2026,
@@ -10877,7 +10882,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.926Z"
+      "updatedAt": "2026-09-16T14:36:17.320Z"
     },
     {
       "year": 2026,
@@ -10887,7 +10892,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.930Z"
+      "updatedAt": "2026-09-16T14:36:17.325Z"
     },
     {
       "year": 2026,
@@ -10897,7 +10902,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.939Z"
+      "updatedAt": "2026-09-16T14:36:17.332Z"
     },
     {
       "year": 2026,
@@ -10907,7 +10912,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.945Z"
+      "updatedAt": "2026-09-16T14:36:17.337Z"
     },
     {
       "year": 2026,
@@ -10917,7 +10922,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.954Z"
+      "updatedAt": "2026-09-16T14:36:17.341Z"
     },
     {
       "year": 2026,
@@ -10927,7 +10932,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.959Z"
+      "updatedAt": "2026-09-16T14:36:17.346Z"
     },
     {
       "year": 2026,
@@ -10937,7 +10942,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.964Z"
+      "updatedAt": "2026-09-16T14:36:17.351Z"
     },
     {
       "year": 2026,
@@ -10947,7 +10952,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.969Z"
+      "updatedAt": "2026-09-16T14:36:17.356Z"
     },
     {
       "year": 2026,
@@ -10957,7 +10962,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.115Z"
+      "updatedAt": "2026-09-16T14:36:17.503Z"
     },
     {
       "year": 2026,
@@ -10967,7 +10972,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.119Z"
+      "updatedAt": "2026-09-16T14:36:17.507Z"
     },
     {
       "year": 2026,
@@ -10977,7 +10982,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.124Z"
+      "updatedAt": "2026-09-16T14:36:17.512Z"
     },
     {
       "year": 2026,
@@ -10987,7 +10992,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.129Z"
+      "updatedAt": "2026-09-16T14:36:17.516Z"
     },
     {
       "year": 2026,
@@ -10997,7 +11002,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.154Z"
+      "updatedAt": "2026-09-16T14:36:17.539Z"
     },
     {
       "year": 2026,
@@ -11007,7 +11012,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.159Z"
+      "updatedAt": "2026-09-16T14:36:17.544Z"
     },
     {
       "year": 2026,
@@ -11017,7 +11022,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.164Z"
+      "updatedAt": "2026-09-16T14:36:17.548Z"
     },
     {
       "year": 2026,
@@ -11027,7 +11032,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.593Z"
+      "updatedAt": "2026-09-16T14:36:16.995Z"
     },
     {
       "year": 2026,
@@ -11037,7 +11042,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.598Z"
+      "updatedAt": "2026-09-16T14:36:16.999Z"
     },
     {
       "year": 2026,
@@ -11047,7 +11052,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.602Z"
+      "updatedAt": "2026-09-16T14:36:17.004Z"
     },
     {
       "year": 2026,
@@ -11057,7 +11062,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.607Z"
+      "updatedAt": "2026-09-16T14:36:17.008Z"
     },
     {
       "year": 2026,
@@ -11067,7 +11072,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.621Z"
+      "updatedAt": "2026-09-16T14:36:17.021Z"
     },
     {
       "year": 2026,
@@ -11077,7 +11082,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.629Z"
+      "updatedAt": "2026-09-16T14:36:17.031Z"
     },
     {
       "year": 2026,
@@ -11087,7 +11092,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.634Z"
+      "updatedAt": "2026-09-16T14:36:17.036Z"
     },
     {
       "year": 2026,
@@ -11097,337 +11102,17 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.639Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "719",
-      "code": "216",
-      "name": "INSTITUTO DE PROTEÇAO E DEFESA DO CONSUMIDOR DO ACRE - PROCON/AC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.934Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "720",
-      "code": "202",
-      "name": "INSTITUTO DE MEIO AMBIENTE DO ACRE IMAC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.974Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "744",
-      "code": "203",
-      "name": "SERVIÇO DE ÁGUA E ESGOTO DO ESTADO DO ACRE - SANEACRE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.031Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "744",
-      "code": "206",
-      "name": "INSTITUTO DE TERRAS DO ACRE ITERACRE",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.036Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "744",
-      "code": "619",
-      "name": "FUNDO ESTADUAL DE HABITAÇÃO - FEH",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.041Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "744",
-      "code": "643",
-      "name": "FUNDO ESTADUAL ESPEC. PARA A RECUP. DA BACIA DO IGARAPÉ SÃO FRANCISCO",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.046Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "753",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.051Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "753",
-      "code": "207",
-      "name": "INSTITUTO DE DEFESA AGROPECUÁRIA FLORESTAL - IDAF",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.057Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "753",
-      "code": "401",
-      "name": "COMPANHIA DE ARMAZÉNS E ENTREPOSTOS DO ACRE - CAGEACRE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.062Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "753",
-      "code": "402",
-      "name": "EMPRESA DE ASSISTÊNCIA TÉCNICA E EXTENSÃO RURAL DO ACRE - EMATER/AC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.067Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "754",
-      "code": "502",
-      "name": "COMPANHIA DE SANEAMENTO DO ACRE - SANACRE",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.090Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "759",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.094Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "759",
-      "code": "635",
-      "name": "FUNDO ESP.PARA O DESENV.DA PRODUÇÃO COMERCIALIZAÇÃO ARTESANATO ACREANO",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.100Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "760",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.105Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "760",
-      "code": "216",
-      "name": "INSTITUTO DE PROTEÇÃO E DEFESA DO CONSUMIDOR DO ACRE - PROCON/AC",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.110Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "760",
-      "code": "640",
-      "name": "FUNDO ESTADUAL DE DEFESA DO CONSUMIDOR - FEDC",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.134Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "760",
-      "code": "642",
-      "name": "FUNDO ESTADUAL DE DIREITOS DA PES- SOA IDOSA DO ACRE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.139Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "761",
-      "code": "615",
-      "name": "FUNDO DE DESENVOLVIMENTO SUSTENTÁVEL - FDS",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.182Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "761",
-      "code": "618",
-      "name": "FUNDO DE DESENVOLVIMENTO CIENTÍFICO E TECNOLÓGICO - FDCT",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.188Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "761",
-      "code": "623",
-      "name": "FUNDO DE APOIO AO COOPERATIVISMO - FAC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.193Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "761",
-      "code": "645",
-      "name": "FUNDO DO TRABALHO - FT/AC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.198Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "762",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.203Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "101",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.577Z"
+      "updatedAt": "2026-09-16T14:36:17.041Z"
     },
     {
       "year": 2026,
       "organizationCode": "203",
-      "code": "006",
-      "name": "SECRETARIA DE INFRAESTRUTURA E ATENDIMENTO AO USUÁRIO-SEINF",
+      "code": "641",
+      "name": "FUNDO ESPECIAL REGISTRAL DE REGULAR . FUNDIÁRIA DE INTERESSE SOCIAL",
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.616Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "203",
-      "code": "008",
-      "name": "SECRETARIA DE LOGÍSTICA E GESTÃO ADMINISTRATIVA-SELGA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.625Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "305",
-      "code": "630",
-      "name": "FUNDO ORÇ. ESP. DA ESCOLA SUP. DA D EFENSORIA PÚB DO EST.DO ACRE-ESDPAC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.662Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "446",
-      "code": "629",
-      "name": "FUNDO DE PRESERVAÇÃO E DESENV. DOS POVOS INDIGENAS DO ACRE - FPDPI/AC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.679Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "510",
-      "code": "650",
-      "name": "Fundo de Gestão de Honorários Advocatícios",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-09-14T16:10:06.146Z",
-      "updatedAt": "2026-09-15T14:38:59.726Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "714",
-      "code": "002",
-      "name": "UNIDADE GESTORA DA FOLHA DE PAGAMEN TO DE PESSOAL",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.780Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "714",
-      "code": "211",
-      "name": "INSTITUTO DE PREVIDÊNCIA DO ESTADO DO ACRE - ACREPREVIDÊNCIA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.785Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "715",
-      "code": "404",
-      "name": "COMPANHIA DE COLONIZAÇÃO DO ACRE - COLONACRE EM LIQUIDAÇÃO ORDINÁRIA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.841Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "720",
-      "code": "206",
-      "name": "INSTITUTO DE TERRAS DO ACRE ITERACRE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.979Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "720",
-      "code": "215",
-      "name": "INSTITUTO DE MUDANÇAS CLIMÁTICAS E REGULAÇÃO DOS SERV. AMBIENTAIS -IMC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.984Z"
+      "updatedAt": "2026-09-16T14:36:17.046Z"
     },
     {
       "year": 2026,
@@ -11437,7 +11122,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.989Z"
+      "updatedAt": "2026-09-16T14:36:17.389Z"
     },
     {
       "year": 2026,
@@ -11447,37 +11132,77 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.998Z"
+      "updatedAt": "2026-09-16T14:36:17.392Z"
     },
     {
       "year": 2026,
-      "organizationCode": "721",
+      "organizationCode": "753",
       "code": "001",
       "name": "UNIDADE GESTORA",
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.003Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "721",
-      "code": "302",
-      "name": "FUNDAÇÃO HOSPITAL ESTADUAL DO ACRE- FUNDHACRE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.008Z"
+      "updatedAt": "2026-09-16T14:36:17.444Z"
     },
     {
       "year": 2026,
       "organizationCode": "753",
-      "code": "610",
-      "name": "FUNDO AGROPECUÁRIO - FUNAGRO",
+      "code": "207",
+      "name": "INSTITUTO DE DEFESA AGROPECUÁRIA FLORESTAL - IDAF",
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.071Z"
+      "updatedAt": "2026-09-16T14:36:17.448Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "753",
+      "code": "401",
+      "name": "COMPANHIA DE ARMAZÉNS E ENTREPOSTOS DO ACRE - CAGEACRE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.453Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "753",
+      "code": "402",
+      "name": "EMPRESA DE ASSISTÊNCIA TÉCNICA E EXTENSÃO RURAL DO ACRE - EMATER/AC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.458Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "760",
+      "code": "216",
+      "name": "INSTITUTO DE PROTEÇÃO E DEFESA DO CONSUMIDOR DO ACRE - PROCON/AC",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.498Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "760",
+      "code": "640",
+      "name": "FUNDO ESTADUAL DE DEFESA DO CONSUMIDOR - FEDC",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.521Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "760",
+      "code": "642",
+      "name": "FUNDO ESTADUAL DE DIREITOS DA PES- SOA IDOSA DO ACRE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.525Z"
     },
     {
       "year": 2026,
@@ -11487,7 +11212,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.144Z"
+      "updatedAt": "2026-09-16T14:36:17.530Z"
     },
     {
       "year": 2026,
@@ -11497,7 +11222,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.149Z"
+      "updatedAt": "2026-09-16T14:36:17.534Z"
     },
     {
       "year": 2026,
@@ -11507,107 +11232,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.169Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "102",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.583Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "102",
-      "code": "647",
-      "name": "FUNDO DE AMPARO ÀS ATIV.PEDAGÓGICAS DO TRIBUNAL DE CONTAS - FAAP/TCE",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.588Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "203",
-      "code": "005",
-      "name": "SECRETARIA DE TECNOLOGIA DA INFORMAÇÃO E COMUNICAÇÃO-SETIC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.612Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "715",
-      "code": "510",
-      "name": "BANCO DO ESTADO DO ACRE S.A. - BANACRE EM LIQUIDAÇÃO ORDINÁRIA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.861Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "717",
-      "code": "212",
-      "name": "INSTITUTO ESTADUAL DE EDUCAÇÃO PROFISSIONAL E TECNOLÓGICA - IEPTEC",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:38:59.885Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "721",
-      "code": "607",
-      "name": "FUNDO ESTADUAL DE SAÚDE - FUNDES",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.012Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "722",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.016Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "754",
-      "code": "001",
-      "name": "UNIDADE GESTORA",
-      "active": true,
-      "relocated": false,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.076Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "754",
-      "code": "203",
-      "name": "SERVIÇO DE ÁGUA E ESGOTO DO ESTADO DO ACRE - SANEACRE",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.081Z"
-    },
-    {
-      "year": 2026,
-      "organizationCode": "754",
-      "code": "210",
-      "name": "AGÊNCIA REGULADORA DOS SERVIÇOS PÚBLICOS DO ESTADO DO ACRE-AGEACRE",
-      "active": true,
-      "relocated": true,
-      "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.085Z"
+      "updatedAt": "2026-09-16T14:36:17.552Z"
     },
     {
       "year": 2026,
@@ -11617,7 +11242,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.173Z"
+      "updatedAt": "2026-09-16T14:36:17.557Z"
     },
     {
       "year": 2026,
@@ -11627,7 +11252,167 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.178Z"
+      "updatedAt": "2026-09-16T14:36:17.561Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "762",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.582Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "101",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:16.980Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "102",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:16.986Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "446",
+      "code": "629",
+      "name": "FUNDO DE PRESERVAÇÃO E DESENV. DOS POVOS INDIGENAS DO ACRE - FPDPI/AC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.081Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "510",
+      "code": "650",
+      "name": "Fundo de Gestão de Honorários Advocatícios",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-09-14T16:10:06.146Z",
+      "updatedAt": "2026-09-16T14:36:17.127Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "714",
+      "code": "002",
+      "name": "UNIDADE GESTORA DA FOLHA DE PAGAMEN TO DE PESSOAL",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.178Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "714",
+      "code": "211",
+      "name": "INSTITUTO DE PREVIDÊNCIA DO ESTADO DO ACRE - ACREPREVIDÊNCIA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.182Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "715",
+      "code": "404",
+      "name": "COMPANHIA DE COLONIZAÇÃO DO ACRE - COLONACRE EM LIQUIDAÇÃO ORDINÁRIA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.237Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "715",
+      "code": "510",
+      "name": "BANCO DO ESTADO DO ACRE S.A. - BANACRE EM LIQUIDAÇÃO ORDINÁRIA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.256Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "717",
+      "code": "212",
+      "name": "INSTITUTO ESTADUAL DE EDUCAÇÃO PROFISSIONAL E TECNOLÓGICA - IEPTEC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.278Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "719",
+      "code": "216",
+      "name": "INSTITUTO DE PROTEÇAO E DEFESA DO CONSUMIDOR DO ACRE - PROCON/AC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.329Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "720",
+      "code": "202",
+      "name": "INSTITUTO DE MEIO AMBIENTE DO ACRE IMAC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.360Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "721",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.397Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "721",
+      "code": "302",
+      "name": "FUNDAÇÃO HOSPITAL ESTADUAL DO ACRE- FUNDHACRE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.402Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "721",
+      "code": "607",
+      "name": "FUNDO ESTADUAL DE SAÚDE - FUNDES",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.407Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "722",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.411Z"
     },
     {
       "year": 2026,
@@ -11637,7 +11422,7 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.021Z"
+      "updatedAt": "2026-09-16T14:36:17.416Z"
     },
     {
       "year": 2026,
@@ -11647,7 +11432,237 @@
       "active": true,
       "relocated": false,
       "createdAt": "2026-05-21T18:22:55.737Z",
-      "updatedAt": "2026-09-15T14:39:00.026Z"
+      "updatedAt": "2026-09-16T14:36:17.421Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "744",
+      "code": "203",
+      "name": "SERVIÇO DE ÁGUA E ESGOTO DO ESTADO DO ACRE - SANEACRE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.425Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "753",
+      "code": "610",
+      "name": "FUNDO AGROPECUÁRIO - FUNAGRO",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.462Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "754",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.467Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "754",
+      "code": "203",
+      "name": "SERVIÇO DE ÁGUA E ESGOTO DO ESTADO DO ACRE - SANEACRE",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.471Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "754",
+      "code": "210",
+      "name": "AGÊNCIA REGULADORA DOS SERVIÇOS PÚBLICOS DO ESTADO DO ACRE-AGEACRE",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.476Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "761",
+      "code": "615",
+      "name": "FUNDO DE DESENVOLVIMENTO SUSTENTÁVEL - FDS",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.566Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "102",
+      "code": "647",
+      "name": "FUNDO DE AMPARO ÀS ATIV.PEDAGÓGICAS DO TRIBUNAL DE CONTAS - FAAP/TCE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:16.990Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "203",
+      "code": "005",
+      "name": "SECRETARIA DE TECNOLOGIA DA INFORMAÇÃO E COMUNICAÇÃO-SETIC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.012Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "203",
+      "code": "006",
+      "name": "SECRETARIA DE INFRAESTRUTURA E ATENDIMENTO AO USUÁRIO-SEINF",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.017Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "720",
+      "code": "206",
+      "name": "INSTITUTO DE TERRAS DO ACRE ITERACRE",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.371Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "720",
+      "code": "215",
+      "name": "INSTITUTO DE MUDANÇAS CLIMÁTICAS E REGULAÇÃO DOS SERV. AMBIENTAIS -IMC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.381Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "744",
+      "code": "206",
+      "name": "INSTITUTO DE TERRAS DO ACRE ITERACRE",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.430Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "744",
+      "code": "619",
+      "name": "FUNDO ESTADUAL DE HABITAÇÃO - FEH",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.434Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "744",
+      "code": "643",
+      "name": "FUNDO ESTADUAL ESPEC. PARA A RECUP. DA BACIA DO IGARAPÉ SÃO FRANCISCO",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.438Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "754",
+      "code": "502",
+      "name": "COMPANHIA DE SANEAMENTO DO ACRE - SANACRE",
+      "active": true,
+      "relocated": true,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.480Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "759",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.485Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "761",
+      "code": "618",
+      "name": "FUNDO DE DESENVOLVIMENTO CIENTÍFICO E TECNOLÓGICO - FDCT",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.570Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "761",
+      "code": "623",
+      "name": "FUNDO DE APOIO AO COOPERATIVISMO - FAC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.575Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "761",
+      "code": "645",
+      "name": "FUNDO DO TRABALHO - FT/AC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.578Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "203",
+      "code": "008",
+      "name": "SECRETARIA DE LOGÍSTICA E GESTÃO ADMINISTRATIVA-SELGA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.026Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "305",
+      "code": "630",
+      "name": "FUNDO ORÇ. ESP. DA ESCOLA SUP. DA D EFENSORIA PÚB DO EST.DO ACRE-ESDPAC",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.062Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "759",
+      "code": "635",
+      "name": "FUNDO ESP.PARA O DESENV.DA PRODUÇÃO COMERCIALIZAÇÃO ARTESANATO ACREANO",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.490Z"
+    },
+    {
+      "year": 2026,
+      "organizationCode": "760",
+      "code": "001",
+      "name": "UNIDADE GESTORA",
+      "active": true,
+      "relocated": false,
+      "createdAt": "2026-05-21T18:22:55.737Z",
+      "updatedAt": "2026-09-16T14:36:17.494Z"
     }
   ],
   "exerciseUnitExecutors": [
