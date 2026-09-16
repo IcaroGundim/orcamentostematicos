@@ -3,6 +3,7 @@ import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth
 import { authorizeJob } from '@/lib/job-auth';
 import { prisma } from '@/lib/prisma';
 import { parseQdd } from '@/lib/qdd-parser';
+import { readQddFormData } from '@/lib/qdd-upload';
 import { createId } from '@/lib/store';
 
 export const runtime = 'nodejs';
@@ -34,11 +35,12 @@ export async function POST(req: NextRequest) {
     if (user.role !== 'SEPLAN_ADMIN') return forbidden();
   }
 
-  const formData = await req.formData().catch(() => null);
-  if (!formData) return badRequest('Envie o arquivo do QDD do SICAF no campo file.');
+  const upload = await readQddFormData(req);
+  if (upload.response) return upload.response;
+  const formData = upload.formData;
 
-  const file = formData.get('file') as File | null;
-  if (!file) return badRequest('Envie o arquivo do QDD do SICAF no campo file.');
+  const file = formData.get('file');
+  if (!(file instanceof File)) return badRequest('Envie o arquivo do QDD do SICAF no campo file.');
 
   const periodType = (formData.get('periodType') as string | null) ?? 'ACUMULADO_ANUAL';
   const referenceMonth = Number(formData.get('referenceMonth'));

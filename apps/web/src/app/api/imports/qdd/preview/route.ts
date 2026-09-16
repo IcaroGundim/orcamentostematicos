@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized, forbidden, badRequest } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import { parseQdd } from '@/lib/qdd-parser';
+import { readQddFormData } from '@/lib/qdd-upload';
 import { createId } from '@/lib/store';
 
 export const runtime = 'nodejs';
@@ -12,11 +13,12 @@ export async function POST(req: NextRequest) {
   if (!user) return unauthorized();
   if (user.role !== 'SEPLAN_ADMIN') return forbidden();
 
-  const formData = await req.formData().catch(() => null);
-  if (!formData) return badRequest('Envie um arquivo QDD no campo file.');
+  const upload = await readQddFormData(req);
+  if (upload.response) return upload.response;
+  const formData = upload.formData;
 
-  const file = formData.get('file') as File | null;
-  if (!file) return badRequest('Envie um arquivo QDD no campo file.');
+  const file = formData.get('file');
+  if (!(file instanceof File)) return badRequest('Envie um arquivo QDD no campo file.');
 
   const periodType = formData.get('periodType') as string | null;
   const referenceMonth = Number(formData.get('referenceMonth'));

@@ -37,7 +37,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     headers,
   });
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && path !== '/auth/login') {
       clearStoredSession();
       window.location.href = '/login';
       return new Promise<T>(() => {});

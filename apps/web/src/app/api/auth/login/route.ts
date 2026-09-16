@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { badRequest, ok, unauthorized } from '@/lib/auth-server';
+import {
+  loginRateLimitKey,
+  loginRateLimitLockId,
+  nextLoginFailure,
+  retryAfterSeconds,
+} from '@/lib/login-rate-limit';
 
 function databaseUnavailable() {
   return NextResponse.json(
@@ -19,15 +25,65 @@ function databaseUnavailable() {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const rawIdentifier = body?.identifier ?? body?.email;
-  if (!rawIdentifier || !body?.password) {
+  if (!rawIdentifier || typeof body?.password !== 'string' || !body.password) {
     return badRequest('Informe e-mail ou nome de usuário e a senha.');
   }
   const identifier = String(rawIdentifier).toLowerCase().trim();
+  if (!identifier || identifier.length > 254) return badRequest('Identificador inválido.');
 
-  let user;
+  let result;
   try {
-    user = await prisma.user.findFirst({
-      where: { OR: [{ email: identifier }, { username: identifier }] },
+    // A tabela é compartilhada por todas as instâncias. Limpeza rara e limitada
+    // evita que identificadores inexistentes acumulem linhas sem travar o login.
+    if (Math.random() < 0.02) {
+      const staleBefore = new Date(Date.now() - 60 * 60 * 1000);
+      await prisma.$executeRaw`
+        DELETE FROM "LoginRateLimit"
+        WHERE "key" IN (
+          SELECT "key" FROM "LoginRateLimit"
+          WHERE "windowStartedAt" < ${staleBefore}
+          ORDER BY "windowStartedAt"
+          LIMIT 100
+          FOR UPDATE SKIP LOCKED
+        )
+      `;
+    }
+    result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { OR: [{ email: identifier }, { username: identifier }] },
+      });
+      const key = loginRateLimitKey(user ? 'user' : 'identifier', user?.id ?? identifier);
+
+      // O lock torna a quinta falha efetiva mesmo com requisições simultâneas.
+      await tx.$queryRawUnsafe(
+        'SELECT pg_advisory_xact_lock($1::integer, $2::integer)::text AS lock_result',
+        20260916,
+        loginRateLimitLockId(key),
+      );
+
+      const now = new Date();
+      const current = await tx.loginRateLimit.findUnique({ where: { key } });
+      if (current?.blockedUntil && current.blockedUntil > now) {
+        return { kind: 'blocked', retryAfter: retryAfterSeconds(current.blockedUntil, now) } as const;
+      }
+
+      if (!user || user.active === false || user.password !== body.password) {
+        const next = nextLoginFailure(current, now);
+        await tx.loginRateLimit.upsert({
+          where: { key },
+          create: { key, ...next },
+          update: next,
+        });
+        return next.blockedUntil
+          ? { kind: 'blocked', retryAfter: retryAfterSeconds(next.blockedUntil, now) } as const
+          : { kind: 'invalid' } as const;
+      }
+
+      await tx.loginRateLimit.deleteMany({ where: { key } });
+      const token = randomBytes(32).toString('hex');
+      await tx.session.create({ data: { token, userId: user.id } });
+      const { password: _pw, ...safeUser } = user;
+      return { kind: 'success', token, user: safeUser } as const;
     });
   } catch (error) {
     if (
@@ -38,11 +94,12 @@ export async function POST(req: NextRequest) {
     }
     throw error;
   }
-  if (!user || user.password !== body.password) return unauthorized();
-
-  const token = randomBytes(32).toString('hex');
-  await prisma.session.create({ data: { token, userId: user.id } });
-
-  const { password: _pw, ...safeUser } = user;
-  return ok({ token, user: safeUser });
+  if (result.kind === 'blocked') {
+    return NextResponse.json(
+      { message: 'Muitas tentativas de login. Aguarde e tente novamente.' },
+      { status: 429, headers: { 'Retry-After': String(result.retryAfter) } },
+    );
+  }
+  if (result.kind === 'invalid') return unauthorized();
+  return ok({ token: result.token, user: result.user });
 }

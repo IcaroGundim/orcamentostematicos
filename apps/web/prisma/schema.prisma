@@ -131,6 +131,15 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model LoginRateLimit {
+  key             String    @id
+  failures        Int
+  windowStartedAt DateTime
+  blockedUntil    DateTime?
+
+  @@index([windowStartedAt])
+}
+
 model PasswordResetToken {
   token     String    @id
   userId    String

@@ -7,10 +7,13 @@ export function todayStamp(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** Escapa uma célula para CSV (separador `;`), protegendo aspas e quebras de linha. */
+/** Escapa uma célula para CSV e impede que texto seja interpretado como fórmula. */
 export function escapeCsvCell(value: string | number | null | undefined): string {
   if (value == null) return '';
-  const str = String(value);
+  // Preserva números reais, inclusive negativos. Apenas texto não confiável é neutralizado.
+  const str = typeof value === 'string' && /^\s*[=+\-@]/u.test(value)
+    ? `'${value}`
+    : String(value);
   if (/[";\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
