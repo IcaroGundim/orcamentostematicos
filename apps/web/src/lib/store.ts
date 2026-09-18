@@ -62,7 +62,9 @@ export async function setCurrentYear(year: number): Promise<void> {
       create: { year, isCurrent: true },
       update: { isCurrent: true },
     });
-  });
+    // Mesma razão do login: o padrão de 2s do `maxWait` não cobre o despertar do
+    // compute suspenso do Neon, e a troca de exercício falharia com P2028.
+  }, { maxWait: 10000, timeout: 15000 });
 }
 
 /**

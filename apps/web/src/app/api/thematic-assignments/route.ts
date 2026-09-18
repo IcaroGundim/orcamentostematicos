@@ -137,7 +137,9 @@ export async function POST(req: NextRequest) {
     }
 
     return assignment;
-  });
+    // Mesma razão do login: o padrão de 2s do `maxWait` não cobre o despertar do
+    // compute suspenso do Neon, e classificar uma ação falharia com P2028.
+  }, { maxWait: 10000, timeout: 15000 });
 
   await logUserActivity({
     userId: user.id,
