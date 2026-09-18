@@ -5,10 +5,36 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* ── Marca ─────────────────────────────────────────────────────────────────
+     Verde da identidade: #2E6F40, escolhido pelo usuário em 18/09/2026.
+     Registro em docs/design-orcamento.md, seções 4.1 e 9.
+
+     São QUATRO tons e eles NÃO são intercambiáveis — cada um existe para um
+     papel de contraste:
+
+       --marca            superfícies: faixas, cabeçalhos de painel, botões
+       --marca-hover      hover dessas superfícies
+       --marca-escura     texto sobre fundo claro, bordas, tooltip escuro
+       --marca-contraste  texto sobre --marca e --marca-hover
+
+     Os valores NÃO são escolhidos à mão: saem de `derivarPaleta()` em
+     `src/lib/paleta-marca.ts`, que persegue os mínimos do WCAG AA e recusa
+     silêncio quando não alcança. Para trocar a cor, rode `npm run build:lab`,
+     teste no painel e cole o bloco que ele gera — não edite estes quatro valores
+     avulsos, ou os papéis saem de sincronia.
+
+     Contrastes medidos para esta cor: --marca-contraste sobre --marca 5,91:1 ·
+     sobre --marca-hover 7,06:1 · branco sobre --marca-escura 10,08:1 ·
+     --marca-escura sobre branco 10,08:1. */
+  --marca: oklch(0.487 0.100 150.2);
+  --marca-hover: oklch(0.445 0.100 150.2);
+  --marca-escura: oklch(0.367 0.101 150.3);
+  --marca-contraste: oklch(0.991 0.000 89.9);
+
   --muted: oklch(0.97 0 0);
   --border: oklch(0 0 0);
-  --primary: oklch(0.34 0.12 165);
-  --primary-foreground: oklch(0.99 0 0);
+  --primary: var(--marca);
+  --primary-foreground: var(--marca-contraste);
   --accent: oklch(0.96 0 0);
   --background: oklch(1 0 0);
   --foreground: oklch(0.16 0.025 150);
@@ -23,8 +49,11 @@
   --destructive: oklch(0.55 0.18 28);
   --input: oklch(0 0 0);
   --ring: oklch(0.78 0 0);
-  --chart-1: oklch(0.34 0.12 165);
-  --chart-2: oklch(0.52 0.14 150);
+  /* Os dois verdes da série seguem a marca; os três restantes (laranja,
+     vermelho, azul) não mudam — é o contraste ENTRE séries que torna o gráfico
+     legível, e colapsá-las numa cor só apagaria a distinção. */
+  --chart-1: var(--marca-escura);
+  --chart-2: var(--marca);
   --chart-3: oklch(0.68 0.16 55);
   --chart-4: oklch(0.54 0.16 30);
   --chart-5: oklch(0.48 0.1 235);
@@ -34,17 +63,41 @@
   --gauge-2: oklch(0.62 0.16 45);
   --gauge-3: oklch(0.68 0.16 55);
   --gauge-4: oklch(0.7 0.14 110);
-  --gauge-5: oklch(0.52 0.14 150);
-  --gauge-6: oklch(0.34 0.12 165);
+  --gauge-5: var(--marca);
+  --gauge-6: var(--marca-escura);
   --radius: 0.625rem;
-  --sidebar: oklch(0.23 0.07 165);
+  /* A barra lateral continua sendo uma superfície ESCURA com texto quase branco,
+     agora no matiz da marca. Usar --marca aqui deixaria texto claro sobre fundo
+     claro. Branco sobre estes tons: 8,1:1 (fundo) e 5,9:1 (acento). */
+  --sidebar: oklch(0.34 0.08 150);
   --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.34 0.12 165);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.32 0.09 165);
+  --sidebar-primary: var(--marca);
+  --sidebar-primary-foreground: var(--marca-contraste);
+  --sidebar-accent: oklch(0.42 0.09 150);
   --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(0.35 0.06 165);
-  --sidebar-ring: oklch(0.55 0.12 165);
+  --sidebar-border: oklch(0.46 0.085 150);
+  --sidebar-ring: var(--marca);
+}
+
+/**
+ * A TELA DE LOGIN fica fora da nova marca, por decisão do usuário: ela guarda o
+ * verde anterior como identidade da porta de entrada.
+ *
+ * É uma classe de escopo, e não pinos por elemento, porque `--primary` alcança
+ * o painel do herói, o botão padrão, campos, alertas e anéis de foco — todos os
+ * componentes de `components/ui` que derivam do token. Herança cobre todos de
+ * uma vez; pinar um a um deixaria algum para trás na próxima edição.
+ *
+ * O AlertDialog do acesso rápido também recebe a classe: o Radix o renderiza em
+ * portal, FORA desta subárvore, então ele escaparia do escopo.
+ */
+.marca-anterior {
+  --marca: oklch(0.34 0.12 165);
+  --marca-hover: oklch(0.28 0.1 165);
+  --marca-escura: oklch(0.26 0.063 152.9);
+  --marca-contraste: oklch(0.99 0 0);
+  --primary: oklch(0.34 0.12 165);
+  --primary-foreground: oklch(0.99 0 0);
 }
 
 button,
@@ -57,6 +110,10 @@ textarea {
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
+  --color-marca: var(--marca);
+  --color-marca-hover: var(--marca-hover);
+  --color-marca-escura: var(--marca-escura);
+  --color-marca-contraste: var(--marca-contraste);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -132,16 +189,18 @@ textarea {
   --gauge-2: oklch(0.68 0.16 45);
   --gauge-3: oklch(0.75 0.15 55);
   --gauge-4: oklch(0.78 0.14 110);
-  --gauge-5: oklch(0.68 0.14 150);
-  --gauge-6: oklch(0.58 0.13 165);
-  --sidebar: oklch(0.18 0.04 165);
+  --gauge-5: oklch(0.66 0.11 150.2);
+  --gauge-6: oklch(0.55 0.11 150.2);
+  /* Mesma marca, clareada para o fundo escuro. `--primary` do modo escuro é
+     cinza neutro e continua assim: nunca foi verde. */
+  --sidebar: oklch(0.24 0.06 150);
   --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.34 0.12 165);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.24 0.06 165);
+  --sidebar-primary: oklch(0.6 0.11 150.2);
+  --sidebar-primary-foreground: oklch(0.15 0.03 150);
+  --sidebar-accent: oklch(0.3 0.07 150);
   --sidebar-accent-foreground: oklch(0.97 0 0);
   --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.55 0.12 165);
+  --sidebar-ring: oklch(0.6 0.11 150.2);
 }
 
 @layer base {

@@ -248,7 +248,10 @@ function LoginView({ onForgot }: { onForgot: () => void }) {
           if (!open && pendingQuickAccessSave) declineQuickAccessSave();
         }}
       >
-        <AlertDialogContent>
+        {/* O Radix renderiza este conteúdo em portal, FORA da subárvore do
+            <main>, então ele escaparia do escopo e o botão "Sim, salvar atalho"
+            apareceria na marca nova. A classe precisa ser repetida aqui. */}
+        <AlertDialogContent className="marca-anterior">
           <AlertDialogHeader>
             <AlertDialogTitle>Salvar atalho neste dispositivo?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -537,7 +540,11 @@ function LoginCard() {
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen bg-background">
+    // `marca-anterior` congela o verde antigo nesta tela: o restante da aplicação
+    // passou para #2E6F40, mas a porta de entrada mantém a identidade anterior por
+    // decisão do usuário. A classe redefine os tokens, então tudo que herda de
+    // `--primary` (herói, botões, campos, alertas, anéis de foco) vem junto.
+    <main className="marca-anterior min-h-screen bg-background">
       <section className="grid min-h-screen w-full lg:grid-cols-[1fr_480px]">
 
         <div className="relative hidden flex-col justify-between overflow-hidden bg-primary p-10 text-primary-foreground lg:flex">

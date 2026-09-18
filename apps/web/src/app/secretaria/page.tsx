@@ -571,7 +571,7 @@ export default function SecretariaPage() {
 
   return (
     <main className={cn('bg-background', activeTab === 'overview' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen')}>
-      <header className="shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
+      <header className="shrink-0 border-b border-black bg-marca text-marca-contraste shadow-sm">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />

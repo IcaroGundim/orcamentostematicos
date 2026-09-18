@@ -59,7 +59,7 @@ const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
 const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
 const switchTrackClass =
-  'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534] md:text-[17px]';
+  'group relative inline-block h-[2em] w-[3.5em] shrink-0 cursor-pointer rounded-[10px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#2e6f40] md:text-[17px]';
 const switchThumbClass =
   'absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]:translate-x-[1.5em]';
 
@@ -544,7 +544,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;
   const tableHeadClass = isExecutionVariant
-    ? 'bg-green-900 text-white'
+    ? 'bg-marca text-marca-contraste'
     : 'bg-background text-muted-foreground';
 
   const selectedOrganization = useMemo(() => {
@@ -954,7 +954,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               <div className={`sticky top-0 z-10 w-full ${tableMinWidth}`}>
                 <Table className="table-fixed w-full">
                   <TableHeader
-                    className={cn(isExecutionVariant ? 'bg-green-900' : 'bg-background')}
+                    className={cn(isExecutionVariant ? 'bg-marca' : 'bg-background')}
                   >
                     <TableRow
                       style={

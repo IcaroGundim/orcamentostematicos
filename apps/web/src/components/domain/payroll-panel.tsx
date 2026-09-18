@@ -164,7 +164,7 @@ function PayrollSection({
 }) {
   return (
     <section className={cn('min-w-0 overflow-hidden border bg-white', className)}>
-      <h3 className="bg-green-900 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-white">
+      <h3 className="bg-marca px-3 py-2 text-sm font-semibold uppercase tracking-wide text-marca-contraste">
         {title}
       </h3>
       <div className="min-w-0 p-3">{children}</div>
@@ -257,7 +257,7 @@ function PayrollBarList({
 }
 
 const switchTrackClass =
-  'group relative inline-block h-[1.5em] w-[2.6em] shrink-0 cursor-pointer rounded-[8px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#166534]';
+  'group relative inline-block h-[1.5em] w-[2.6em] shrink-0 cursor-pointer rounded-[8px] bg-[rgb(182,182,182)] text-[15px] outline-none transition-colors duration-[400ms] focus-visible:shadow-[0_0_1px_#2196F3] data-[state=checked]:bg-[#2e6f40]';
 const switchThumbClass =
   'absolute bottom-[0.22em] left-[0.22em] size-[1.06em] rounded-[6px] bg-white transition-transform duration-[400ms] group-data-[state=checked]:translate-x-[1.1em]';
 
@@ -778,7 +778,7 @@ export const PayrollPanel = memo(function PayrollPanel({ data }: { data: Payroll
   return (
     <div className="payroll-presentation flex h-full min-h-0 flex-col overflow-hidden border bg-white">
       <header className="shrink-0 border-b bg-white px-4 py-3">
-        <h2 className="text-lg font-bold leading-tight text-green-900">Folha de pagamento</h2>
+        <h2 className="text-lg font-bold leading-tight text-marca-escura">Folha de pagamento</h2>
         <p className="mt-0.5 text-sm font-semibold capitalize">{period}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1">

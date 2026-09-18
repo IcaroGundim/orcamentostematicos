@@ -26,13 +26,13 @@ export async function sendPasswordResetEmail(
 
   const html = `
     <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.6;">
-      <h2 style="color: #166534; margin-bottom: 8px;">Redefinição de senha</h2>
+      <h2 style="color: #2e6f40; margin-bottom: 8px;">Redefinição de senha</h2>
       <p>${saudacao},</p>
       <p>Recebemos um pedido para redefinir a senha da sua conta no sistema
       <strong>Orçamentos Temáticos</strong>. Clique no botão abaixo para criar uma nova senha:</p>
       <p style="margin: 24px 0;">
         <a href="${link}"
-           style="background: #166534; color: #ffffff; text-decoration: none; padding: 12px 20px;
+           style="background: #2e6f40; color: #ffffff; text-decoration: none; padding: 12px 20px;
                   border-radius: 8px; display: inline-block; font-weight: 600;">
           Redefinir minha senha
         </a>

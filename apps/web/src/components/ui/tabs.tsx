@@ -253,7 +253,7 @@ function HoverTabsList({
               'relative z-10 border-0 bg-transparent shadow-none transition-none',
               'data-active:bg-transparent data-active:shadow-none',
               highlighted
-                ? 'text-white data-active:text-white hover:text-white'
+                ? 'text-marca-contraste data-active:text-marca-contraste hover:text-marca-contraste'
                 : cn(
                     'text-foreground/70 data-active:text-foreground/70 hover:text-foreground',
                     item.idleClassName,

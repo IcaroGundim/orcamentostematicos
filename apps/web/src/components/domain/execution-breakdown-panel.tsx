@@ -59,7 +59,7 @@ const AXIS_TICK_MAX_CHARS = 18;
 const PANEL_CLASS =
   '!gap-0 overflow-hidden rounded-none border-black/70 bg-white !py-0 shadow-none';
 const CHART_HEADER_CLASS =
-  '!mt-0 !rounded-none border-b border-black/70 bg-green-900 px-3 py-2 text-white';
+  '!mt-0 !rounded-none border-b border-black/70 bg-marca px-3 py-2 text-marca-contraste';
 
 function chartTick(row: ExecutionRow): string {
   if (row.chartLabel) return truncate(row.chartLabel, AXIS_TICK_MAX_CHARS);

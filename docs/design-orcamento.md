@@ -334,12 +334,35 @@ telas pequenas que a justifique — não por preferência estética.
 
 ### 4.1 Paleta
 
+A marca vive em quatro tokens declarados em `src/app/globals.css` (`:root`). Eles
+**não** são intercambiáveis — cada um existe para um papel de contraste, e trocar
+um pelo outro quebra a legibilidade. Use os utilitários (`bg-marca`,
+`text-marca-escura`, …), nunca o hex solto.
+
+| Token | Valor | Papel |
+|---|---|---|
+| `--marca` | `#2e6f40` · `oklch(0.487 0.100 150.2)` | superfícies: faixas, cabeçalhos, botões |
+| `--marca-hover` | `#216335` · `oklch(0.445 0.100 150.2)` | hover dessas superfícies |
+| `--marca-escura` | `#004d20` · `oklch(0.367 0.101 150.3)` | texto sobre claro, bordas, tooltip escuro |
+| `--marca-contraste` | `#fcfcfc` · `oklch(0.991 0.000 89.9)` | texto sobre `--marca` e `--marca-hover` |
+
+**Não edite estes quatro valores à mão.** Eles saem de `derivarPaleta()`
+(`src/lib/paleta-marca.ts`), que persegue os mínimos do WCAG AA e avisa quando não
+alcança. Para trocar a cor: `npm run build:lab`, testar no painel "Cores" e colar o
+bloco que ele gera. Editar um tom isolado tira os papéis de sincronia.
+
 | Uso | Valor |
 |---|---|
-| Cabeçalhos de painel, faixa de navegação, título da trilha | `bg-green-900` |
+| Cabeçalhos de painel, faixa de navegação, título da trilha | `bg-marca` + `text-marca-contraste` |
+| Texto verde sobre fundo claro, bordas estruturais verdes | `text-marca-escura` / `border-marca-escura` |
+| Tooltip escuro | `bg-marca-escura` + `text-white` |
 | Marcador de aba ativa, acento bege | `#b8b477` |
 | Barras/pizza da execução (5) | `#5f8f70`, `#8fa873`, `#b8b477`, `#110f24`, `#c8c89f` |
 | Pizza da folha (10) | as 5 acima + `#365f47`, `#78966a`, `#8c8756`, `#29253d`, `#d8d8bd`, `#6f735a` |
+
+As cores de **gráfico** são independentes dos tokens da marca e sempre foram mais
+claras que o cromo — é o contraste entre séries que torna o gráfico legível.
+Igualá-las à cor da identidade apaga essa distinção.
 | Fundo de card/painel | `bg-white` |
 | Bordas estruturais | `border-black/70` |
 | Bordas internas (linhas, células) | `border-black/20`–`/30` |
@@ -361,8 +384,10 @@ quando há filtro ativo (seção 9, item 24); não estendê-la a outros elemento
 
 - Rótulos de seção e coluna: `uppercase`, `tracking-[0.08em]` a `[0.12em]`,
   `text-[0.68rem]`, `font-semibold`, `text-muted-foreground`.
-- Títulos de painel: `uppercase tracking-wide`, `font-semibold` (branco sobre
-  verde).
+- Títulos de painel: `uppercase tracking-wide`, `font-semibold`, com
+  `text-marca-contraste` sobre `bg-marca`. Hoje isso é branco sobre verde, mas
+  **nunca escreva `text-white` aqui**: o token acompanha a cor da marca e vira
+  escuro sozinho se um dia ela clarear (ver seção 9, item 25).
 - Valores monetários: `formatMoney` (`Intl.NumberFormat('pt-BR', BRL, 2 casas)`,
   `src/lib/api.ts:60-67`) para células; `compactMoney` (abreviações `mil`/`mi`/
   `bi`, 1 casa máxima) para eixos de gráfico e listas compactas. **Nenhuma**
@@ -1050,6 +1075,47 @@ documentar aqui.
     governa o `disabled`. Assim o vermelho nunca aparece no estado desabilitado,
     que continuaria `outline` e sairia rosa-lavado sob `disabled:opacity-50`. O
     botão segue sempre montado para o bloco de filtros não mudar de altura.
+25. **O verde da marca é `#2E6F40`, e ele vive em TOKENS, não em classes.**
+    Escolha do dono do produto em 2026-09-18, registrada aqui porque a seção
+    10.16 é explícita: quem revoga uma regra da paleta é uma edição deste
+    documento, não um clique. O verde anterior (`green-900`, `#14532d`) saiu de
+    toda a aplicação — exceto do login (abaixo).
+
+    **Nunca escreva `text-white` sobre uma superfície da marca.** Use
+    `text-marca-contraste`. Hoje o token resolve para branco e o resultado é
+    idêntico, então a regra parece supérflua — não é. No caminho até aqui a cor
+    passou por `#78a890`, um verde claro em que texto branco dava **2,7:1** e
+    reprovava no WCAG AA; o token virou escuro sozinho e as telas continuaram
+    legíveis. Fixar `text-white` é justamente o que quebra na próxima troca.
+
+    **Por que quatro tons e não um:** uma cor só não cobre os papéis. Texto verde
+    sobre fundo branco (`text-marca-escura`, 21 ocorrências no módulo) e o tooltip
+    escuro precisam de um tom mais fundo que a superfície; daí `--marca-escura`,
+    com 10,08:1 nos dois sentidos. O `--marca-hover` existe porque escurecer até
+    `--marca-escura` no hover estouraria a relação com o texto.
+
+    **A derivação é código, não gosto.** `derivarPaleta()` em
+    `src/lib/paleta-marca.ts` produz os quatro tons a partir de um hex, persegue
+    os mínimos do AA e emite aviso quando não alcança — com 18 testes, incluindo
+    os casos degenerados. O painel "Cores" (`npm run build:lab`) aplica a paleta
+    no app real para conferência antes de fixar.
+
+    **O que ficou de fora, deliberadamente:**
+    - **A tela de login** mantém o verde anterior, por decisão do usuário. O
+      congelamento é a classe de escopo `.marca-anterior` em `globals.css`,
+      aplicada ao `<main>` do login **e** ao `AlertDialogContent` do acesso
+      rápido — o Radix renderiza esse diálogo em portal, fora da subárvore, e ele
+      escaparia do escopo.
+    - **`#065f46` (CLIMATICO)** e os pares `#9333ea` (OSG) / `#0e7490` (OCAD) são
+      codificação de dado, não cromo. Pintar uma das três categorias com a cor da
+      marca faria "verde = Climático" e "verde = a aplicação" virarem o mesmo
+      sinal.
+    - **As cores dos gráficos**, que seguem as da seção 4.1 e não os tokens da
+      marca. Elas sempre foram mais claras que o cromo — mesmo quando ele era
+      `green-900` — porque é o contraste ENTRE séries que torna o gráfico
+      legível. Amarrá-las à cor da identidade apagaria essa distinção, e foi por
+      isso que voltaram a `#5f8f70`/`#365f47` quando a marca virou um verde
+      escuro de novo.
 
 ## 10. Proibições explícitas (anti-slop)
 

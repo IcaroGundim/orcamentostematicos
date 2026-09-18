@@ -298,7 +298,7 @@ export function UsersPanel({ organizations }: Props) {
           </div>
           <Button
             size="sm"
-            className="!border-white !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950"
+            className="!border-white !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura"
             onClick={openCreate}
           >
             <PlusIcon className="size-4" />
@@ -607,7 +607,7 @@ function UserRow({ user, onEdit, onDelete, isEditing }: UserRowProps) {
           <Badge variant="outline">{roleLabels[user.role]}</Badge>
           {!user.active ? <Badge variant="destructive">Inativo</Badge> : null}
           {user.sessionActive ? (
-            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600/90">
+            <Badge className="bg-marca text-marca-contraste hover:bg-marca-hover">
               Sessão ativa
             </Badge>
           ) : null}

@@ -198,20 +198,20 @@ export function AdminDeliveryWorkspace({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black bg-background shadow-sm">
-      <header className="shrink-0 border-b border-black bg-green-900 px-4 py-2 text-white lg:px-5">
+      <header className="shrink-0 border-b border-black bg-marca px-4 py-2 text-marca-contraste lg:px-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="grid size-7 shrink-0 place-items-center rounded-md border border-white/35 bg-white/10 text-white">
+            <div className="grid size-7 shrink-0 place-items-center rounded-md border border-black/25 bg-black/10 text-marca-contraste">
               <PackageCheckIcon className="size-3.5" />
             </div>
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
               <h1 className="shrink-0 text-base font-semibold leading-tight">Registro de entregas</h1>
-              <p className="truncate text-xs text-white/70">
+              <p className="truncate text-xs text-marca-contraste/70">
                 Documente o que chegou à população e publique os registros consolidados nos resultados.
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-3 divide-x divide-green-900/20 overflow-hidden rounded-md border border-white bg-white shadow-sm">
+          <div className="grid grid-cols-3 divide-x divide-marca-escura/20 overflow-hidden rounded-md border border-white bg-white shadow-sm">
             <PortfolioMetric label="Registros" value={validations.length} />
             <PortfolioMetric label="Em edição" value={draftCount} />
             <PortfolioMetric label="Publicadas" value={publishedCount} />
@@ -310,13 +310,13 @@ export function AdminDeliveryWorkspace({
                       className={cn(
                         'group relative w-full overflow-hidden rounded-lg border px-3 py-3 text-left transition-colors',
                         selected
-                          ? 'border-green-900 bg-card text-foreground ring-1 ring-green-900 shadow-sm'
+                          ? 'border-marca-escura bg-card text-foreground ring-1 ring-marca-escura shadow-sm'
                           : 'border-transparent bg-card hover:border-black hover:bg-muted/40',
                       )}
                     >
                       <span className={cn('absolute inset-y-3 left-0 w-1 rounded-r-full', themeAccent[validation.theme])} />
                       <div className="flex items-center gap-2 pl-1.5">
-                        <span className={cn('text-[10px] font-bold uppercase tracking-[0.13em]', selected ? 'text-green-900' : 'text-muted-foreground')}>
+                        <span className={cn('text-[10px] font-bold uppercase tracking-[0.13em]', selected ? 'text-marca-escura' : 'text-muted-foreground')}>
                           {validation.action
                             ? `${validation.action.organizationCode}${validation.action.unitCode && validation.action.unitCode !== '001' ? `/${validation.action.unitCode}` : ''} · ${organizationAcronym(validation.action.organizationCode, validation.action.organizationName)}`
                             : 'Sem órgão'}
@@ -404,7 +404,7 @@ export function AdminDeliveryWorkspace({
                   <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="grid size-7 place-items-center rounded-md bg-green-900 text-xs font-bold text-white">1</span>
+                        <span className="grid size-7 place-items-center rounded-md bg-marca text-xs font-bold text-marca-contraste">1</span>
                         <h3 className="text-base font-semibold text-foreground">Entregas realizadas</h3>
                       </div>
                       <p className="ml-9 mt-1 text-xs text-muted-foreground">Uma ficha para cada bem, serviço ou atendimento concluído.</p>
@@ -489,7 +489,7 @@ export function AdminDeliveryWorkspace({
           <div className="grid min-h-[30rem] place-items-center bg-muted/30 p-8">
             <div className="max-w-md text-center">
               <div className="relative mx-auto grid size-24 place-items-center rounded-xl border border-black bg-card shadow-sm">
-                <div className="absolute -right-3 -top-3 grid size-8 place-items-center rounded-full border border-black bg-green-900 text-white shadow-sm">
+                <div className="absolute -right-3 -top-3 grid size-8 place-items-center rounded-full border border-black bg-marca text-marca-contraste shadow-sm">
                   <MapPinIcon className="size-4" />
                 </div>
                 <PackageIcon className="size-9 text-primary" />
@@ -519,10 +519,10 @@ function CompactFilter({ label, children, className }: { label: string; children
 function PortfolioMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-16 px-2.5 py-1 text-center">
-      <p className="text-sm font-bold leading-none tabular-nums text-green-900">
+      <p className="text-sm font-bold leading-none tabular-nums text-marca-escura">
         {value.toLocaleString('pt-BR')}
       </p>
-      <p className="mt-0.5 text-[7px] font-bold uppercase leading-none tracking-[0.11em] text-green-900">{label}</p>
+      <p className="mt-0.5 text-[7px] font-bold uppercase leading-none tracking-[0.11em] text-marca-escura">{label}</p>
     </div>
   );
 }
@@ -548,18 +548,18 @@ function AdminDeliveryEditor({
 
   return (
     <article className="overflow-hidden rounded-lg border border-black bg-card shadow-sm">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-black bg-green-900 px-3 py-2 text-white">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-black bg-marca px-3 py-2 text-marca-contraste">
         <div className="flex items-center gap-3">
           <span className="grid size-7 place-items-center rounded-md border border-black bg-background text-xs font-bold tabular-nums text-foreground">
             {String(index + 1).padStart(2, '0')}
           </span>
           <div>
             <p className="text-sm font-semibold">Ficha da entrega</p>
-            <p className="text-[11px] text-white/75">Identificação da entrega realizada</p>
+            <p className="text-[11px] text-marca-contraste/75">Identificação da entrega realizada</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="sm" className="text-white hover:bg-white/15 hover:text-white" onClick={onClear} title="Limpar os campos desta entrega">
+          <Button type="button" variant="ghost" size="sm" className="text-marca-contraste hover:bg-black/10 hover:text-marca-contraste" onClick={onClear} title="Limpar os campos desta entrega">
             <EraserIcon />
             Limpar
           </Button>

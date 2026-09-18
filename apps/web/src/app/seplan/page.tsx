@@ -314,7 +314,7 @@ function AdminSidebarNavigation({
       <span
         aria-hidden
         className={cn(
-          'pointer-events-none absolute z-10 rounded-md bg-green-900 shadow-md',
+          'pointer-events-none absolute z-10 rounded-md bg-marca shadow-md',
           'transition-[top,left,width,height] duration-300 ease-out',
           highlight.ready ? 'opacity-100' : 'opacity-0',
         )}
@@ -348,7 +348,7 @@ function AdminSidebarNavigation({
                         'relative z-20 bg-transparent shadow-none transition-none',
                         'hover:bg-transparent hover:shadow-none focus:bg-transparent focus-visible:bg-transparent focus-visible:shadow-none data-active:bg-transparent data-active:shadow-none',
                         isHighlighted
-                          ? 'text-white hover:text-white data-active:text-white [&_svg]:text-white data-active:[&_svg]:text-white'
+                          ? 'text-marca-contraste hover:text-marca-contraste data-active:text-marca-contraste [&_svg]:text-marca-contraste data-active:[&_svg]:text-marca-contraste'
                           : 'text-sidebar-foreground hover:text-sidebar-foreground data-active:text-sidebar-foreground [&_svg]:text-sidebar-foreground data-active:[&_svg]:text-sidebar-foreground',
                       )}
                     >
@@ -360,7 +360,7 @@ function AdminSidebarNavigation({
                         className={cn(
                           'z-30',
                           isHighlighted
-                            ? 'text-white peer-data-active/menu-button:text-white'
+                            ? 'text-marca-contraste peer-data-active/menu-button:text-marca-contraste'
                             : 'text-sidebar-foreground peer-data-active/menu-button:text-sidebar-foreground'
                         )}
                       >
@@ -1616,7 +1616,7 @@ function SeplanPageContent() {
       </Sidebar>
 
       <SidebarInset className="flex h-svh min-h-0 flex-col overflow-hidden">
-        <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-marca text-marca-contraste shadow-sm">
           <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger size="icon-lg" className="size-10 shrink-0 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
@@ -2435,7 +2435,7 @@ function SeplanPageContent() {
                                         <CardAction className="flex flex-wrap gap-2">
                                           <Button
                                             variant="outline"
-                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
+                                            className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura disabled:!border-white/75 disabled:!bg-white disabled:!text-marca-escura/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'ENVIADO'}
                                             onClick={() => void reviewValidation(validation.id, 'approve')}
                                           >
@@ -2453,7 +2453,7 @@ function SeplanPageContent() {
                                           </Button>
                                           <Button
                                             variant="outline"
-                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
+                                            className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura disabled:!border-white/75 disabled:!bg-white disabled:!text-marca-escura/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'APROVADO'}
                                             onClick={() => void revertApproval(validation.id)}
                                           >
@@ -2610,7 +2610,7 @@ function SeplanPageContent() {
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
-                                className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950"
+                                className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura"
                               >
                                 <FileDownIcon data-icon="inline-start" />
                                 Exportar

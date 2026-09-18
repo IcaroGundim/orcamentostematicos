@@ -257,7 +257,7 @@ function FiscalKpi({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="fiscal-kpi-help inline-flex shrink-0 text-green-900 hover:text-green-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-900"
+                className="fiscal-kpi-help inline-flex shrink-0 text-marca-escura hover:text-marca-escura focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca-escura"
                 aria-label={`Como é calculado: ${label}`}
               >
                 <InfoIcon className="size-3.5" />
@@ -287,7 +287,7 @@ function FiscalSection({
 }) {
   return (
     <section className={cn('min-h-0 min-w-0 overflow-hidden border bg-white', className)}>
-      <h3 className="bg-green-900 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-white">
+      <h3 className="bg-marca px-3 py-2 text-sm font-semibold uppercase tracking-wide text-marca-contraste">
         {title}
       </h3>
       <div className="min-h-0 min-w-0 overflow-hidden p-3">{children}</div>
@@ -473,7 +473,7 @@ export function FiscalSecretariatView({
       <div className="fiscal-presentation-header shrink-0 border-b bg-white px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold leading-tight text-green-900">
+            <h2 className="truncate text-lg font-bold leading-tight text-marca-escura">
               Visão fiscal da execução
             </h2>
             <p className="mt-0.5 truncate text-sm font-semibold">
@@ -698,7 +698,7 @@ export function FiscalSecretariatView({
                         return (
                           <div
                             key={contract.label}
-                            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2 border-l-2 border-green-900 pl-2"
+                            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2 border-l-2 border-marca-escura pl-2"
                           >
                             <dt
                               className="truncate text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground"
@@ -707,7 +707,7 @@ export function FiscalSecretariatView({
                               {contract.label}
                             </dt>
                             <dd className="shrink-0 text-base tabular-nums">
-                              <strong className="text-green-900">
+                              <strong className="text-marca-escura">
                                 {contract.headcount.toLocaleString('pt-BR')}
                               </strong>
                               <span className="ml-1 text-xs text-muted-foreground">
@@ -724,7 +724,7 @@ export function FiscalSecretariatView({
                 )}
 
                 <div
-                  className="min-w-56 border-l-4 border-green-900 bg-muted/40 px-3 py-2"
+                  className="min-w-56 border-l-4 border-marca-escura bg-muted/40 px-3 py-2"
                   title={
                     payrollHeadcount?.matchedOrganizations.length
                       ? `Correspondências na folha: ${payrollHeadcount.matchedOrganizations.join(', ')}`
@@ -735,7 +735,7 @@ export function FiscalSecretariatView({
                     <UsersIcon className="size-3.5" aria-hidden="true" />
                     Vínculos ativos na folha
                   </div>
-                  <p className="mt-1 text-[1.35rem] font-bold leading-none tabular-nums text-green-900">
+                  <p className="mt-1 text-[1.35rem] font-bold leading-none tabular-nums text-marca-escura">
                     {payrollHeadcount?.headcount === null || !payrollHeadcount
                       ? 'Não identificado'
                       : payrollHeadcount.headcount.toLocaleString('pt-BR')}
@@ -894,7 +894,7 @@ export function FiscalSecretariatView({
                         <span className="tabular-nums text-muted-foreground">
                           {compactMoney(row.updatedBudget)}
                         </span>
-                        <span className="min-w-14 border-l-2 border-green-900 pl-2 text-right font-bold tabular-nums">
+                        <span className="min-w-14 border-l-2 border-marca-escura pl-2 text-right font-bold tabular-nums">
                           {formatPercent(row.executionRate)}
                         </span>
                       </div>

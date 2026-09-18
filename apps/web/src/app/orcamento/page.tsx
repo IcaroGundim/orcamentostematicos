@@ -157,7 +157,7 @@ function ExecutionViewNavigation({
       <span
         aria-hidden
         className={cn(
-          'pointer-events-none absolute z-0 bg-green-900',
+          'pointer-events-none absolute z-0 bg-marca',
           'transition-[left,top,width,height] duration-500 ease-out',
           pill.pill.ready ? 'opacity-100' : 'opacity-0',
         )}
@@ -200,7 +200,7 @@ function ExecutionViewNavigation({
               'relative z-10 inline-flex min-h-10 items-center gap-2 border-b border-black/20 px-3 py-2 text-xs font-semibold transition-colors',
               'xl:w-full xl:border-l-4 xl:border-l-transparent',
               collapsed ? 'xl:justify-center xl:px-2' : 'xl:justify-start',
-              highlighted ? 'text-white' : 'text-muted-foreground hover:text-foreground',
+              highlighted ? 'text-marca-contraste' : 'text-muted-foreground hover:text-foreground',
             )}
             title={collapsed ? item.label : undefined}
           >
@@ -713,7 +713,7 @@ function OrcamentoPageContent() {
           transformOrigin: 'top left',
         }}
       >
-      <header className="orcamento-app-header sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white">
+      <header className="orcamento-app-header sticky top-0 z-30 shrink-0 border-b border-black bg-marca text-marca-contraste">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto shrink-0" />
@@ -774,7 +774,7 @@ function OrcamentoPageContent() {
         >
           <div
             className={cn(
-              'shrink-0 bg-green-900 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-white',
+              'shrink-0 bg-marca px-3 py-2 text-xs font-semibold uppercase tracking-wide text-marca-contraste',
               sidebarCollapsed && 'xl:hidden',
             )}
           >
@@ -990,7 +990,7 @@ function OrcamentoPageContent() {
           */}
           <Button
             size="sm"
-            className="shrink-0 rounded-sm border border-black/70 bg-green-900 text-white shadow-none hover:bg-green-950"
+            className="shrink-0 rounded-sm border border-black/70 bg-marca text-marca-contraste shadow-none hover:bg-marca-hover"
             onClick={() => router.push('/seplan')}
           >
             <BanknoteIcon data-icon="inline-start" />
@@ -1257,7 +1257,7 @@ function OrcamentoPageContent() {
             <span
               aria-hidden
               className={cn(
-                'pointer-events-none absolute inset-y-0 z-0 bg-green-900',
+                'pointer-events-none absolute inset-y-0 z-0 bg-marca',
                 'transition-[left,width] duration-500 ease-out',
                 contentViewPill.pill.ready ? 'opacity-100' : 'opacity-0',
               )}
@@ -1299,7 +1299,7 @@ function OrcamentoPageContent() {
                     // A borda de baixo continua aqui só como reserva de espaço: o
                     // marcador visível é o retângulo deslizante acima.
                     'relative z-10 shrink-0 border-b-[3px] border-transparent px-4 py-2 text-xs font-semibold transition-colors',
-                    highlighted ? 'text-white' : 'text-muted-foreground hover:text-foreground',
+                    highlighted ? 'text-marca-contraste' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {item.label}

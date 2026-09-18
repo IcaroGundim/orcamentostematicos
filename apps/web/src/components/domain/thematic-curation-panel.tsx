@@ -1211,7 +1211,7 @@ const CurationAssignmentCard = memo(function CurationAssignmentCard({
                         <TooltipTrigger asChild>{option}</TooltipTrigger>
                         <TooltipContent
                           side="right"
-                          className="max-w-xs bg-green-950 text-sm leading-snug text-white [&>svg]:bg-green-950 [&>svg]:fill-green-950"
+                          className="max-w-xs bg-marca-escura text-sm leading-snug text-white [&>svg]:bg-marca-escura [&>svg]:fill-marca-escura"
                         >
                           {description}
                         </TooltipContent>
