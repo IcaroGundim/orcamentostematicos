@@ -10,6 +10,7 @@
     "dev": "npm run dev -w apps/web",
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build -w apps/web",
+    "build:lab": "npm run build:lab -w apps/web",
     "start": "npm run start -w apps/web",
     "lint": "npm run lint -w apps/web",
     "proxy:dev": "wrangler dev --config workers/proxy/wrangler.jsonc",

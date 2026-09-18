@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "build:lab": "node scripts/build-lab.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run",
