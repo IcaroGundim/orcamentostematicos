@@ -5,6 +5,10 @@ Seu objetivo é **preservar a estrutura de frontend que está posta** e impedir 
 mudanças — em especial mudanças feitas por modelos de IA — introduzam elementos
 estranhos ao sistema.
 
+O **contrato visual** (paleta fechada, cantos retos, sem sombras, receitas de
+componente) foi **retirado em 2026-10-14** por decisão do dono do produto — ver
+a seção 4. O documento segue valendo para arquitetura, dados, cálculos e folha.
+
 Todo conteúdo é descrito a partir do código atual. Referências relativas a
 `apps/web/`. Quando este documento e o código divergirem, o código vence; a
 divergência deve ser corrigida aqui, não no código.
@@ -17,14 +21,18 @@ Escopo de aplicação (qualquer edição nestes caminhos deve respeitar os contr
 deste documento):
 
 - `src/app/orcamento/page.tsx` — a página inteira;
-- `src/components/domain/execution-breakdown-panel.tsx`,
+- `src/components/domain/execution-breakdown-panel.tsx` (gráficos da aba
+  `Gráficos`; `ExecutionTablePanel` sem uso desde 2026-10-01, seção 9, item 26),
   `src/components/domain/fiscal-secretariat-view.tsx`,
   `src/components/domain/payroll-panel.tsx`,
-  `src/components/domain/overview-scheduled-actions-panel.tsx` — componentes do módulo;
+  `src/components/domain/overview-scheduled-actions-panel.tsx`,
+  `src/components/domain/execution-visuals.tsx` (régua de indicadores, blocos e
+  gráficos desenhados em SVG, desde 2026-10-14) — componentes do módulo;
 - `src/lib/execution-monitor.ts`, `src/lib/payroll-scope.ts`,
   `src/lib/payroll-portal.ts`, `src/lib/expense-nature.ts`,
   `src/lib/fontes-recursos.ts`, `src/lib/expense-breakdown.ts`,
-  `src/lib/organization-acronym.ts` — lógica;
+  `src/lib/organization-acronym.ts`, `src/lib/chart-palette.ts`,
+  `src/lib/chart-geometry.ts`, `src/lib/readable-name.ts` — lógica;
 - `scripts/collect-payroll.mjs` e `.github/workflows/folha.yml` — coleta da folha;
 - `prisma/schema.prisma` — apenas se a seção 2 (regra R12) for seguida.
 
@@ -34,8 +42,8 @@ Regras de uso:
    correspondente **antes** da mudança.
 2. A seção 9 lista decisões deliberadas que parecem bugs. Não "corrigir" nenhuma
    sem atualizar este documento.
-3. A seção 10 é a lista de proibições (anti-slop). Violar qualquer item é motivo
-   para rejeitar a mudança.
+3. A seção 10 é a lista de proibições (arquitetura, dados, cálculos e texto da
+   interface). Violar qualquer item é motivo para rejeitar a mudança.
 4. A seção 11 é o checklist obrigatório antes de encerrar qualquer mudança.
 5. **Ler antes de propor.** Este documento é pré-requisito de qualquer edição nos
    caminhos acima — e também de qualquer *sugestão* feita ao usuário. Descobrir o
@@ -67,49 +75,52 @@ Regras de uso:
 4. **R4 — Abas montadas com `forceMount` + componentes `memo`.** Todas as
    `TabsContent` das visualizações usam `forceMount` (a classe
    `data-[state=inactive]:hidden` do `TabsContent` é o que evita o piscar ao
-   alternar — ver `src/components/ui/tabs.tsx:226-243`). `ExecutionChartCard`,
-   `ExecutionTablePanel`, `PayrollPanel`, `OverviewScheduledActionsPanel` e
-   `OverviewActionRow` (`overview-scheduled-actions-panel.tsx:98`) são `memo`.
-   Sem `memo`, cada mudança de estado da página (troca de aba, de métrica
-   ou de filtro) re-renderizaria os 20+ gráficos Recharts de **todas** as abas,
-   inclusive as ocultas.
-5. **R5 — Navegação em dois níveis, preservada.** Dimensão de análise
-   (`Geral`/`Emendas`, na trilha lateral, `page.tsx:110-113`) × Visualização
-   (`Ações`/`Gráficos`/`Órgão`/`Tabela`/`Folha de pagamento`, no footer;
-   `Ações` é a primeira e a principal — estado inicial da página — e a aba
-   `overview` de gráficos foi renomeada para `Gráficos`, `page.tsx:115-121`).
-   Selecionar uma dimensão **navega para lugar nenhum** — só troca o recorte,
-   que se aplica às abas `Ações`, `overview` (Gráficos) e `table`, **e à tela
-   como um todo**: com `Emendas parlamentares` ativa, os KPIs globais, a
-   contagem do heading, o botão Exportar (`dimensionActions`) e o painel de
-   Ações refletem apenas as ações de emenda; o título ganha o sufixo
-   "— Emendas parlamentares". Nova visualização =
-   novo item em `CONTENT_VIEWS`, com entrada no footer, no comportamento de
-   setas e na lógica de anterior/próxima; nova dimensão = novo item em `VIEWS`,
-   com grade própria nas abas `overview` e `table`.
-6. **R6 — Shell de zoom e rolagem interna.** A raiz é
-   `orcamento-page-root h-svh w-full overflow-hidden`; dentro dela, o shell
-   `orcamento-zoom-shell` aplica `width: 100/0.95%`, `height: 100/0.95%`,
-   `transform: scale(0.95)` com `transformOrigin: 'top left'` (`PAGE_ZOOM`,
-   `page.tsx:66, 588-596`). O cabeçalho do app fica **dentro** do shell. Todo
-   scroll acontece dentro de `main` (`orcamento-main … overflow-y-auto`) e das
-   áreas internas — nunca na janela. Não remover o zoom, não permitir scroll no
-   documento, não quebrar os `min-h-0`/`overflow-hidden` da cadeia de colunas.
-7. **R7 — Trilha lateral com colapso.** A trilha é `xl:w-64` expandida e
-   `xl:w-16` colapsada, com `transition-[width] duration-300 ease-out`
-   (`page.tsx:650-657`). Colapsada, os blocos de filtros ficam `xl:hidden` e os
-   itens de navegação `xl:justify-center` com rótulo `xl:sr-only` e `title` como
-   tooltip. A trilha **some por completo** apenas nas visões executivas
-   (`Órgão` e `Folha de pagamento`, `isExecutiveView`, `page.tsx:573`) — e,
-   nesses casos, também somem o heading com contagem e os KPIs globais
-   (`page.tsx:801-848`), pois são visões que ou não usam os filtros do QDD (folha)
-   ou têm os próprios controles (órgão).
+   alternar — ver `src/components/ui/tabs.tsx:226-243`). `PayrollPanel`,
+   `OverviewScheduledActionsPanel`, `OverviewActionRow`
+   (`overview-scheduled-actions-panel.tsx:98`), `FiscalSecretariatView` e os
+   componentes de `execution-visuals.tsx` (`KpiStrip`, `VizBlock` e os gráficos)
+   são `memo`. Sem `memo`, cada
+   mudança de estado da página (troca de aba, de métrica ou de filtro)
+   re-renderizaria os painéis de **todas** as abas, inclusive as ocultas — e a
+   tabela de ações chega a milhares de linhas.
+5. **R5 — Navegação em dois níveis, preservada.** Visualização
+   (`Ações`/`Gráficos`/`Órgão`/`Folha de pagamento`, abas da faixa de navegação
+   — seção 3.2; `Ações` é a primeira e a principal — estado inicial da página) ×
+   Recorte (`Geral`/`Emendas parlamentares`, `VIEWS`, na mesma faixa, à direita).
+   Até 2026-10-14 o recorte ficava na trilha lateral, como "Dimensão de
+   análise"; subiu para a faixa quando a trilha saiu (seção 9, item 27). A aba
+   `Tabela` (`table`) foi retirada em 2026-10-01; `Gráficos` (`overview`) saiu
+   na mesma data e voltou em 2026-10-14 (seção 9, item 26).
+   Selecionar um recorte **navega para lugar nenhum** — só troca o recorte, que
+   se aplica às abas `Ações` e `Gráficos` **e à tela como um todo**: com
+   `Emendas parlamentares` ativa, a régua de indicadores, o título e a contagem
+   da seção de ações, o botão Exportar (`dimensionActions`), a tabela e a grade
+   de gráficos refletem apenas as ações de emenda. Nova visualização = novo item
+   em `CONTENT_VIEWS`, com entrada na faixa e no comportamento de setas — o
+   `aria-label` do `Tabs` é derivado da mesma lista; novo recorte = novo item
+   em `VIEWS`, refletido em `dimensionActions`.
+6. **R6 — A página rola inteira; a faixa de navegação fica.** Desde 2026-10-14
+   não há zoom (`PAGE_ZOOM` saiu; seção 9, item 1) nem rolagem confinada ao
+   `<main>`: a raiz é `orcamento-page-root min-h-svh`, o documento rola, o
+   cabeçalho do app rola junto e a faixa de navegação é `sticky top-0`. A única
+   rolagem interna obrigatória é a da tabela de ações: ela é virtualizada
+   (`useVirtualizer` com `getScrollElement` no contêiner da tabela), então o
+   contêiner tem altura própria (`h-[max(28rem,calc(100svh-9rem))]`). Trocar
+   isso por rolagem da janela exige trocar o virtualizador junto.
+7. **R7 — Filtros numa linha, sem trilha lateral.** Os filtros do QDD ocupam a
+   linha `orcamento-filters` sob a faixa (seção 3.3). A trilha lateral com
+   colapso (`xl:w-64`/`xl:w-16`) saiu em 2026-10-14, e com ela o seletor
+   "Exibir valores de": a tabela mostra os estágios por botão ("Mostrar todos
+   os estágios", seção 7.3) e os gráficos não dependem de um estágio escolhido.
+   A linha de filtros e a régua de indicadores **somem** nas visões executivas
+   (`Órgão` e `Folha de pagamento`, `isExecutiveView`), que ou não usam os
+   filtros do QDD (folha) ou têm os próprios controles (órgão).
 8. **R8 — Filtros em cascata.** Órgão → Unidade → Fonte. Trocar órgão limpa
    unidade e fonte; trocar unidade limpa fonte (`page.tsx:718-737`). As opções de
    unidade e fonte são derivadas das ações já filtradas pelo nível anterior
    (nunca apontam para recortes vazios). O botão "Limpar filtros" está sempre
-   presente e desabilitado quando `!hasFilters` — o bloco não muda de altura ao
-   filtrar (`page.tsx:549-564, 758-769`).
+   presente e desabilitado quando `!hasFilters` — a linha não muda de forma ao
+   filtrar.
 9. **R9 — Integrações externas seguem o padrão da folha.** Fonte externa
    (portal, API pública) = coleta em job server-side (`scripts/` + workflow
    GitHub), persistência **somente de agregados**, leitura por rota `/api/*`
@@ -131,352 +142,235 @@ Regras de uso:
 
 ## 3. Anatomia da tela
 
-Estrutura hierárquica (`page.tsx`):
+Redesenhada em 2026-10-14 a partir do mockup aprovado pelo dono do produto
+(`mockups/orcamento-redesenho-v7.html`; seção 9, item 27). Estrutura (`page.tsx`):
 
 ```
-orcamento-page-root (h-svh w-full overflow-hidden)
-└─ orcamento-zoom-shell (scale 0.95)
-   ├─ header (h-16, bg-green-900, sticky, z-30)
-   ├─ main (flex-1, min-h-0; coluna em <xl, linha em ≥xl)
-   │  ├─ sidebar (trilha: filtros + dimensão) — oculta em visões executivas
-   │  └─ content column (heading, KPIs, Tabs das visualizações)
-   └─ footer de navegação (min-h-11, Anterior / abas / Próxima)
+orcamento-page-root (min-h-svh; a página rola inteira)
+├─ header.orcamento-app-header (h-14, bg-marca) — rola junto com a página
+├─ nav.orcamento-view-bar (sticky top-0 z-30) — abas · recorte; sempre visível
+└─ main.orcamento-main
+   ├─ orcamento-filters (linha de filtros) — oculta nas visões executivas
+   ├─ orcamento-global-kpis (régua de indicadores) — oculta nas visões executivas
+   └─ Tabs das visualizações (Ações, Gráficos, Órgão, Folha de pagamento)
 ```
+
+Margem lateral única para tudo: `px-6`, `xl:px-10`.
 
 ### 3.1 Cabeçalho do app
 
-`sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white`
-(`page.tsx:598`). Compõe-se de:
+`orcamento-app-header flex h-14 items-center gap-5 bg-marca text-marca-contraste`.
+Da esquerda para a direita:
 
-- logo `/logo.svg` (`h-8 w-auto`);
-- divisor `|` (`hidden lg:inline`, `text-primary-foreground/50`);
-- título `EXECUÇÃO ORÇAMENTÁRIA` — `font-semibold uppercase tracking-widest`,
-  `fontSize: 22px`, `truncate`;
-- **seletor de exercício** (`ExerciseSelect`,
-  `src/components/domain/exercise-select.tsx`), primeiro item do grupo à direita.
-  É um `Select` de `components/ui/select` com a mesma receita visual dos botões
-  vizinhos (`rounded-sm border-black/50 bg-white text-foreground shadow-none
-  hover:bg-stone-100`) e ícone `CalendarRangeIcon`. Fica **visível mesmo com
-  um só exercício** (desabilitado nesse caso): quem opera precisa enxergar em que
-  exercício está, não só poder trocá-lo. Exercícios apenas comparativos ganham o
-  sufixo `Comparativo` na lista, e o corrente, `Corrente`. O estado vive na URL
-  (`?exercicio=2026`) via `useExercise` (`src/lib/use-exercise.ts`), e trocar o
-  exercício **limpa órgão, unidade, fonte, função, subfunção e busca**, porque a
-  estrutura do QDD difere entre anos. Não usa `useHoverPill`: a seção 4.4 vale
-  para abas/pílulas, não para `Select`.
-- dois botões à direita, todos `variant="secondary"` com a receita visual
-  `rounded-sm border-black/50 bg-white text-foreground shadow-none
-  hover:bg-stone-100`:
-  - **Atualizar** → re-executa `load()`; ícone `RefreshCwIcon` ganha
-    `animate-spin` enquanto `isLoading`; rótulo `hidden lg:inline`;
-  - **Sair** → `clearStoredSession()` + `router.push('/login')`, com trava
-    `isSigningOut`.
+- logo `/logo.svg` (`h-7 w-auto`);
+- título `Execução orçamentária` (`text-base font-semibold`, caixa normal);
+- **← Orçamentos Temáticos**: botão-link (`ArrowLeftIcon`, texto
+  `text-marca-contraste/80`, rótulo `hidden md:inline`) que faz
+  `router.push('/seplan')`. Até 2026-10-14 era o botão verde "Voltar a
+  Orçamentos Temáticos" no heading; mudou para o cabeçalho porque o heading
+  saiu, e o cabeçalho existe em todas as abas;
+- à direita (`ml-auto`):
+  - **seletor de exercício** (`ExerciseSelect`,
+    `src/components/domain/exercise-select.tsx`), sem mudança: `Select` claro
+    com `CalendarRangeIcon`, **visível mesmo com um só exercício**
+    (desabilitado nesse caso) — quem opera precisa enxergar em que exercício
+    está. Exercícios comparativos ganham o sufixo `Comparativo`, e o corrente,
+    `Corrente`. O estado vive na URL (`?exercicio=2026`) via `useExercise`
+    (`src/lib/use-exercise.ts`), e trocar o exercício **limpa órgão, unidade,
+    fonte, função, subfunção e busca**, porque a estrutura do QDD difere entre
+    anos;
+  - **Atualizar** (`variant="ghost"`, texto claro) → re-executa `load()`;
+    `RefreshCwIcon` com `animate-spin` enquanto `isLoading`; rótulo
+    `hidden lg:inline`;
+  - **Sair** (`variant="ghost"`) → `clearStoredSession()` +
+    `router.push('/login')`, com trava `isSigningOut`.
 
-  O retorno a **Orçamentos Temáticos** mora no heading do conteúdo (seção
-  3.3), não aqui.
+### 3.2 Faixa de navegação
 
-### 3.2 Trilha lateral (não-executiva)
+`<nav aria-label="Navegação entre visualizações">` com `orcamento-view-bar
+sticky top-0 z-30 flex items-end gap-8 border-b bg-white`. Fica fora do `<main>`
+e é a única navegação nas visões executivas — não condicioná-la a
+`isExecutiveView`.
 
-Coluna `border border-black/70 bg-white`, rolagem interna no bloco de filtros,
-quatro zonas:
+- **Abas** (`role="tablist"`, `aria-label="Visualizações da execução"`): um
+  botão por item de `CONTENT_VIEWS` (`role="tab"`, `aria-selected`), texto
+  `text-[15px] font-semibold`, cinza quando inativo; a ativa fica com o texto
+  escuro e um sublinhado de 3px no verde da marca (`border-b-[3px]
+  border-marca`). Sem ícone e sem a pílula deslizante de `useHoverPill` desde
+  2026-10-14 (seção 3.7). Externo com `overflow-x-auto` para telas estreitas.
+- **Recorte** (à direita, `ml-auto`): rótulo `Recorte` e um botão por item de
+  `VIEWS` (`Geral`, `Emendas parlamentares`), `aria-pressed`, o ativo em
+  negrito com sublinhado escuro de 2px. Fica `invisible` (e não some) nas
+  visões executivas: a faixa não muda de altura nem as abas mudam de lugar ao
+  trocar de aba.
 
-1. **Título** `Filtros da execução` — `bg-green-900 px-3 py-2 text-xs font-semibold
-   uppercase tracking-wide text-white` (some quando colapsada).
-2. **Seletor de estágio** — rótulo "Exibir valores de" (`text-xs font-medium
-   text-muted-foreground`) + `Select` com `EXECUTION_METRICS` em ordem do ciclo da
-   despesa (dotação inicial → atualizada → empenhado → liquidado → pago), com
-   `aria-label="Estágio da despesa exibido nos gráficos"`.
-3. **Filtros** (bloco rolável, `border-b border-black/30`):
-   - **Buscar**: `Input` com ícone `SearchIcon` à esquerda (`pl-8`), placeholder
-     "Ação, programa…". Normalização `normalize()` (sem acentos, minúsculas) sobre
-     `application`, `projectActivity`, `functionalProgram`, `organizationName`
-     (`page.tsx:387-422`).
-   - **Órgão**: `SearchableCombobox` com opções `{code} — {name}` ordenadas por
-     código + "Todos os órgãos" (`allValue = 'ALL'`).
-   - **Unidade**: opções derivadas das ações do órgão selecionado; chave
-     `{org}|{unit}`; rótulo com `org/unit — nome` quando não há órgão filtrado,
-     `unit — nome` quando há.
-   - **Fonte de recurso**: opções derivadas das linhas das ações do órgão+unidade
-     selecionados; código normalizado por `normalizeSourceCode` (remove
-     não-dígitos; se sobrar vazio, usa o texto cru) e rótulo
-     `{código} — {getFonteLabel ?? "Fonte não catalogada"}`.
-   - **Função/Subfunção**: `FunctionalClassificationFilters` (mesmo componente
-     dos orçamentos temáticos), com `actionMatchesFunctionalFilters` — o filtro de
-     subfunção depende da função selecionada.
-   - **Limpar filtros**: `variant="outline" size="sm"`, `disabled={!hasFilters}`.
-4. **Dimensão de análise** (`page.tsx:772-795`): rótulo de seção
-   `text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground`
-   (vira `xl:sr-only` quando colapsada) + `ExecutionViewNavigation`. Presente em
-   **todas** as visões não-executivas, inclusive `Ações` (o painel de ações
-   responde à dimensão: `Emendas parlamentares` mostra só as ações de emenda).
+Saíram em 2026-10-14 o contador `{n} de {total}` e os botões Anterior/Próximo:
+a faixa passou a ficar sempre visível no topo, e as setas ← → do teclado
+continuam navegando (seção 11, item 3).
 
-`ExecutionViewNavigation` (`page.tsx:123-204`): lista com `role="tablist"`,
-itens `role="tab"` com `aria-selected`, `data-execution-view` e
-`data-hover-tab-value`. A "pílula" verde (`bg-green-900`) mede a caixa **inteira**
-do item (funciona tanto na coluna do desktop quanto na linha de telas menores) e
-o marcador de seleção é um retângulo bege de 4px (`bg-[#b8b477]`) na borda
-inicial do item — ambos com `transition` de 500ms/300ms. Abaixo de `xl`, a lista
-vira faixa horizontal com `border-b border-black/20` entre itens; em `xl`,
-`flex-col` com `border-l-4 border-l-transparent`.
+### 3.3 Linha de filtros
 
-### 3.3 Coluna de conteúdo
+`orcamento-filters flex flex-wrap items-center gap-2.5 border-b py-3.5`, logo
+abaixo da faixa, **só** em `Ações` e `Gráficos`. Os campos não têm rótulo
+visível: o próprio valor diz o filtro (`Órgão: todos`, `Unidade: todas`,
+`Fonte: todas`; escolhido, o rótulo da opção já diz o código e o nome). A
+busca tem `aria-label`.
 
-- **Heading** (`page.tsx:802-819`): botão de colapso (`PanelLeftCloseIcon`/
-  `PanelLeftOpenIcon`, `hidden xl:inline-flex`), `h1` com o **nome do recorte**
-  (`headingTitle`): `{código} — {nome}` da unidade quando há uma selecionada na
-  trilha, senão o do órgão, senão o genérico "Monitoramento da execução
-  orçamentária"; em Emendas parlamentares recebe o sufixo " — Emendas
-  parlamentares" (`font-heading text-xl font-bold tracking-tight`) e contagem
-  `{N} ação(ões)` à direita com `border-l border-black/40 pl-3` (ou "Carregando
-  dados do QDD vigente…" enquanto `isLoading`). Na extremidade direita da linha
-  (`ml-auto`), botão **Exportar** (`variant="outline" size="sm"`, receita
-  `border-black/50 bg-white shadow-none hover:bg-stone-100`, igual ao botão
-  Exportar dos orçamentos temáticos): `Popover` com `Select` de formato
-  (Excel/CSV/JSON) + botão "Exportar recorte filtrado". No Excel, a saída é uma
-  **sheet única estruturada por órgão**: cabeçalho geral e, na sequência, uma
-  linha de seção mesclada por órgão (`{código} — {nome} (N ação(ões))`, ordem de
-  código) com as ações dele abaixo; valores monetários e percentual saem como
-  números formatados (`#,##0.00` / `0.0`) e colunas têm largura própria.
-  Obs.: a edição community do SheetJS não aplica fonte/fundo — a hierarquia
-  visual vem da estrutura de seções mescladas.
-  Exporta **client-side** sobre o recorte da dimensão ativa (`dimensionActions`:
-  `filteredActions` em Geral; só as ações de emenda em Emendas parlamentares —
-  seção 5.3), logo o arquivo
-  carrega exatamente o recorte dos filtros da trilha e **nunca contém dado da
-  folha de pagamento** (que não faz parte de `filteredActions`); nome de arquivo
-  `execucao-orcamentaria-{ano}-{data}.{ext}` com o exercício carregado
-  (`loadedYear ?? year`). Import dinâmico de `src/lib/execution-export.ts` (mesmo
-  padrão do export do painel de ações — o `xlsx` não entra no bundle principal).
-  Sem recorte, o botão do popover desabilita e um `toast.error` concreto
-  explica; sucesso/erro também por `toast`. Nenhuma rota nova: é leitura do
-  estado já em memória. Some junto com o heading nas visões executivas
-  (`isExecutiveView`).
-- **KPIs globais** (`page.tsx:828-848`): `<dl>` com `grid-cols-2 lg:grid-cols-3
-  2xl:grid-cols-6` (6 células: Dotação inicial, Dotação atualizada, Empenhado,
-  Liquidado, Pago, Execução). Células com `border-b border-r border-black/20`,
-  `last:border-r-0 2xl:border-b-0`. `dt` com rótulo uppercase 0.68rem; `dd` com
-  `text-base font-bold tabular-nums truncate` e `title` com o valor completo;
-  `Skeleton h-6 w-24` durante o carregamento. A taxa de execução usa 1 casa
-  decimal pt-BR.
-- **Tabs de visualização**: `Tabs` com `role="group"` e `aria-label` que explica a
-  navegação por setas (`page.tsx:853-859`). Conteúdo por aba:
+- **Buscar** (`w-60`): `Input` com `SearchIcon` à esquerda (`pl-8`),
+  placeholder "Buscar ação, programa…". Normalização `normalize()` (sem
+  acentos, minúsculas) sobre `application`, `projectActivity`,
+  `functionalProgram`, `organizationName`.
+- **Órgão**, **Unidade**, **Fonte** (`SearchableCombobox`, `w-40`):
+  opções e cascata da regra R8. Unidade: chave `{org}|{unit}`, rótulo com
+  `org/unit — nome` sem órgão filtrado e `unit — nome` com. Fonte: código
+  normalizado por `normalizeSourceCode` e rótulo
+  `{código} — {getFonteLabel ?? "Fonte não catalogada"}`.
+- **Função/Subfunção**: `FunctionalClassificationFilters` com
+  `showLabels={false}`.
+- **Limpar** (`variant="ghost"`), sempre presente e desabilitado quando
+  `!hasFilters`.
+- **Estado do recorte** (`ml-auto`, `text-sm text-muted-foreground`):
+  "Nenhum filtro aplicado" ou o nome do recorte (`headingTitle`: a unidade
+  escolhida, senão o órgão, senão "Filtros aplicados").
 
-  - `overview` (aba `Gráficos`): `Tabs` interno pela dimensão; `geral` renderiza a grade
-    `gridClass` (`grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2
-    xl:grid-cols-3 xl:grid-rows-2`) com **6 cards de tipos mistos** (seção 7.7):
-    `CycleStackedBarChart` (elemento, fonte), `CycleLineChart` (grupo),
-    `ExecutionChartCard` (categoria, modalidade) e `ExecutionScatterChart`
-    (órgão). `amendments` renderiza a mesma grade com os 6 recortes de emenda,
-    todos `ExecutionChartCard` (os tipos adicionais ficam na dimensão `geral`).
-  - `fiscal`: `FiscalSecretariatView` (seção 7.4).
-  - `actions`: `OverviewScheduledActionsPanel` com `variant="execution"`
-    (seção 7.3).
-  - `table`: `Tabs` interno pela dimensão. Em `geral`, as tabelas empilham com
-    `flex flex-col gap-2 overflow-y-auto`: elemento, grupo, ação e fonte, todas
-    com `STACKED_TABLE_CLASS = 'shrink-0 max-h-[34rem]'` (sem `shrink-0`, cards
-    flex com `min-h-0` encolhem até sobrar uma linha visível; o teto faz a
-    tabela de ação — 74 registros no QDD atual — rolar por dentro em vez de
-    empurrar as demais para fora). Em `amendments`, `grid-rows-2` com as duas
-    tabelas (órgão e ação) em `min-h-0 overflow-hidden`.
-  - `payroll`: `PayrollPanel` (ou `Skeleton h-96 w-full`).
+### 3.4 Régua de indicadores (`KpiStrip`)
 
-### 3.4 Rodapé de navegação
+`orcamento-global-kpis`, faixa de fundo `bg-[#f5f6f2]` com `border-b`, só em
+`Ações` e `Gráficos`; a visão `Órgão` usa a mesma régua com os totais do órgão.
+Seis células, valores **por extenso** (`formatMoney`, nunca compactos):
 
-`orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between
-border-t border-black/70 bg-white` (`page.tsx:1214-1311`):
+1. **Execução** (célula principal): anel de 70px com liquidado ÷ dotação
+   atualizada, o percentual em `text-[40px]` e a linha "liquidado ÷ dotação";
+   em Emendas, o rótulo vira "Execução · emendas".
+2. **Dotação inicial** — "lei orçamentária".
+3. **Dotação atualizada** — "+R$ … em créditos" (atualizada − inicial, com
+   sinal; seção 6.7).
+4. **Empenhado** — anel pequeno + "% da dotação".
+5. **Liquidado** — anel pequeno + "% da dotação".
+6. **Pago** — anel pequeno + "% do liquidado" (base do pagamento, seção 6.5).
 
-- **Voltar a Orçamentos Temáticos**: no heading, à direita do Exportar. Verde
-  escuro
-  (`bg-green-900 text-white`, hover `green-950`, `rounded-sm border-black/70
-  shadow-none`), `router.push('/seplan')`, sempre visível (some só com o
-  heading nas visões executivas). É a rota de fuga do módulo — o verde escuro,
-  idêntico aos cabeçalhos de painel, o faz notável sem cor fora da paleta.
-- **Anterior/Próxima**: `variant="ghost" size="sm"`, `h-auto rounded-none`,
-  borda `border-r/border-l border-black/20`, `aria-label` +
-  `aria-disabled`; no primeiro/último item, `pointer-events-none opacity-40`.
-- **Abas**: container `role="tablist"` com `aria-label="Visualizações da
-  execução"` e `overflow-x-auto`; a faixa verde (`bg-green-900`, `inset-y-0`,
-  `transition-[left,width] duration-500`) segue o mouse via `useHoverPill` e o
-  marcador bege (`bottom-0 h-[3px] bg-[#b8b477]`, `z-20`,
-  `transition-[left,width] duration-300`) marca a aba ativa — verde sobre verde
-  sumiria, por isso o marcador é bege. Cada botão: `role="tab"`, `aria-selected`,
-  `data-hover-tab-value`, `onFocus`/`onMouseEnter` para acender a pílula, `z-10`,
-  `border-b-[3px] border-transparent` (reserva de espaço), texto `text-xs
-  font-semibold`, branco quando sob a pílula.
+Colunas e filetes em `.orcamento-kpis` (`globals.css`), e não em classes do
+Tailwind: o Tailwind ordenava `min-[1360px]:` antes de `sm:` e a régua nunca
+passava de três colunas. Duas colunas abaixo de `sm` (com a execução ocupando a
+linha inteira), três até 1360px e `1fr 1fr 1.2fr 1fr 1fr 1fr` a partir daí, com
+filete vertical entre as células. Abaixo de 1360px (inclusive em 1280px) os
+valores por extenso não cabem em seis colunas e a régua passa a 3 × 2. `Skeleton`
+nos valores durante o carregamento. Cores dos anéis: `STAGE_COLORS`.
 
-### 3.5 Estados da página
+### 3.5 Conteúdo por aba
+
+- `actions` — seção "Ações orçamentárias" (seção 7.3):
+  - cabeçalho `h2` "Ações orçamentárias" (+ " — emendas parlamentares" no
+    recorte de emendas) e "{N} ações, na ordem do QDD";
+  - à direita, **Mostrar todos os estágios** (`aria-pressed`; alterna com
+    "Mostrar só o essencial") e **Exportar**;
+  - **Exportar** (`Popover` com `Select` de formato Excel/CSV/JSON + botão
+    "Exportar recorte filtrado"): exporta **client-side** o recorte do recorte
+    ativo (`dimensionActions`: `filteredActions` em Geral; só as ações de
+    emenda em Emendas parlamentares — seção 5.3), com import dinâmico de
+    `src/lib/execution-export.ts` (o `xlsx` não entra no bundle principal). No
+    Excel, sheet única estruturada por órgão: cabeçalho geral e, na sequência,
+    uma linha de seção mesclada por órgão (`{código} — {nome} (N ação(ões))`,
+    ordem de código) com as ações dele abaixo; valores monetários e percentual
+    como números formatados (`#,##0.00` / `0.0`). A edição community do SheetJS
+    não aplica fonte/fundo — a hierarquia vem das seções mescladas. O arquivo
+    **nunca contém dado da folha de pagamento**; nome
+    `execucao-orcamentaria-{ano}-{data}.{ext}` com `loadedYear ?? year`. Sem
+    recorte, o botão desabilita e um `toast.error` concreto explica. Até
+    2026-10-14 o Exportar ficava no heading da página e valia também para a aba
+    Gráficos; o heading saiu e o botão foi para a seção de ações, que é o que
+    ele exporta;
+  - a tabela (`OverviewScheduledActionsPanel` com `variant="execution"`).
+- `overview` (`Gráficos`): `Tabs` interno pelo recorte (`value={view}`), um
+  `TabsContent` `forceMount` por recorte, cada um com a grade `gridClass`
+  (`grid grid-cols-1 gap-x-10 gap-y-8 min-[1180px]:grid-cols-2`). Quatro blocos
+  (`VizBlock`, seção 7.7), nesta ordem:
+  - `geral`: **Para onde vai a despesa** (mapa de áreas dos 10 maiores
+    elementos, área = dotação, cor = % executado na rampa sequencial) · **De onde
+    vem o recurso** (rosca das 5 maiores fontes + "Demais fontes") · **Quem tem
+    orçamento grande e execução baixa** (dispersão dos órgãos) · **Como a
+    dotação mudou desde a lei** (halteres dos 8 órgãos com maior alteração);
+  - `amendments`: **Quem recebe as emendas** (mapa de áreas dos 12 maiores
+    órgãos, cor categórica) · **Maiores emendas** (pirulito das 6 maiores ações)
+    · **Onde o dinheiro das emendas é aplicado** (rosca dos 5 maiores elementos
+    + "Demais elementos") · **Como a dotação mudou desde a lei** (halteres, sobre
+    as emendas).
+  Cada bloco tem uma frase de leitura calculada do próprio dado (ex.: "Saldo de
+  +R$ 460,1 mi: R$ 2,3 bi em acréscimos e R$ 1,8 bi em reduções"). Trocar um
+  bloco é decisão de layout desta seção.
+- `fiscal`: `FiscalSecretariatView` (seção 7.4).
+- `payroll`: `PayrollPanel` (seção 7.5) ou `Skeleton h-96 w-full`.
+
+### 3.6 Estados da página
 
 - **Sem sessão**: `router.push('/login')` no primeiro `useEffect`.
 - **Perfil não-admin**: `router.push('/secretaria')`.
-- **Carregando** (`isLoading`): skeleton nos KPIs (`h-6 w-24`), `Skeleton h-96`
-  no corpo das abas, botão Atualizar com ícone girando, heading com texto de
-  carregamento.
-- **Vazio**: cada componente tem seu estado vazio próprio (seção 7) — sempre
-  usando `Empty` de `@/components/ui/empty`, com texto concreto em pt-BR.
+- **Carregando** (`isLoading`): `Skeleton` nos valores da régua, `Skeleton h-96`
+  no corpo das abas, Atualizar com ícone girando.
+- **Vazio**: cada componente tem estado vazio próprio (seção 7), com texto
+  concreto em pt-BR.
 - **Erro de carga**: `toast.error` com a mensagem da API (o helper `api()` de
   `src/lib/api.ts` lança o `message` do JSON de erro, ou o texto bruto; 401
   limpa a sessão e vai para `/login`).
 
-### 3.6 Responsividade e zoom
+### 3.7 Responsividade
 
-| Breakpoint | Comportamento |
+| Largura | Comportamento |
 |---|---|
-| `< sm` | grade 1 coluna; KPIs 2 colunas; trilha vira faixa acima do conteúdo |
-| `sm`–`xl` | grade 2 colunas; KPIs 3 colunas; cabeçalho do app sem título longo no `lg` |
-| `xl`–`2xl` | layout 3 colunas (trilha + conteúdo), trilha colapsável, grade 3×2; KPIs continuam 3 colunas (6 colunas só em `2xl` — com a trilha lateral, em 1440px cada célula teria ~147px e os valores, que precisam de ~170px, apareceriam cortados) |
-| `≥ 2xl` | KPIs 6 colunas |
+| `< sm` | régua 2 colunas; filtros quebram linha; abas rolam na horizontal |
+| `sm`–1360px | régua 3 × 2 |
+| < 1180px | grades de Gráficos e Órgão em uma coluna |
+| ≥ 1180px | grades em duas colunas |
+| ≥ 1360px | régua em 6 colunas |
 
-O zoom de 95% é constante e não responde ao viewport. A decisão de manter o
-zoom (seção 9, item 1) deve ser revista apenas se houver medição de uso em
-telas pequenas que a justifique — não por preferência estética.
+Sem zoom desde 2026-10-14 (seção 9, item 1).
 
-## 4. Contrato visual
+`useHoverPill` (`src/components/ui/tabs.tsx`) segue em uso nos orçamentos
+temáticos, mas **não** mais em `/orcamento`: a faixa de navegação usa sublinhado
+fixo, e a trilha lateral, onde ficava a outra pílula, saiu. As notas sobre a
+pílula (ref de callback, `pill.ready` antes de clarear o texto) continuam valendo
+para quem a usa.
 
-### 4.1 Paleta
+## 4. Visual (contrato retirado em 2026-10-14)
 
-A marca vive em quatro tokens declarados em `src/app/globals.css` (`:root`). Eles
-**não** são intercambiáveis — cada um existe para um papel de contraste, e trocar
-um pelo outro quebra a legibilidade. Use os utilitários (`bg-marca`,
-`text-marca-escura`, …), nunca o hex solto.
+O contrato visual — paleta fechada, cantos retos, ausência de sombras e as receitas
+de componente — foi **retirado em 2026-10-14** por decisão do dono do produto. O
+visual do módulo deixa de ser regra: onde as seções 3 e 7 citam classes e cores,
+elas descrevem o código atual, não um padrão obrigatório. Ficam só informações
+úteis para quem mexer:
 
-| Token | Valor | Papel |
-|---|---|---|
-| `--marca` | `#2e6f40` · `oklch(0.487 0.100 150.2)` | superfícies: faixas, cabeçalhos, botões |
-| `--marca-hover` | `#216335` · `oklch(0.445 0.100 150.2)` | hover dessas superfícies |
-| `--marca-escura` | `#004d20` · `oklch(0.367 0.101 150.3)` | texto sobre claro, bordas, tooltip escuro |
-| `--marca-contraste` | `#fcfcfc` · `oklch(0.991 0.000 89.9)` | texto sobre `--marca` e `--marca-hover` |
-
-**Não edite estes quatro valores à mão.** Eles saem de `derivarPaleta()`
-(`src/lib/paleta-marca.ts`), que persegue os mínimos do WCAG AA e avisa quando não
-alcança. Para trocar a cor: `npm run build:lab`, testar no painel "Cores" e colar o
-bloco que ele gera. Editar um tom isolado tira os papéis de sincronia.
-
-| Uso | Valor |
-|---|---|
-| Cabeçalhos de painel, faixa de navegação, título da trilha | `bg-marca` + `text-marca-contraste` |
-| Texto verde sobre fundo claro, bordas estruturais verdes | `text-marca-escura` / `border-marca-escura` |
-| Tooltip escuro | `bg-marca-escura` + `text-white` |
-| Marcador de aba ativa, acento bege | `#b8b477` |
-| Barras/pizza da execução (5) | `#5f8f70`, `#8fa873`, `#b8b477`, `#110f24`, `#c8c89f` |
-| Pizza da folha (10) | as 5 acima + `#365f47`, `#78966a`, `#8c8756`, `#29253d`, `#d8d8bd`, `#6f735a` |
-
-As cores de **gráfico** são independentes dos tokens da marca e sempre foram mais
-claras que o cromo — é o contraste entre séries que torna o gráfico legível.
-Igualá-las à cor da identidade apaga essa distinção.
-| Fundo de card/painel | `bg-white` |
-| Bordas estruturais | `border-black/70` |
-| Bordas internas (linhas, células) | `border-black/20`–`/30` |
-| Zebra de tabela | `odd:bg-stone-50/60` |
-| Fundo de cabeçalho de tabela | `bg-stone-50` |
-| Texto secundário | `text-muted-foreground` |
-| Base das barras de participação | `bg-muted` / `bg-stone-100` |
-| Botão "Limpar filtros" com filtro ativo | `variant="destructive"` (`--destructive`, `oklch(0.55 0.18 28)`) |
-
-Os três tipos de visualização novos (seção 7.7) usam exatamente as mesmas 5 cores
-da execução — nunca cores novas fora desta tabela.
-
-Regra: **nenhuma cor fora desta paleta** — em especial nada de azul/roxo/vermelho
-de frameworks, nada de `text-primary`/`bg-primary` do tema em elementos de
-destaque do módulo. A **única** exceção de vermelho é o botão "Limpar filtros"
-quando há filtro ativo (seção 9, item 24); não estendê-la a outros elementos.
-
-### 4.2 Tipografia e números
-
-- Rótulos de seção e coluna: `uppercase`, `tracking-[0.08em]` a `[0.12em]`,
-  `text-[0.68rem]`, `font-semibold`, `text-muted-foreground`.
-- Títulos de painel: `uppercase tracking-wide`, `font-semibold`, com
-  `text-marca-contraste` sobre `bg-marca`. Hoje isso é branco sobre verde, mas
-  **nunca escreva `text-white` aqui**: o token acompanha a cor da marca e vira
-  escuro sozinho se um dia ela clarear (ver seção 9, item 25).
-- Valores monetários: `formatMoney` (`Intl.NumberFormat('pt-BR', BRL, 2 casas)`,
-  `src/lib/api.ts:60-67`) para células; `compactMoney` (abreviações `mil`/`mi`/
-  `bi`, 1 casa máxima) para eixos de gráfico e listas compactas. **Nenhuma**
-  formatação de moeda ad hoc.
-- Números: sempre `tabular-nums`; contagens com `toLocaleString('pt-BR')`.
-- Título da página: `font-heading text-xl font-bold tracking-tight`.
-- Texto de interface: **pt-BR**, sem emojis, sem inglês.
-
-### 4.3 Receitas de componente
-
-- **Painel/card do módulo** (`PANEL_CLASS`, `execution-breakdown-panel.tsx:47-50`):
-  `!gap-0 overflow-hidden rounded-none border-black/70 bg-white !py-0 shadow-none`
-  com `size="sm"`; cabeçalho (`CHART_HEADER_CLASS`):
-  `!mt-0 !rounded-none border-b border-black/70 bg-green-900 px-3 py-2 text-white`.
-  O `rounded-none`/`shadow-none` é identidade: o sistema é plano, com bordas
-  pretas, sem cantos arredondados e sem sombras.
-- **Cabeçalho do app**: descrito em 3.1.
-- **KPI**: `dt` uppercase 0.68rem + `dd` bold tabular-nums com `truncate` e
-  `title` (acessibilidade para valores cortados).
-- **Tabela**: cabeçalho `sticky top-0 z-10 bg-stone-50` com borda inferior
-  `border-black/70`; primeira coluna `min-w-[16rem]`; valores à direita
-  (`text-right`); coluna da métrica selecionada em destaque (`font-semibold`
-  no cabeçalho e nas células).
-- **Botões do cabeçalho do app**: `rounded-sm border-black/50 bg-white
-  text-foreground shadow-none hover:bg-stone-100`.
-- **Campos de filtro e dropdowns**: retos, sem exceção. Os componentes
-  compartilhados (`components/ui/select.tsx`, `input.tsx`, `popover.tsx`,
-  `domain/searchable-combobox.tsx`) e a receita comum
-  `components/ui/dropdown-styles.ts` nascem arredondados porque servem também a
-  `/seplan` e `/secretaria`; o módulo os aplaina por CSS, **sem** alterar o
-  componente compartilhado. Duas regras em `src/app/globals.css`:
-  - `.orcamento-main [data-slot='button'|'input'|'select-trigger'|
-    'searchable-combobox-trigger'|'empty'|'empty-icon']` →
-    `border-radius: 0; box-shadow: none`, para tudo que está **dentro do
-    `<main>`**: trilha de filtros e coluna de conteúdo. O escopo é `main`, e não
-    a trilha, porque as visões executivas (`Órgão`, `Folha`) não têm trilha —
-    limitar à trilha deixava os seletores de secretaria/unidade e os botões
-    `Apresentar` / `Imprimir` da visão `Órgão` arredondados. O cabeçalho do app
-    fica fora do `<main>` e por isso não é alcançado, que é o comportamento
-    desejado (seção 3.1);
-  - `body:has(.orcamento-page-root) …` → para os **painéis abertos**.
-    `SelectContent`, `PopoverContent` e o menu do `SearchableCombobox` são
-    portados para o `<body>`, fora de `orcamento-page-root`, então nenhum
-    seletor descendente da rota os alcança. O gancho é o `:has()`: a raiz da
-    rota só está no DOM enquanto `/orcamento` está montada, e os painéis
-    portados são irmãos dela sob o mesmo `<body>`. É CSS puro — **não** usar
-    classe no `<body>` via `useEffect` para isso (foi a primeira tentativa e
-    não pegou). As declarações levam `!important` porque disputam com
-    utilitários Tailwind no próprio elemento. Ao criar um dropdown novo no
-    módulo, conferir se ele cai numa dessas duas regras; se não cair, estender
-    a regra, nunca arredondar o campo.
-
-  Os botões do cabeçalho do app e o `ExerciseSelect` seguem em `rounded-sm`
-  (2px), conforme a seção 3.1 — é a única receita do módulo que não é reta, e
-  mudá-la exige editar aquela seção antes.
-- **Estados vazios**: `Empty`/`EmptyHeader`/`EmptyMedia`/`EmptyTitle`/
-  `EmptyDescription` com texto concreto ("Nenhum dado para exibir", "Não há
-  registros correspondentes aos filtros aplicados." etc.). Proibido lorem ipsum e
-  texto genérico.
-- **Loading**: `Skeleton` apenas (sem shimmer, sem spinner além do ícone do
-  botão Atualizar).
-- **Ícones**: somente `lucide-react`, tamanho `size-4` (ou `size-3.5` em linhas
-  compactas), com `data-icon="inline-start"/"inline-end"` para os slots dos
-  botões.
-
-### 4.4 Interação (pílula de hover)
-
-O padrão `useHoverPill` (`src/components/ui/tabs.tsx:104-211`) é compartilhado
-com os orçamentos temáticos e deve ser **literalmente o mesmo**:
-
-- cada item carrega `data-hover-tab-value`; o container é `relative` e recebe
-  `listRef`;
-- `pill` segue o mouse/foco (500ms); `activePill` só se move quando a seleção
-  muda (300ms) — é isso que faz o marcador deslizar entre itens em vez de saltar;
-- `onMouseLeave={resetHighlight}` volta a pílula para o item ativo;
-- `ResizeObserver` no container + `window.resize` re-medem as pílulas;
-- `listRef` é **ref de callback** e guarda o nó em estado, porque o container
-  pode montar *depois* do hook — em `/orcamento` o `useHoverPill` do rodapé fica
-  antes do `return null` de sessão ausente. Com `useRef`, o `useLayoutEffect`
-  rodava uma única vez com o ref vazio, a medição se perdia em silêncio e nunca
-  mais voltava (o `ResizeObserver` também ficava sem ligar);
-- a cor clara do texto vem de `isHighlighted(value)`, que exige `pill.ready`.
-  **Não** decidir `text-white` comparando `highlightValue` direto: sem a
-  pílula medida atrás, o rótulo fica branco sobre branco — foi assim que a aba
-  Ações sumiu do rodapé na primeira carga de `/orcamento`.
-
-Não substituir por fundos estáticos (`bg-green-900` fixo no item ativo) nem por
-`TabsTrigger` puro do Radix nos casos onde hoje se usa o hook — a animação é a
-mesma em todo o sistema.
+- **Cromo** (cabeçalho do app, sublinhado da aba ativa, cabeçalho da tabela de
+  ações e faixas de título dos blocos): segue o verde da marca, que mora em quatro tokens de `globals.css`
+  (`--marca`, `--marca-hover`, `--marca-escura`, `--marca-contraste`) gerados por
+  `derivarPaleta()` (`src/lib/paleta-marca.ts`, com testes). Para trocar a cor:
+  `npm run build:lab`, conferir no painel "Cores" e colar o bloco gerado. Sobre
+  uma superfície da marca, `text-marca-contraste` (e não `text-white`) acompanha o
+  contraste se a marca clarear. O login mantém o verde anterior pela classe
+  `.marca-anterior`, aplicada também ao diálogo de acesso rápido (portal).
+- **Gráficos**: as cores de dado moram em `src/lib/chart-palette.ts`, separadas da
+  marca, e foram validadas para daltonismo (protanopia/deuteranopia):
+  - `STAGE_COLORS` — uma cor por estágio do ciclo da despesa, igual em todo o
+    módulo: dotação violeta, empenhado laranja, liquidado azul, pago verde. Vale
+    para os anéis da régua e da tabela, a dispersão, a folha da visão `Órgão` e
+    os pirulitos;
+  - `CHART_CATEGORICAL` — oito tons em ordem fixa para listas e séries (barras de
+    participação, pizza e listas da folha, curva do ciclo). Não cicla: o que passa
+    de oito vira "Demais" (`CHART_OTHER`, cinza) ou uma cor só;
+  - `CHANGE_COLORS` — acréscimos azul e reduções vermelho nos halteres da
+    dotação (`CHANGE_TEXT_COLORS`, mais escuros, no texto do saldo);
+  - `SEQUENTIAL_EXECUTION` — rampa de um azul só, em cinco faixas de 10 pontos,
+    para "% executado" no mapa de áreas.
+- **Campos retos**: os componentes compartilhados (`select`, `input`, `popover`,
+  `searchable-combobox`) nascem arredondados por servirem a `/seplan` e
+  `/secretaria`; o módulo os aplaina por CSS em `globals.css` —
+  `.orcamento-main [data-slot=…]` para o que está dentro do `<main>` e
+  `body:has(.orcamento-page-root) …` para os painéis portados para o `<body>`.
+  Mudar isso é editar essas regras, não os componentes compartilhados.
+- **Formatação de valores** (continua regra, seção 10.7): `formatMoney`
+  (`src/lib/api.ts`) nas células e `compactMoney` (`mil`/`mi`/`bi`) em eixos e
+  listas compactas; contagens com `toLocaleString('pt-BR')`; texto em pt-BR.
+- **"Limpar filtros" vermelho com filtro ativo** foi pedido pelo dono do produto em
+  2026-09-10 (`variant="destructive"`, alternando com `hasFilters`).
 
 ## 5. Dados: carga, tipos e derivações
 
@@ -507,7 +401,7 @@ esse formato e deduplica marcações por tema.
 `ExpenseLine` (`domain.ts:192-214`): além dos identificadores, `expenseAccount`
 (natureza em 6 posições), `expenseDescription`, `reduced`, `source` e 10 valores
 (inclui `payableToLiquidate` e `payable`, que **não** são exibidos no módulo —
-não adicionar colunas com eles sem atualizar a seção 4).
+não adicionar colunas com eles sem documentá-las aqui).
 
 ### 5.3 Estado da página e derivações
 
@@ -519,19 +413,18 @@ Todos os `useMemo` da página e o que os invalida:
 | `fiscalOrganizationOptions` | `organizations` | opções da visão por órgão ("Selecione uma secretaria") |
 | `unitOptions` | `actions`, `organizationCode` | unidades do órgão selecionado |
 | `sourceOptions` | `actions`, `organizationCode`, `unitFilter` | fontes das ações do recorte órgão+unidade |
-| `filteredActions` | 6 filtros + `actions` | recorte aplicado às abas de gráfico/tabela/ações |
-| `totals` | `filteredActions` | KPIs globais |
+| `filteredActions` | 6 filtros + `actions` | recorte dos filtros, base de `amendments` e de `dimensionActions` |
+| `totals` | `filteredActions` | régua de indicadores (Geral) e grade `geral` |
 | `fiscalActions` | `actions`, `organizationCode`, `unitFilter` | recorte da visão por órgão (sem fonte/função/busca) |
 | `selectedOrganization` | `organizations`, `organizationCode` | objeto do órgão na visão fiscal |
 | `fiscalPayrollHeadcount` | `payroll`, `organizationCode`, `unitFilter` | vínculos da folha no escopo do órgão (seção 6.6) |
 | `personnelScope` | `actions`, `fiscalActions`, `selectedOrganization`, `unitFilter` | ações locais vs. folha centralizada (3 casos, abaixo) |
-| `elementRows`…`sourceRows` | `filteredActions` | agregações da dimensão `geral` |
-| `amendments` + 6 agregações | `filteredActions` | recortes da dimensão `emendas` |
-| `dimensionActions` | `view`, `amendments`, `filteredActions` | recorte dominante da tela: alimenta KPIs, contagem do heading, Exportar e painel de Ações |
-| `dimensionTotals` | `view`, `amendments`, `totals` | KPIs globais (emendas quando a dimensão é `emendas`) |
-| `hasFilters` | 6 filtros | habilita "Limpar filtros" |
-| `contentViewPill` | `contentView` | hook de pílula do footer (não é memo) |
-| `rate` | `totals` | % de execução dos KPIs |
+| `amendments` | `filteredActions` | ações de emenda dentro dos filtros (recorte `emendas`) |
+| `amendmentTotals` | `amendments` | régua no recorte de emendas e grade `amendments` |
+| `headingTitle` | `actions`, `selectedOrganization`, `unitFilter` | nome do recorte na linha de filtros |
+| `dimensionActions` | `view`, `amendments`, `filteredActions` | recorte dominante da tela: alimenta a contagem da seção de ações, Exportar e a tabela |
+| `dimensionTotals` | `view`, `amendmentTotals`, `totals` | régua de indicadores (não é memo: só escolhe entre dois memos) |
+| `hasFilters` | 6 filtros | habilita "Limpar" |
 
 `personnelScope` resolve o problema "o pessoal da secretaria está em ações
 próprias e na folha centralizada da SEAD" em três casos (`page.tsx:455-527`):
@@ -613,6 +506,7 @@ com `{ key, label, shortLabel, chartLabel?, count, executionRate, ...totals }`):
 | `aggregateBySource` | linha | `source` cru (trim); rótulo via `getFonteLabel`; vazio → `Sem fonte` |
 | `aggregateByOrganization` | ação (`totals`) | código do órgão; rótulo `{código} — {nome}`; `chartLabel` = sigla (`organizationAcronym`) |
 | `aggregateByAction` | ação | `action.id`; rótulo `{projectActivity} — {application}` |
+| `aggregateBudgetChangesByOrganization` | linha | código do órgão (como `aggregateByOrganization`); devolve `BudgetChangeRow` = `ExecutionRow` + `increases`/`reductions`/`netChange` (seção 6.7) |
 
 Regras transversais:
 
@@ -665,26 +559,50 @@ Recursos 2026 da SEPLAN/DIRPLA/DEPOP.
   vinculação. **O texto de ajuda do KPI é gerado** a partir das fontes reais do
   órgão (`commitmentHelpText`, `fiscal-secretariat-view.tsx:405-417`), nunca
   escrito à mão — para não mentir quando a lista mudar.
-- **Índices de execução**: Empenho e Liquidação sobre a dotação atualizada;
-  **Pagamento sobre o liquidado** (`safeRate(paid, liquidated)`) — bases
-  diferentes por definição de cada ato (comprometer ≠ executar ≠ pagar).
-- **Pessoal consolidado**: `personnelTotalsOf` (seção 6.6) aplicada a
-  `localPersonnelScope` (ações do órgão **menos** as centralizadas) e a
-  `centralPayrollActions`; totais somados; participação no orçamento =
-  `updatedBudget(pessoal) ÷ (updatedBudget(ações locais) + updatedBudget(folha
-  centralizada))`.
-- **Menores índices de execução**: ações não-emenda com `updatedBudget > 0`,
-  ordenadas por taxa asc e dotação desc, top 8 — um alerta prático, não um
-  ranking estatístico.
-- **Composição**: unidades (quando nenhuma unidade selecionada), categorias e
-  fontes em barras de participação (top 5, `MiniBarList`).
-- **Apresentação**: "Apresentar" entra em fullscreen da seção
-  (`requestFullscreen`/`exitFullscreen`); "Imprimir / Salvar PDF" chama
-  `window.print()`. As seções marcam `fiscal-print-section`.
+- **Índices de execução** (régua de indicadores, seção 3.4): Empenho e
+  Liquidação sobre a dotação atualizada; **Pagamento sobre o liquidado**
+  (`paid ÷ liquidated`) — bases diferentes por definição de cada ato
+  (comprometer ≠ executar ≠ pagar).
+- **Folha de pagamento** (desde 2026-10-14; regra na seção 6.6):
+  `payrollBudgetTotalsOf` aplicada a `localPersonnelScope` (ações do órgão
+  **menos** as centralizadas) e a `centralPayrollActions`; totais somados;
+  participação = `updatedBudget(folha) ÷ (updatedBudget(ações locais) +
+  updatedBudget(folha centralizada))` — a mesma base de antes.
+- **Sem nenhum valor liquidado**: ações não-emenda com `updatedBudget > 0` e
+  liquidado zero, maiores dotações primeiro, top 5. Quando não há nenhuma (o QDD
+  de setembro já tem pouca ação parada), o bloco vira **Menor execução** e lista
+  as cinco menores taxas, com o percentual — um alerta prático, não um ranking
+  estatístico.
+- **Composição**: unidades (mapa de áreas; com uma unidade selecionada, o bloco
+  passa a mostrar os elementos de despesa da unidade), fontes (grade de 100
+  quadradinhos, 4 maiores + "Demais fontes") e categorias (rosca).
+- **Apresentação**: "Apresentar" entra em fullscreen da visão
+  (`requestFullscreen`/`exitFullscreen`); "Imprimir" chama `window.print()`. Os
+  blocos marcam `fiscal-print-section`.
 
 ### 6.6 Folha de pagamento
 
-**Custo de pessoal no QDD** (`personnelTotalsOf`, `execution-monitor.ts:320-341`):
+**Gasto de folha da visão Órgão** (`payrollBudgetTotalsOf`, desde 2026-10-14):
+
+- só as **ações de folha** (`isPayrollAction`: "folha de pagamento" na
+  aplicação normalizada, sem acento nem caixa), do próprio órgão e da parte dele
+  na folha centralizada da SEAD (abaixo);
+- todas as linhas dessas ações **menos** os elementos **34** (outras despesas de
+  pessoal decorrentes de terceirização) e **36** (serviços de terceiros — pessoa
+  física). Linha com natureza ilegível entra: está numa ação de folha;
+- o valor deixado de fora sai em `excludedUpdatedBudget` e aparece no bloco,
+  para a exclusão ser visível.
+
+Decisão do dono do produto em 2026-10-14: a tentativa de medir terceirizados se
+mostrou imprecisa, e a visão passou a mostrar só a folha do Estado. Antes valia o
+custo ampliado abaixo, que somava todo o GND 1 do órgão (inclusive fora das
+ações de folha e o elemento 34) e o elemento 36 das ações de folha. A diferença é
+real: na SEE, em maio/2026, a folha pela regra nova é R$ 1.546.462.110,19
+(R$ 1.528.756.755,58 no órgão + R$ 17.705.354,61 da folha centralizada), com
+R$ 300.000,00 de elementos 34/36 fora.
+
+**Custo ampliado de pessoal** (`personnelTotalsOf`, sem uso na interface desde
+2026-10-14; mantido porque é a definição documentada se o indicador voltar):
 
 - todas as linhas de GND 1; **mais**
 - linhas de GND 3 (correntes) com elemento em
@@ -750,9 +668,43 @@ Recursos 2026 da SEPLAN/DIRPLA/DEPOP.
   snapshot + `createMany` dos grupos; ou o mês novo entra completo, ou o
   anterior permanece. Recoletar o mesmo mês apenas substitui.
 
+### 6.7 Créditos adicionais e reduções (`aggregateBudgetChangesByOrganization`)
+
+- **O que o QDD entrega**: a coluna "Suplementado" já vem **líquida por linha** —
+  `Dotação inicial + Suplementado = Ini+Sup+Cor-Red` em todas as linhas (6.240 de
+  6.240 no QDD de maio/2026), e 802 delas são negativas. O arquivo não separa,
+  dentro de uma linha, o crédito adicional da anulação que o financiou.
+- **Cálculo**: a alteração de cada linha é `updatedBudget − initialBudget` (e não o
+  campo `supplemented`, para fechar com os KPIs por construção, inclusive em dado
+  antigo sem a coluna). Por órgão: `increases` = soma das linhas com alteração
+  positiva; `reductions` = soma das negativas (valor negativo); `netChange` =
+  `increases + reductions` = dotação atualizada − inicial do órgão.
+- **Leitura honesta**: como cada linha já vem líquida, `increases` e `reductions`
+  são **limites inferiores** dos fluxos brutos de crédito e de redução — um
+  remanejamento dentro da mesma linha não aparece. O saldo (`netChange`) é exato.
+  A descrição do cartão diz isso; não rotular `increases` como "total de créditos
+  adicionais abertos".
+- **Fechamento**: a soma de `netChange` de todos os órgãos é igual a
+  `totalsOf(actions).updatedBudget − totalsOf(actions).initialBudget` (no QDD de
+  maio/2026: R$ 460.102.247,97 = R$ 2.300.414.454,98 de acréscimos −
+  R$ 1.840.312.207,01 de reduções). Órgão só com reduções aparece (barra só à
+  esquerda do zero); órgão sem alteração nenhuma fica fora do gráfico.
+- **Emendas**: no QDD de maio/2026 o saldo das ações de emenda é zero, mas a
+  movimentação não: R$ 98,8 mi saem da reserva de emendas na SEPLAN (redução) e
+  chegam aos órgãos que as executam (acréscimos). É isso que o cartão da grade de
+  emendas mostra. Saldo que arredonda a zero é exibido como `R$ 0,00`, nunca
+  `-R$ 0,00`.
+- **Sem alteração no recorte** (ex.: filtro num órgão que não teve crédito nem
+  redução): estado vazio próprio ("Nenhuma alteração de dotação no recorte…"),
+  não o genérico de filtros.
+
 ## 7. Componentes do módulo
 
 ### 7.1 `ExecutionChartCard` (`execution-breakdown-panel.tsx:110-206`)
+
+> **Sem uso desde o redesenho de 2026-10-14** (seção 9, item 27): a grade de
+> emendas passou aos gráficos de `execution-visuals.tsx` (seção 7.7). Fica no
+> disco, como o `ExecutionTablePanel` (7.2).
 
 Props: `title`, `rows: ExecutionRow[]`, `metric: ExecutionMetric`,
 `description?`, `color = 'var(--chart-1)'`, `className?`.
@@ -784,6 +736,9 @@ Mecânica (toda memoizada):
 
 ### 7.2 `ExecutionTablePanel` (`execution-breakdown-panel.tsx:243-329`)
 
+> **Sem uso desde 2026-10-01**: servia à aba `Tabela`, que continua retirada
+> (seção 9, item 26).
+
 Props: `title`, `description`, `rows`, `metric`, `entityLabel` (cabeçalho da 1ª
 coluna), `countLabel` ("Linhas"/"Ações"), `moneyColumns = MONEY_COLUMNS`
 (padrão: Dotação inicial, Atualizada, Empenhado, Liquidado, Pago — a ordem é o
@@ -805,19 +760,32 @@ Mecânica:
 ### 7.3 `OverviewScheduledActionsPanel` (`overview-scheduled-actions-panel.tsx`)
 
 Compartilhado com os orçamentos temáticos; no módulo é usado com
-`variant="execution"`, `actions={filteredActions}` e `organizations`. O variant
-adapta o painel para receber filtros externos (órgão, função, subfunção, busca)
-em vez de expor os próprios. O painel e a linha da tabela (`OverviewActionRow`)
-são `memo` — a lista chega a milhares de linhas. Não criar um painel
-de ações paralelo para o módulo; evoluir este. No variant de execução, a tabela
-mostra os mesmos estágios monetários da aba `Tabela`: Dotação inicial, Dotação
-atualizada, Empenhado, Liquidado e Pago, nessa ordem, com destaque tipográfico
-para o estágio selecionado no filtro lateral. Usa uma largura mínima compartilhada
-pelo cabeçalho e pelas linhas: no modo de execução, Ação, Órgão e Unidade
-possuem larguras fixas e cada estágio monetário reserva 11rem, com divisor vertical
-sutil. Isso impede que cabeçalhos e valores financeiros se sobreponham. O contêiner
-da lista concentra a rolagem vertical e horizontal para manter as colunas alinhadas
-durante a navegação lateral.
+`variant="execution"`, `actions={dimensionActions}`, `organizations` e
+`showAllStages`. O variant adapta o painel para receber filtros externos (órgão,
+função, subfunção, busca) em vez de expor os próprios. O painel e a linha da
+tabela (`OverviewActionRow`) são `memo` — a lista chega a milhares de linhas.
+Não criar um painel de ações paralelo para o módulo; evoluir este. **Só os ramos
+`execution` mudam aqui**: `/seplan` e `/secretaria` usam o mesmo painel.
+
+No variant de execução (desde 2026-10-14):
+
+- **Coluna Ação** sem largura fixa (ocupa o resto): nome legível em
+  `font-medium` (`readableName`, só exibição; o `title` traz o texto original
+  do QDD) e uma linha de apoio com `{projeto/atividade} · {sigla do órgão} ·
+  {unidade}` em `text-xs text-muted-foreground`. As colunas Órgão e Unidade
+  saíram para essa linha. O chevron continua abrindo o detalhamento por
+  natureza e fonte (`ExpenseBreakdownTable`).
+- **Essencial** (padrão): Dotação atualizada (`font-semibold`), Liquidado e
+  Execução. **Todos os estágios** (`showAllStages`): Dotação inicial, Dotação
+  atualizada, Empenhado, Liquidado, Pago e Execução, na ordem do ciclo. Cada
+  coluna monetária reserva `10.5rem`; a de execução, `8.5rem`, com anel de 22px
+  (`STAGE_COLORS.liquidated`) e o percentual. Cabeçalho e linhas leem a mesma
+  lista de colunas (`executionColumns`), então o botão esconde a célula do
+  cabeçalho e a das linhas juntas.
+- **Cabeçalho** `bg-marca text-marca-contraste`, rótulos em caixa alta
+  espaçada, `sticky`. Largura mínima compartilhada pelo cabeçalho e pelas
+  linhas (`min-w-[56rem]` no essencial, `min-w-[82rem]` com todos os estágios).
+- O contêiner da lista concentra a rolagem vertical e horizontal (R6).
 
 ### 7.4 `FiscalSecretariatView` (`fiscal-secretariat-view.tsx`)
 
@@ -827,39 +795,43 @@ Props (todas obrigatórias exceto `organization`): `actions`, `personnelActions`
 `unitOptions`, `payrollHeadcount: PayrollHeadcountScope | null`, `allValue`,
 `onOrganizationChange`, `onUnitChange`, `vigenteImport?`.
 
-Layout (cabeçalho fixo + conteúdo rolável):
+Layout (redesenhado em 2026-10-14):
 
-1. **Cabeçalho**: título "Visão fiscal da execução", órgão selecionado,
-   `periodLabel(vigenteImport)` ("Acumulado até {mês} de {ano}" para
-   `ACUMULADO_ANUAL`; "Mês de {mês} de {ano}" para `MES_ISOLADO`), unidade
-   selecionada e nº de ações no recorte; botões "Apresentar" (fullscreen) e
-   "Imprimir / Salvar PDF"; seletores de Secretaria e Unidade
-   (`SearchableCombobox`, unidade desabilitada sem órgão).
-2. **KPIs** (`grid-cols-2 md:grid-cols-4 2xl:grid-cols-7`): 6 estágios +
-   Orçamento Comprometido (%) com `FiscalKpi` (tooltip de cálculo via
-   `InfoIcon` + `aria-label` "Como é calculado: …").
-3. **Execução da despesa**: estágios (Atualizado/Empenhado/Liquidado/Pago como
-   barras sobre a dotação atualizada) + índices (Empenho, Liquidação, Pagamento)
-   com detalhe da base.
-4. **Despesas com pessoal**: escopo (rótulo + nota passados pela página),
-   vínculos ativos por contrato (`payrollHeadcount.contracts`, com share e
-   inativos excluídos à parte), cartão "Vínculos ativos na folha" (número grande
-   verde; "Não identificado" quando `headcount === null`; `title` com as
-   correspondências achadas no portal), métricas
-   (no próprio órgão / folha centralizada SEAD / total atualizado / empenhado /
-   liquidado / pago) e indicador de participação no orçamento. Sem dados →
-   estado vazio explicando que não há GND 1 nem ação nominal na folha
-   centralizada.
-5. **Composição do orçamento**: unidades (só sem unidade selecionada),
-   categorias, fontes — `MiniBarList` top 5 por dotação atualizada.
-6. **Ações orçamentárias**: maiores orçamentos atualizados + menores índices de
-   execução (8, sem emendas).
+1. **Cabeçalho do órgão**: linha de rótulo `{sigla} · órgão {código} ·
+   {periodLabel(vigenteImport)} · {N} ações` ("Acumulado até {mês} de {ano}"
+   para `ACUMULADO_ANUAL`; "Mês de {mês} de {ano}" para `MES_ISOLADO`); `h1`
+   com o nome legível do órgão (sem a sigla); linha "Orçamento comprometido
+   **X%** · disponível para empenho **R$ …**" (`available` do recorte), com o
+   `InfoIcon` cujo tooltip é `commitmentHelpText` (seção 6.5 — gerado das fontes
+   reais, nunca "fonte 100" fixo: 719 e 721 somam vinculadas). À direita:
+   seletores **Secretaria** e **Unidade** (`SearchableCombobox`, unidade
+   desabilitada sem órgão), **Apresentar** (fullscreen) e **Imprimir**.
+2. **Régua de indicadores** (`KpiStrip`, seção 3.4) com os totais do recorte do
+   órgão.
+3. **Grade de seis blocos** (`VizBlock`, duas colunas a partir de 1180px):
+   - **Folha de pagamento** (seção 6.6): rosca próprio órgão × folha
+     centralizada da SEAD, com o total no centro; ao lado, dotação de folha
+     (com o nº de ações de cada lado), empenhado e liquidado com anel; a nota
+     dos elementos fora do cálculo, com o valor; a nota de escopo
+     (`personnelScopeNote`) quando há unidade selecionada; e uma linha de
+     **vínculos ativos na folha** (`payrollHeadcount`: total, competência,
+     inativos fora do total; "Folha de pagamento indisponível" sem snapshot).
+     Sem nenhuma ação de folha no recorte → texto próprio explicando que não
+     há ação de folha no órgão nem na folha centralizada 714/002.
+   - **Por unidade**: mapa de áreas com cor categórica e legenda das quatro
+     maiores; com unidade selecionada, **Por elemento de despesa** da unidade.
+   - **Por fonte de recurso**: grade de 100 quadradinhos (cada um vale 1%).
+   - **Por categoria econômica**: rosca com o percentual corrente no centro.
+   - **Maiores orçamentos**: pirulito das cinco maiores ações.
+   - **Sem nenhum valor liquidado** / **Menor execução** (seção 6.5).
+   Sem órgão selecionado → `Empty` "Selecione uma secretaria"; órgão sem ação no
+   recorte → `Empty` próprio.
 
 Regra interna: **nenhum cálculo no componente que já existe em
 `execution-monitor.ts`** — ele importa `aggregateByCategory`,
-`aggregateBySource`, `aggregateByAction`, `personnelTotalsOf`, `totalsOf`,
-`executionRate`, `isCentralPayrollAction`. A exceção é `aggregateByUnit`, que é
-local (só existe nesta visão).
+`aggregateBySource`, `aggregateByAction`, `aggregateByElement`,
+`payrollBudgetTotalsOf`, `totalsOf`, `executionRate`, `isCentralPayrollAction`.
+A exceção é `aggregateByUnit`, que é local (só existe nesta visão).
 
 ### 7.5 `PayrollPanel` (`payroll-panel.tsx`)
 
@@ -872,7 +844,9 @@ GitHub). Com snapshot:
   vínculos sem tipo definido quando `portalHeadcount > headcount`.
 - **Sumário** (`grid-cols-2 lg:grid-cols-4`, divisores `bg-black` com
   `gap-px`): Vínculos classificados, Folha bruta, Descontos, Folha líquida.
-- **Distribuição por órgão**: pizza top 9 + fatia "Demais órgãos (N)"; tooltip
+- **Distribuição por órgão**: pizza top 8 + fatia "Demais órgãos (N)", em cinza —
+  oito porque a paleta categórica tem oito tons e não cicla (até 2026-10-14 eram
+  nove); tooltip
   com share e vínculos; legenda com quadrados de cor e share.
 - **Distribuição da folha** (`xl:grid-cols-3`): por tipo de vínculo (barras top
   8), por órgão (barras top 8), maiores carreiras por rendimento médio.
@@ -915,7 +889,7 @@ busca estiver preenchida.
 - `SearchableCombobox` — combo com busca, usado em órgão/unidade/fonte e nos
   seletores da visão fiscal.
 - `FunctionalClassificationFilters` — filtros de função/subfunção.
-- `useHoverPill` — pílula das navegações (seção 4.4).
+- `useHoverPill` — sem uso em `/orcamento` desde 2026-10-14 (seção 3.7).
 - `formatMoney`, `api`, `getStoredSession`, `clearStoredSession` — de
   `src/lib/api.ts`.
 - `organizationAcronym` (`src/lib/organization-acronym.ts`): sigla via override
@@ -923,43 +897,55 @@ busca estiver preenchida.
   446 SECC, 447 CASMIL, 450 GABVICE, 452 CEPDEC, 720 SEMA) ou extração do trecho
   após " - " (CAIXA ALTA, ≤ 12 chars); sem derivação possível → código.
 
-### 7.7 Tipos de visualização adicionais da grade (Visão geral)
+### 7.7 Visualizações desenhadas em SVG (`execution-visuals.tsx`)
 
-A grade `geral`/`amendments` da Visão geral pode misturar **quatro** tipos de
-visualização, todos sobre as mesmas `ExecutionRow[]` das agregações (seção 6.3),
-todos no mesmo shell de card da seção 4.3 (`PANEL_CLASS`, `CHART_HEADER_CLASS`,
-`rounded-none`, `shadow-none`), todos `memo` (R4) e todos com as 5 cores da
-paleta da seção 4.1:
+Desde 2026-10-14 a aba `Gráficos` e a visão `Órgão` usam visualizações
+desenhadas à mão em SVG, uma forma por tipo de dado, no lugar das barras de
+progresso e dos cartões Recharts. Não é biblioteca nova (seção 10.1): é SVG
+escrito no componente, e a geometria mora em `src/lib/chart-geometry.ts`
+(funções puras, testadas, que toleram lista vazia e total zero).
 
-1. **`ExecutionChartCard`** — barras horizontais de uma série (seção 7.1). O tipo
-   original; continua sendo o padrão para recortes com muitos itens.
-2. **`CycleStackedBarChart`** — **barras empilhadas do ciclo da despesa**: uma
-   barra por recorte (por `updatedBudget`) dividida em 4 segmentos derivados, sem
-   recalcular agregação:
-   - `Não empenhado` = `updatedBudget − committed`;
-   - `Empenhado não liquidado` = `committed − liquidated`;
-   - `Liquidado não pago` = `liquidated − paid`;
-   - `Pago` = `paid`.
-   Usa `BarChart layout="vertical"` com `stackId` e 4 `Bar` com as cores da
-   paleta. Responde "quanto do dinheiro já percorreu o ciclo".
-3. **`CycleLineChart`** — **curva do ciclo**: eixo X com os 5 estágios
-   (`EXECUTION_METRICS`, ordem do ciclo da despesa), eixo Y com o valor; uma
-   linha por item do top-N (padrão 8) por `updatedBudget`. Usa `LineChart` do
-   Recharts com `Line` (sem gradiente). Mostra o "atrito" da execução ao longo do
-   ciclo.
-4. **`ExecutionScatterChart`** — **dispersão dotação × execução**: X =
-   `updatedBudget`, Y = `executionRate` (%), tamanho da bolha = `paid`. Usa
-   `ScatterChart` + `Scatter` + `ZAxis` do Recharts. Localiza "orçamento grande
-   com execução baixa".
+- **`KpiStrip`** — régua de indicadores (seção 3.4).
+- **`VizBlock`** — bloco da grade: faixa de título `bg-marca
+  text-marca-contraste` (`text-sm font-semibold`), frase de leitura
+  (`text-[13.5px] text-muted-foreground`, com o número principal em negrito) e
+  o gráfico. Sem cartão, sombra nem canto arredondado.
+- **`Ring`** — anel de percentual (régua, tabela de ações, folha).
+- **`DonutChart`** — rosca com o total no centro e legenda (`ShareLegend`:
+  valor compacto e parcela). Composição com poucos itens.
+- **`TreemapChart`** — mapa de áreas `squarify`: área = dotação. Cor
+  categórica (órgãos, unidades) ou a rampa sequencial de "% executado"
+  (`SEQUENTIAL_EXECUTION`, com legenda `SequentialLegend`). Rótulo só quando o
+  retângulo comporta o texto; o nome inteiro está no tooltip.
+- **`WaffleChart`** — 100 quadradinhos, cada um 1% (`waffleCells`, maior resto).
+- **`LollipopList`** — ranking em pirulito (haste fina e ponto), em HTML para
+  caber em coluna estreita.
+- **`DumbbellChart`** — halteres da dotação: círculo vazado = inicial (lei),
+  cheio = atualizada, azul se cresceu e vermelho se caiu (`CHANGE_COLORS`), com o
+  saldo à direita (`CHANGE_TEXT_COLORS`). Tooltip com o saldo em destaque e os
+  acréscimos e reduções da linha de `BudgetChangeRow` (seção 6.7), com a nota de
+  que a coluna do QDD já vem líquida por linha.
+- **`BubbleScatter`** — dispersão: X = dotação atualizada, Y = % executado
+  (limitado a 100), área da bolha = pago; rótulo nos cinco maiores pagadores.
+- **`ChartTooltip`** — **uma** caixa de detalhe para todos os gráficos
+  (`useChartTooltip`): subtítulo opcional ("Órgão 744"), título legível, número
+  principal grande quando houver, linhas rótulo/valor com marcador da cor da
+  série e nota. Posição `fixed` junto ao cursor, presa à janela.
 
-**Regras dos tipos novos** (todas derivadas do contrato existente):
+Regras:
 
-- Nenhum deles introduz cor, raio, sombra, gradiente ou biblioteca fora da
-  seção 4/10.
-- `compactMoney` e `chartTick` (seção 7.1) são reutilizados para eixos e rótulos.
-- `EmptyState` é usado quando não há dados após os filtros.
-- A seleção de qual recorte usa qual tipo é uma decisão de layout da página
-  (seção 3.3), não um comportamento fixo de cada componente.
+- cores sempre de `src/lib/chart-palette.ts`; nunca ciclar a categórica (até
+  8 itens, depois `CHART_OTHER`);
+- valores de eixo e rótulo com `compactMoney`; tooltip com `formatMoney`
+  (por extenso); negativos com o sinal tipográfico "−";
+- nomes do QDD passam por `readableName` só para exibição;
+- recorte sem dado → `VizEmpty`, com texto concreto do que falta.
+
+Os cartões Recharts da grade anterior (`CycleStackedBarChart`,
+`ExecutionScatterChart`, `BudgetChangeChart`, `CycleLineChart`,
+`ExecutionChartCard`) ficam no disco, **sem uso** desde 2026-10-14 — como o
+`ExecutionTablePanel` desde 2026-10-01. Recharts continua no módulo pela
+`PayrollPanel`.
 
 ## 8. Coleta da folha — job
 
@@ -988,11 +974,15 @@ documentar aqui.
 
 ## 9. Decisões deliberadas (não "corrigir")
 
-1. **Zoom de 95%** (`PAGE_ZOOM`): aumenta a área útil em telas menores. É
-   intencional e constante.
-2. **Grade 3×2 degradando para 2 e 1 colunas**: abaixo de ~330px por célula, um
-   gráfico com eixo de categorias fica ilegível.
-3. **Tabelas empilhadas com `shrink-0 max-h-[34rem]`** e teto interno
+1. *(Retirado em 2026-10-14, item 27.)* Era o zoom constante de 95%
+   (`PAGE_ZOOM`); saiu com a rolagem da página inteira (R6).
+2. **Grade em duas colunas só a partir de 1180px** (`gridClass`): cada bloco
+   tem gráfico e legenda lado a lado, e abaixo de ~520px por coluna a legenda
+   espreme os nomes. Até 2026-10-01 a grade era 3×2; voltou como 2×2 em
+   2026-10-14 (item 26) e, no redesenho do mesmo dia, sem altura fixa: a
+   página rola (R6).
+3. **Tabelas empilhadas com `shrink-0 max-h-[34rem]`** *(sem uso desde
+   2026-10-01, item 26; vale se a aba `Tabela` voltar)* e teto interno
    `max-h-[26rem]`: sem `shrink-0`, cards flex com `min-h-0` encolhem até sobrar
    uma linha visível; os tetos fazem as tabelas rolarem por dentro.
 4. **Ticks truncados em 18 caracteres** (`AXIS_TICK_MAX_CHARS`) com largura de
@@ -1001,13 +991,15 @@ documentar aqui.
 5. **Gráficos `layout="vertical"`**, `barCategoryGap="16%"`, máximo de 100
    barras, omissão de valores zero na métrica escolhida, altura
    `max(170, n × 26 + 34)`.
-6. **KPIs globais em 6 colunas só a partir de `2xl`**: em 1440px com a trilha
-   lateral, cada célula teria ~147px e os valores (~170px) cortariam.
+6. **Régua em 6 colunas só a partir de 1360px**: os valores são por extenso
+   (pedido do dono do produto) e chegam a ~190px; em 1280px seis colunas
+   cortariam "R$ 10.512.…". Abaixo disso, 3 × 2.
 7. **Dimensões fundidas em `Geral`/`Emendas`**: antes havia uma dimensão por
    recorte (elemento, ação, fonte) exibindo os mesmos gráficos em ordens
-   diferentes; foram fundidas e as tabelas de todos os recortes convivem
-   empilhadas na aba `Tabela`. Não recriar dimensões por recorte.
-8. **`Órgão` e `Folha` sem trilha de filtros**: visões executivas; os filtros
+   diferentes; foram fundidas, e as tabelas de todos os recortes passaram a
+   conviver empilhadas na aba `Tabela` (retirada em 2026-10-01, item 26). Não
+   recriar dimensões por recorte.
+8. **`Órgão` e `Folha` sem linha de filtros**: visões executivas; os filtros
    do QDD não se aplicam à folha e a visão por órgão tem os próprios seletores.
 9. **Ranking de carreiras consolida classes/níveis/jornadas** em famílias —
    "PROFESSOR CLASSE II NÍVEL 4" viraria 4 linhas sem isso.
@@ -1024,20 +1016,18 @@ documentar aqui.
     código fora do padrão deve aparecer, não sumir.
 15. **Ordem das abas e das métricas é o ciclo da despesa** (dotação → empenho →
     liquidação → pagamento) — não reordenar alfabeticamente ou por tamanho.
-16. **A busca do ranking de carreiras não reescala as barras nem recolore a
-    lista.** A largura continua medida contra o maior rendimento médio do
-    ranking **inteiro** (`highestAverage` de `rankedRows[0]`, não do resultado
-    filtrado) e a cor vem do `rank` gravado na linha, não da posição no filtro.
-    Buscar uma carreira do fim da lista mostra, portanto, uma barra curta: é o
-    valor dela perto do topo do estado, e é o ponto de comparação. Reescalar
-    para o filtro faria a mesma carreira mudar de tamanho conforme o que se
-    digita, e recolorir por índice embaralharia a lista a cada tecla.
-17. **A grade da Visão geral mistura tipos de visualização** (seção 7.7):
-    barras de uma série, barras empilhadas do ciclo, curva do ciclo e dispersão
-    dotação × execução. A escolha de qual recorte usa qual tipo é deliberada e
-    fica registrada na seção 3.3 — não é um comportamento aleatório nem uma
-    troca por preferência estética. Nenhum tipo novo pode entrar sem passar por
-    esta seção.
+16. **A busca do ranking de carreiras não reescala as barras.** A largura
+    continua medida contra o maior rendimento médio do ranking **inteiro**
+    (`highestAverage` de `rankedRows[0]`, não do resultado filtrado). Buscar uma
+    carreira do fim da lista mostra, portanto, uma barra curta: é o valor dela
+    perto do topo do estado, e é o ponto de comparação. Reescalar para o filtro
+    faria a mesma carreira mudar de tamanho conforme o que se digita. As barras
+    do ranking têm uma cor só desde 2026-10-14: a lista passa de oito linhas, e a
+    paleta categórica não pode ciclar (`chart-palette.ts`).
+17. **A grade da aba `Gráficos` mistura tipos de visualização** (seção 7.7):
+    mapa de áreas, rosca, dispersão, halteres e pirulito — uma forma por tipo de
+    dado, e não barras em tudo. A escolha de qual recorte usa qual tipo fica
+    registrada na seção 3.5.
 
 18. **As opções do filtro de órgão vêm das ações, não do cadastro.** Unidade e
     fonte sempre derivaram das `actions`; o órgão vinha de `/organizations`. Com
@@ -1068,73 +1058,51 @@ documentar aqui.
 23. **Leituras toleram exercício inexistente, escritas não.** Um link antigo com
     `?exercicio=` de um ano que não existe abre no corrente em vez de quebrar; uma
     rota de escrita sem exercício, ou com um inexistente, é recusada com 400.
-24. **"Limpar filtros" fica vermelho com filtro ativo.** É a única cor fora da
-    paleta verde/bege do módulo, pedida pelo dono do produto em 2026-09-10 — não
-    é slop, não reverter. Usa `variant="destructive"` do `Button` (não uma classe
-    `bg-red-*` ad hoc) e alterna com `hasFilters`, o mesmo predicado que já
-    governa o `disabled`. Assim o vermelho nunca aparece no estado desabilitado,
-    que continuaria `outline` e sairia rosa-lavado sob `disabled:opacity-50`. O
-    botão segue sempre montado para o bloco de filtros não mudar de altura.
-25. **O verde da marca é `#2E6F40`, e ele vive em TOKENS, não em classes.**
-    Escolha do dono do produto em 2026-09-18, registrada aqui porque a seção
-    10.16 é explícita: quem revoga uma regra da paleta é uma edição deste
-    documento, não um clique. O verde anterior (`green-900`, `#14532d`) saiu de
-    toda a aplicação — exceto do login (abaixo).
+24. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)* Era o vermelho do "Limpar filtros" ativo, que continua no
+    código (nota na seção 4).
+25. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)* Era a paleta da marca em tokens; o essencial está na seção 4.
+26. **A aba `Tabela` foi retirada; a aba `Gráficos` saiu e voltou.** Decisão do
+    dono do produto em 2026-10-01: as duas saíram, e o módulo ficou com `Ações`,
+    `Órgão` e `Folha de pagamento`. Saíram junto da página a grade `gridClass`,
+    as tabelas empilhadas (`STACKED_TABLE_CLASS`), o mapa de cores
+    `chartColors`, o `Tabs` interno pela dimensão e as 13 agregações em `useMemo`.
+    Em 2026-10-14 o dono do produto pediu `Gráficos` de volta, como grade
+    **2×2** e com um cartão novo de créditos adicionais (seção 7.7, tipo 5;
+    cálculo na seção 6.7). Voltaram, pelos componentes que tinham ficado no
+    disco: `gridClass` (agora 2×2), `chartColors` (só as cores dos cartões de
+    emendas), o `Tabs` interno pela dimensão e 8 agregações (elemento, fonte,
+    órgão e créditos em `geral`; órgão, ação, elemento e créditos em emendas). Seguem fora: a aba `Tabela`, `STACKED_TABLE_CLASS`
+    e o `ExecutionTablePanel` (sem uso, seção 7.2), além de `CycleLineChart`,
+    `aggregateByGroup`, `aggregateByModality` e `aggregateByCategory` na grade
+    (a visão `Órgão` segue usando `aggregateByCategory`). Recriar `Tabela` é
+    mudança de estrutura (seção 10.11), não "restaurar algo que sumiu".
 
-    **Nunca escreva `text-white` sobre uma superfície da marca.** Use
-    `text-marca-contraste`. Hoje o token resolve para branco e o resultado é
-    idêntico, então a regra parece supérflua — não é. No caminho até aqui a cor
-    passou por `#78a890`, um verde claro em que texto branco dava **2,7:1** e
-    reprovava no WCAG AA; o token virou escuro sozinho e as telas continuaram
-    legíveis. Fixar `text-white` é justamente o que quebra na próxima troca.
+27. **Redesenho de 2026-10-14.** A partir do mockup v7 aprovado pelo dono do
+    produto (`mockups/orcamento-redesenho-v7.html`), depois de seis rodadas — as
+    anteriores foram recusadas por "cara de painel SaaS" (cartões
+    arredondados, sombras, pílulas) e por densidade. Mudou de estrutura: sem
+    zoom e com a página rolando (R6); sem trilha lateral, com os filtros numa
+    linha e o recorte na faixa de navegação (R5, R7); sem o seletor "Exibir
+    valores de"; sem heading, contador e Anterior/Próximo; Exportar na seção de
+    ações e o retorno aos Orçamentos Temáticos no cabeçalho. Mudou de forma: a
+    régua de indicadores com anéis e valores por extenso, a tabela enxuta com
+    nomes legíveis, os gráficos em SVG (seção 7.7) e a visão `Órgão` no mesmo
+    molde. Mudou de cálculo só a folha da visão `Órgão` (seção 6.6). Ficaram de
+    fora do mockup e seguem como estavam: a `PayrollPanel` (aba Folha de
+    pagamento) e a exportação.
 
-    **Por que quatro tons e não um:** uma cor só não cobre os papéis. Texto verde
-    sobre fundo branco (`text-marca-escura`, 21 ocorrências no módulo) e o tooltip
-    escuro precisam de um tom mais fundo que a superfície; daí `--marca-escura`,
-    com 10,08:1 nos dois sentidos. O `--marca-hover` existe porque escurecer até
-    `--marca-escura` no hover estouraria a relação com o texto.
-
-    **A derivação é código, não gosto.** `derivarPaleta()` em
-    `src/lib/paleta-marca.ts` produz os quatro tons a partir de um hex, persegue
-    os mínimos do AA e emite aviso quando não alcança — com 18 testes, incluindo
-    os casos degenerados. O painel "Cores" (`npm run build:lab`) aplica a paleta
-    no app real para conferência antes de fixar.
-
-    **O que ficou de fora, deliberadamente:**
-    - **A tela de login** mantém o verde anterior, por decisão do usuário. O
-      congelamento é a classe de escopo `.marca-anterior` em `globals.css`,
-      aplicada ao `<main>` do login **e** ao `AlertDialogContent` do acesso
-      rápido — o Radix renderiza esse diálogo em portal, fora da subárvore, e ele
-      escaparia do escopo.
-    - **`#065f46` (CLIMATICO)** e os pares `#9333ea` (OSG) / `#0e7490` (OCAD) são
-      codificação de dado, não cromo. Pintar uma das três categorias com a cor da
-      marca faria "verde = Climático" e "verde = a aplicação" virarem o mesmo
-      sinal.
-    - **As cores dos gráficos**, que seguem as da seção 4.1 e não os tokens da
-      marca. Elas sempre foram mais claras que o cromo — mesmo quando ele era
-      `green-900` — porque é o contraste ENTRE séries que torna o gráfico
-      legível. Amarrá-las à cor da identidade apagaria essa distinção, e foi por
-      isso que voltaram a `#5f8f70`/`#365f47` quando a marca virou um verde
-      escuro de novo.
-
-## 10. Proibições explícitas (anti-slop)
+## 10. Proibições explícitas
 
 Violação de qualquer item é motivo para rejeitar a mudança:
 
 1. **Nenhuma biblioteca nova** (gráfico, CSS, utilitário) sem justificativa
    escrita neste documento. Recharts é a única biblioteca de gráficos do módulo.
-2. **Nenhuma cor fora da paleta da seção 4.1.** Em especial: nada de azul/roxo/
-   vermelho "SaaS", nada de `text-primary`/`bg-primary` do tema em elementos de
-   destaque. Única exceção de vermelho: "Limpar filtros" ativo (seção 9, item 24).
-3. **Nenhum arredondamento ou sombra** nos painéis (`rounded-none`,
-   `shadow-none`); nenhum `border-radius` novo em cards do módulo.
-4. **Nenhuma moda de UI**: gradientes, glassmorphism, blur, animações de
-   entrada, skeletons com shimmer, micro-interações que atrasam leitura.
+2. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
+3. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
+4. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
 5. **Nenhum emoji**, nenhum texto em inglês na interface, nenhum texto genérico
    de estado vazio ("Algo deu errado", "Em breve", "Aqui você encontra…").
-6. **Nenhum `div` cru no lugar de componente de UI existente**
-   (`components/ui/*`); nenhum estilo ad hoc quando há token ou receita na
-   seção 4.
+6. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
 7. **Nenhuma duplicação de lógica** de agregação, de normalização ou de
    formatação de moeda dentro de componente.
 8. **Nenhuma chamada a portal externo no cliente**; nenhum dado pessoal
@@ -1154,56 +1122,48 @@ Violação de qualquer item é motivo para rejeitar a mudança:
     exercícios, pertencem à importação e à curadoria; este módulo apenas lê o que
     elas alimentam.
 13. **Nenhuma tabela nova ad-hoc com markup próprio** onde `ExecutionTablePanel`
-    serve (com `moneyColumns`/`hideRate`).
-14. **Nenhum gráfico novo fora do padrão da seção 7.7**: sem pizza em visões de
-    execução (a pizza existe só na folha), sem `layout="horizontal"` fora do
-    `CycleStackedBarChart`/`ExecutionChartCard`, sem eixo categórico com mais de
-    100 itens. Os tipos novos (empilhado do ciclo, linha do ciclo, dispersão)
-    são permitidos apenas na forma registrada na seção 7.7 — nunca uma variação
-    livre (ex.: área empilhada, pizza, radar) fora dela.
-15. **Nenhum "ajuste" de UI que ande na contramão das decisões da seção 9** —
-    inclusive "melhorar o visual" dos painéis verdes/pretos, que é a identidade.
-16. **Nenhuma opção fora do contrato oferecida ao usuário.** Ao propor
-    alternativas (cor, efeito, layout), *todas* as opções apresentadas já devem
-    respeitar as seções 4 e 10. Aprovação do usuário **não** valida uma opção
-    proibida: quem revoga uma regra é uma edição deste documento, não um clique.
-    Esta regra existe porque já falhou — uma sessão ofereceu âmbar e degradês
-    como escolhas legítimas, violando 10.2 e 10.4, e coube ao usuário recusar
-    quatro vezes o que o contrato já proibia.
+    serve (com `moneyColumns`/`hideRate`). O componente está sem uso desde
+    2026-10-01 (seção 9, item 26), mas segue sendo o caminho para qualquer
+    tabela de agregação que volte ao módulo.
+14. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
+15. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
+16. *(Retirado em 2026-10-14 junto com o contrato visual — seção 4.)*
 17. **Nenhuma mudança declarada pronta sem a verificação da seção 11.** Quando um
     item do checklist não puder ser cumprido — por exemplo, sem navegador para
-    conferir as três larguras (item 2), o re-render das abas ocultas (item 4) ou
-    o print em `xl` (item 11) —, diga **quais** itens ficaram por verificar em vez
+    conferir as três larguras (item 2) ou o re-render das abas ocultas (item 4) —,
+    diga **quais** itens ficaram por verificar em vez
     de omitir. "Compila" e "`tsc` limpo" não são "verificado".
 
 ## 11. Checklist antes de encerrar uma mudança
 
 1. `npm run lint` na raiz passa (`tsc --noEmit` sem erros novos).
-2. Testado em **três larguras**: ≥ `2xl` (KPIs 6 colunas), `xl`–`2xl` (trilha
-   lateral, colapso), < `sm` (1 coluna, trilha em faixa).
+2. Testado em **três larguras**: ≥ 1360px (régua em 6 colunas, grades em 2),
+   1024–1180px (régua 3 × 2, grades em 1 coluna), < `sm` (régua 2 colunas,
+   filtros quebrando linha, abas rolando).
 3. Navegação por setas ← → funciona e **ignora** inputs, selects, comboboxes e
    abas internas por tema (o guard do handler deve continuar intacto).
 4. Abas não piscam ao alternar (`forceMount` mantido); `React DevTools` (ou
-   profiler) não mostra re-render das abas ocultas em troca de métrica/filtro
+   profiler) não mostra re-render das abas ocultas em troca de recorte/filtro
    (`memo` mantido).
 5. Filtros em cascata: órgão limpa unidade+fonte; unidade limpa fonte; "Limpar
    filtros" desabilita quando limpo; opções de unidade/fonte refletem o recorte.
    **Trocar o exercício limpa órgão+unidade+fonte+função+subfunção+busca**, e as
    opções passam a refletir apenas o QDD do ano escolhido.
 6. Somatórios conferem: para o QDD vigente, a soma dos buckets de cada
-   agregação fecha com o total geral (nada descartado, nada duplicado) — e isso
+   agregação em uso (hoje, as da visão `Órgão` — categoria, fonte, ação e
+   elemento — e as da aba `Gráficos` — elemento, fonte, órgão, ação e créditos
+   adicionais, cujo `netChange` fecha com atualizada − inicial, seção 6.7; os
+   "Demais" de rosca e quadradinhos fecham com o total real) fecha
+   com o total geral (nada descartado, nada duplicado) — e isso
    vale **em cada exercício**, não só no corrente.
-7. Textos novos seguem o padrão: pt-BR, `uppercase tracking` em rótulos,
-   `tabular-nums` em números, `formatMoney`/`compactMoney` em valores.
+7. Textos novos em pt-BR, com `formatMoney`/`compactMoney` em valores.
 8. Estado vazio e `Skeleton` cobertos para o que foi alterado; estados vazios
    com texto concreto.
-9. Se a mudança tocou base de cálculo, catálogo manual, paleta ou componente de
-   UI: seções 4/6/9/12 deste documento atualizadas.
+9. Se a mudança tocou base de cálculo ou catálogo manual: seções 6/9/12 deste
+   documento atualizadas.
 10. Se a mudança mexeu na coleta da folha: `payroll-portal.ts` **e**
     `collect-payroll.mjs` alterados juntos; job manual disparado uma vez contra
     o mês vigente e resultado conferido no painel.
-11. Print da mudança em largura `xl` conferido contra a receita visual da
-    seção 4 (nenhuma cor/raio/sombra fora do contrato).
 
 ## 12. Catálogos e mapas manuais (manutenção)
 
@@ -1267,7 +1227,7 @@ atualizar este documento.
 | `src/lib/expense-breakdown.ts` | limpeza de descrição, linhas por conta+fonte |
 | `src/lib/execution-export.ts` | exportação XLSX/CSV/JSON do recorte filtrado (client-side) |
 | `src/lib/organization-acronym.ts` | siglas |
-| `src/components/domain/execution-breakdown-panel.tsx` | `ExecutionChartCard`, `ExecutionTablePanel` |
+| `src/components/domain/execution-breakdown-panel.tsx` | cartões da aba `Gráficos`: `ExecutionChartCard`, gráficos do ciclo, dispersão e `BudgetChangeChart`; `ExecutionTablePanel` sem uso desde 2026-10-01 (seção 9, item 26) |
 | `src/components/domain/fiscal-secretariat-view.tsx` | visão por órgão |
 | `src/components/domain/payroll-panel.tsx` | painel da folha |
 | `src/components/domain/overview-scheduled-actions-panel.tsx` | aba Ações (variant execution) |

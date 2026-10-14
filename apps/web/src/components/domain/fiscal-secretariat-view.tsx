@@ -1,15 +1,22 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
+import { Building2Icon, InfoIcon, Maximize2Icon, PrinterIcon, WalletCardsIcon } from 'lucide-react';
 import {
-  Building2Icon,
-  CalendarDaysIcon,
-  InfoIcon,
-  Maximize2Icon,
-  PrinterIcon,
-  UsersIcon,
-  WalletCardsIcon,
-} from 'lucide-react';
+  DonutChart,
+  KpiStrip,
+  LollipopList,
+  MicroLabel,
+  Ring,
+  ShareLegend,
+  TreemapChart,
+  VizBlock,
+  VizEmpty,
+  WaffleChart,
+  WatchList,
+  paintItems,
+  readableLabel,
+} from '@/components/domain/execution-visuals';
 import {
   SearchableCombobox,
   type SearchableComboboxItem,
@@ -19,23 +26,30 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatMoney } from '@/lib/api';
 import {
+  CHART_CATEGORICAL,
+  STAGE_COLORS,
+  categoricalColor,
+} from '@/lib/chart-palette';
+import { shareOf, topWithOther } from '@/lib/chart-geometry';
+import {
   aggregateByAction,
   aggregateByCategory,
+  aggregateByElement,
   aggregateBySource,
   executionRate,
   isCentralPayrollAction,
-  personnelTotalsOf,
+  payrollBudgetTotalsOf,
   totalsOf,
-  type ExecutionRow,
   type ExecutionTotals,
 } from '@/lib/execution-monitor';
 import { getFonteLabel } from '@/lib/fontes-recursos';
 import { actionIsAmendment } from '@/lib/functional-classification';
+import { compactMoney, formatPercent } from '@/lib/number-format';
+import { organizationAcronym } from '@/lib/organization-acronym';
 import type { PayrollHeadcountScope } from '@/lib/payroll-scope';
-import { cn } from '@/lib/utils';
+import { readableName } from '@/lib/readable-name';
 import type { BudgetAction, BudgetImport, Organization } from '@/types/domain';
 
-const FISCAL_COLORS = ['#5f8f70', '#8fa873', '#b8b477', '#110f24', '#c8c89f'] as const;
 const UNRESTRICTED_TREASURY_SOURCE = '15000100';
 
 /**
@@ -98,38 +112,6 @@ type UnitRow = ExecutionTotals & {
   count: number;
 };
 
-function safeRate(value: number, base: number) {
-  if (!base) return 0;
-  return (value / base) * 100;
-}
-
-function formatPercent(value: number) {
-  return `${value.toLocaleString('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}%`;
-}
-
-function compactMoney(value: number) {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) {
-    return `R$ ${(value / 1_000_000_000).toLocaleString('pt-BR', {
-      maximumFractionDigits: 1,
-    })} bi`;
-  }
-  if (abs >= 1_000_000) {
-    return `R$ ${(value / 1_000_000).toLocaleString('pt-BR', {
-      maximumFractionDigits: 1,
-    })} mi`;
-  }
-  if (abs >= 1_000) {
-    return `R$ ${(value / 1_000).toLocaleString('pt-BR', {
-      maximumFractionDigits: 0,
-    })} mil`;
-  }
-  return formatMoney(value);
-}
-
 function periodLabel(vigenteImport?: BudgetImport | null) {
   if (!vigenteImport) return 'Período de referência não informado';
   const month = MONTH_NAMES[vigenteImport.referenceMonth - 1] ?? '';
@@ -167,139 +149,41 @@ function aggregateByUnit(actions: BudgetAction[]): UnitRow[] {
   return [...rows.values()].sort((a, b) => b.updatedBudget - a.updatedBudget);
 }
 
-function MiniBarList({
-  rows,
-  valueKey = 'updatedBudget',
-  emptyLabel,
-  basisLabel = 'do total',
-}: {
-  rows: Array<ExecutionRow | UnitRow>;
-  valueKey?: keyof ExecutionTotals;
-  emptyLabel: string;
-  basisLabel?: string;
-}) {
-  const positiveRows = rows.filter((row) => row[valueKey] > 0);
-  const total = positiveRows.reduce((sum, row) => sum + row[valueKey], 0);
-  const visibleRows = [...positiveRows]
-    .sort((a, b) => b[valueKey] - a[valueKey])
-    .slice(0, 5);
-
-  if (!visibleRows.length) {
-    return (
-      <div className="flex h-full min-h-28 items-center justify-center text-center text-sm text-muted-foreground">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <div className="fiscal-bar-list grid min-w-0 gap-2.5">
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Participação na dotação atualizada total do recorte
-        {positiveRows.length > visibleRows.length
-          ? ` · exibindo os ${visibleRows.length} maiores de ${positiveRows.length}`
-          : ''}
-        .
-      </p>
-      {visibleRows.map((row, index) => {
-        const value = row[valueKey];
-        const share = total ? (value / total) * 100 : 0;
-        return (
-          <div key={row.key} className="fiscal-bar-row grid min-w-0 gap-1">
-            <div className="flex min-w-0 items-baseline justify-between gap-3 text-sm">
-              <span className="min-w-0 flex-1 truncate font-medium" title={row.label}>
-                {row.label}
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {compactMoney(value)}
-              </span>
-            </div>
-            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-              <div
-                className="h-1.5 overflow-hidden bg-muted"
-                role="img"
-                aria-label={`${row.label}: ${formatPercent(share)} ${basisLabel}`}
-              >
-                <div
-                  className="h-full transition-[width] duration-500"
-                  style={{
-                    width: `${Math.max(share > 0 ? 1 : 0, Math.min(100, share))}%`,
-                    backgroundColor: FISCAL_COLORS[index % FISCAL_COLORS.length],
-                  }}
-                />
-              </div>
-              <span className="w-24 text-right text-xs tabular-nums text-muted-foreground">
-                {formatPercent(share)} {basisLabel}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+/** Nome do órgão sem a sigla do fim: "Secretaria de Estado de Saúde (SESACRE)" → "…Saúde". */
+function organizationDisplayName(organization: Organization) {
+  return readableName(organization.name).replace(/ \([^)]+\)$/, '');
 }
 
-function FiscalKpi({
+/** Um fato do bloco de folha: rótulo, valor por extenso e linha de leitura. */
+function PayrollFact({
   label,
   value,
-  helpText,
+  detail,
+  rate,
+  color,
 }: {
   label: string;
-  value: string;
-  helpText?: string;
+  value: number;
+  detail: string;
+  rate?: number;
+  color?: string;
 }) {
   return (
-    <div className="min-w-0 px-3 py-2.5">
-      <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        <span>{label}</span>
-        {helpText ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="fiscal-kpi-help inline-flex shrink-0 text-marca-escura hover:text-marca-escura focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca-escura"
-                aria-label={`Como é calculado: ${label}`}
-              >
-                <InfoIcon className="size-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {helpText}
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-      </dt>
-      <dd className="mt-1 truncate text-base font-bold tabular-nums" title={value}>
-        {value}
-      </dd>
+    <div>
+      <MicroLabel className="mb-0.5">{label}</MicroLabel>
+      <div className="text-[17px] font-semibold tabular-nums">{formatMoney(value)}</div>
+      <div className="mt-0.5 flex items-center gap-[7px] text-[13px] text-[#4a504b] tabular-nums">
+        {rate != null ? <Ring value={rate} size={18} color={color} /> : null}
+        <span>{detail}</span>
+      </div>
     </div>
   );
 }
 
-function FiscalSection({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn('min-h-0 min-w-0 overflow-hidden border bg-white', className)}>
-      <h3 className="bg-marca px-3 py-2 text-sm font-semibold uppercase tracking-wide text-marca-contraste">
-        {title}
-      </h3>
-      <div className="min-h-0 min-w-0 overflow-hidden p-3">{children}</div>
-    </section>
-  );
-}
-
-export function FiscalSecretariatView({
+export const FiscalSecretariatView = memo(function FiscalSecretariatView({
   actions,
   personnelActions,
   centralPayrollActions,
-  personnelScopeLabel,
   personnelScopeNote,
   organization,
   organizationCode,
@@ -334,65 +218,6 @@ export function FiscalSecretariatView({
         ),
     [actions, commitmentSources],
   );
-  const categoryRows = useMemo(() => aggregateByCategory(actions), [actions]);
-  const localPersonnelScope = useMemo(
-    () => personnelActions.filter((action) => !isCentralPayrollAction(action)),
-    [personnelActions],
-  );
-  const localBudgetTotals = useMemo(
-    () => totalsOf(localPersonnelScope),
-    [localPersonnelScope],
-  );
-  const localPersonnelTotals = useMemo(
-    () => personnelTotalsOf(localPersonnelScope),
-    [localPersonnelScope],
-  );
-  const centralPersonnelTotals = useMemo(
-    () => personnelTotalsOf(centralPayrollActions),
-    [centralPayrollActions],
-  );
-  const personnelTotals = {
-    updatedBudget: localPersonnelTotals.updatedBudget + centralPersonnelTotals.updatedBudget,
-    committed: localPersonnelTotals.committed + centralPersonnelTotals.committed,
-    liquidated: localPersonnelTotals.liquidated + centralPersonnelTotals.liquidated,
-    paid: localPersonnelTotals.paid + centralPersonnelTotals.paid,
-  };
-  const personnelBudgetBase =
-    localBudgetTotals.updatedBudget + centralPersonnelTotals.updatedBudget;
-  const hasPersonnelData = Object.values(personnelTotals).some((value) => value !== 0);
-  const sourceRows = useMemo(() => aggregateBySource(actions), [actions]);
-  const actionRows = useMemo(() => aggregateByAction(actions), [actions]);
-  const unitRows = useMemo(() => aggregateByUnit(actions), [actions]);
-  const lowerExecutionActions = useMemo(
-    () =>
-      aggregateByAction(actions.filter((action) => !actionIsAmendment(action)))
-        .filter((row) => row.updatedBudget > 0)
-        .sort((a, b) => a.executionRate - b.executionRate || b.updatedBudget - a.updatedBudget)
-        .slice(0, 8),
-    [actions],
-  );
-  const showUnitComposition = unitFilter === allValue;
-  const selectedUnitLabel =
-    unitFilter === allValue
-      ? 'Todas as unidades'
-      : unitOptions.find((option) => option.value === unitFilter)?.label ?? 'Unidade selecionada';
-  const payrollCompetence = payrollHeadcount
-    ? `${MONTH_NAMES[payrollHeadcount.month - 1] ?? payrollHeadcount.month} de ${payrollHeadcount.year}`
-    : null;
-  const payrollScopeLabel = payrollHeadcount?.isStatewidePayroll
-    ? 'Folha estadual consolidada'
-    : unitFilter === allValue
-      ? 'Secretaria e entidades vinculadas'
-      : 'Unidade selecionada';
-
-  const kpis = [
-    { label: 'Dotação inicial', value: totals.initialBudget },
-    { label: 'Dotação atualizada', value: totals.updatedBudget },
-    { label: 'Empenhado', value: totals.committed },
-    { label: 'Liquidado', value: totals.liquidated },
-    { label: 'Pago', value: totals.paid },
-    { label: 'Disponível', value: totals.available },
-  ];
   // Comprometido = empenhado sobre a dotação atualizada. O empenho é justamente o ato
   // que compromete a dotação; o liquidado mede execução já realizada, não compromisso.
   const commitmentRate = executionRate(
@@ -416,44 +241,122 @@ export function FiscalSecretariatView({
       .map(describe)
       .join('; ')}.`;
   }, [earmarkedSources, actions]);
-  const cycle = [
-    { label: 'Atualizado', value: totals.updatedBudget, base: totals.updatedBudget },
-    { label: 'Empenhado', value: totals.committed, base: totals.updatedBudget },
-    { label: 'Liquidado', value: totals.liquidated, base: totals.updatedBudget },
-    { label: 'Pago', value: totals.paid, base: totals.updatedBudget },
-  ];
-  const rates = [
-    {
-      label: 'Empenho',
-      value: safeRate(totals.committed, totals.updatedBudget),
-      detail: 'do orçamento atualizado',
-    },
-    {
-      label: 'Liquidação',
-      value: executionRate(totals.liquidated, totals.updatedBudget),
-      detail: 'do orçamento atualizado',
-    },
-    {
-      label: 'Pagamento',
-      value: safeRate(totals.paid, totals.liquidated),
-      detail: 'do valor liquidado',
-    },
-  ];
-  const personnelMetrics = [
-    { label: 'No próprio órgão', value: localPersonnelTotals.updatedBudget },
-    { label: 'Folha centralizada SEAD', value: centralPersonnelTotals.updatedBudget },
-    { label: 'Total atualizado', value: personnelTotals.updatedBudget },
-    { label: 'Empenhado', value: personnelTotals.committed },
-    { label: 'Liquidado', value: personnelTotals.liquidated },
-    { label: 'Pago', value: personnelTotals.paid },
-  ];
-  const personnelRates = [
-    {
-      label: 'Participação no orçamento',
-      value: safeRate(personnelTotals.updatedBudget, personnelBudgetBase),
-      detail: 'pessoal sobre o orçamento com a folha centralizada',
-    },
-  ];
+
+  // ── Folha de pagamento (contrato, seção 6.6) ──
+  const localPersonnelScope = useMemo(
+    () => personnelActions.filter((action) => !isCentralPayrollAction(action)),
+    [personnelActions],
+  );
+  const localBudgetTotals = useMemo(() => totalsOf(localPersonnelScope), [localPersonnelScope]);
+  const localPayroll = useMemo(() => payrollBudgetTotalsOf(localPersonnelScope), [localPersonnelScope]);
+  const centralPayroll = useMemo(
+    () => payrollBudgetTotalsOf(centralPayrollActions),
+    [centralPayrollActions],
+  );
+  const payroll = {
+    updatedBudget: localPayroll.updatedBudget + centralPayroll.updatedBudget,
+    committed: localPayroll.committed + centralPayroll.committed,
+    liquidated: localPayroll.liquidated + centralPayroll.liquidated,
+    excluded: localPayroll.excludedUpdatedBudget + centralPayroll.excludedUpdatedBudget,
+  };
+  const payrollShare = shareOf(
+    payroll.updatedBudget,
+    localBudgetTotals.updatedBudget + centralPayroll.updatedBudget,
+  );
+  const payrollParts = paintItems(
+    [
+      { key: 'local', label: 'Próprio órgão', value: localPayroll.updatedBudget },
+      { key: 'central', label: 'Centralizada na SEAD', value: centralPayroll.updatedBudget },
+    ],
+    [STAGE_COLORS.budget, CHART_CATEGORICAL[3]],
+  );
+  const payrollCompetence = payrollHeadcount
+    ? `${MONTH_NAMES[payrollHeadcount.month - 1] ?? payrollHeadcount.month} de ${payrollHeadcount.year}`
+    : null;
+
+  // ── Composição ──
+  const showUnitComposition = unitFilter === allValue;
+  const unitRows = useMemo(() => aggregateByUnit(actions), [actions]);
+  const elementRows = useMemo(() => aggregateByElement(actions), [actions]);
+  const compositionItems = useMemo(() => {
+    const rows = showUnitComposition
+      ? unitRows.map((row) => ({ key: row.key, label: row.label, value: row.updatedBudget }))
+      : elementRows.map((row) => ({ key: row.key, label: row.label, value: row.updatedBudget }));
+    return rows
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .map((row, index) => ({
+        key: row.key,
+        label: readableLabel(row.label),
+        short: readableLabel(row.label),
+        value: row.value,
+        color: categoricalColor(index),
+        ink: '#ffffff',
+      }));
+  }, [elementRows, showUnitComposition, unitRows]);
+  const sourceRows = useMemo(() => aggregateBySource(actions), [actions]);
+  const sourceItems = useMemo(
+    () =>
+      paintItems(
+        topWithOther(
+          sourceRows.map((row) => ({ key: row.key, label: readableLabel(row.label), value: row.updatedBudget })),
+          4,
+          'Demais fontes',
+          totals.updatedBudget,
+        ),
+        CHART_CATEGORICAL,
+      ),
+    [sourceRows, totals.updatedBudget],
+  );
+  const categoryRows = useMemo(() => aggregateByCategory(actions), [actions]);
+  const categoryItems = useMemo(
+    () =>
+      paintItems(
+        [...categoryRows]
+          .filter((row) => row.updatedBudget > 0)
+          .sort((a, b) => b.updatedBudget - a.updatedBudget)
+          .map((row) => ({ key: row.key, label: readableLabel(row.label), value: row.updatedBudget })),
+        CHART_CATEGORICAL,
+      ),
+    [categoryRows],
+  );
+  const currentCategory = categoryRows.find((row) => row.key === '3');
+
+  // ── Ações ──
+  const actionRows = useMemo(() => aggregateByAction(actions), [actions]);
+  const topActions = useMemo(
+    () =>
+      [...actionRows]
+        .filter((row) => row.updatedBudget > 0)
+        .sort((a, b) => b.updatedBudget - a.updatedBudget)
+        .slice(0, 5)
+        .map((row) => ({
+          key: row.key,
+          label: readableLabel(row.label),
+          value: row.updatedBudget,
+          rate: row.executionRate,
+        })),
+    [actionRows],
+  );
+  const lowExecution = useMemo(
+    () =>
+      aggregateByAction(actions.filter((action) => !actionIsAmendment(action)))
+        .filter((row) => row.updatedBudget > 0)
+        .sort((a, b) => a.executionRate - b.executionRate || b.updatedBudget - a.updatedBudget),
+    [actions],
+  );
+  // No meio do exercício quase toda ação já liquidou algo; sem nenhuma parada, a
+  // lista vira "menor execução" em vez de sumir (contrato, seção 6.5).
+  const notLiquidated = lowExecution.filter((row) => row.liquidated <= 0);
+  const watchRows = (notLiquidated.length ? notLiquidated : lowExecution).slice(0, 5);
+  const watchByRate = notLiquidated.length === 0;
+
+  const acronym = organization ? organizationAcronym(organization.code, organization.name) : '';
+  const largestShare = (items: { value: number }[]) => shareOf(items[0]?.value ?? 0, totals.updatedBudget);
+  const topTwoUnits = shareOf(
+    (compositionItems[0]?.value ?? 0) + (compositionItems[1]?.value ?? 0),
+    totals.updatedBudget,
+  );
 
   async function present() {
     const target = presentationRef.current;
@@ -466,92 +369,92 @@ export function FiscalSecretariatView({
   }
 
   return (
-    <div
-      ref={presentationRef}
-      className="fiscal-presentation flex h-full min-h-0 flex-col overflow-hidden border bg-white"
-    >
-      <div className="fiscal-presentation-header shrink-0 border-b bg-white px-4 py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold leading-tight text-marca-escura">
-              Visão fiscal da execução
-            </h2>
-            <p className="mt-0.5 truncate text-sm font-semibold">
-              {organization
-                ? `${organization.code} — ${organization.name}`
-                : 'Selecione uma secretaria para iniciar'}
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <CalendarDaysIcon className="size-3.5" />
-                {periodLabel(vigenteImport)}
+    <div ref={presentationRef} className="fiscal-presentation min-w-0 bg-white">
+      <section className="fiscal-presentation-header flex flex-wrap items-end gap-6 px-6 pb-6 pt-8 xl:px-10">
+        <div className="min-w-0">
+          <MicroLabel>
+            {organization
+              ? `${acronym} · órgão ${organization.code} · ${periodLabel(vigenteImport)} · ${actions.length.toLocaleString('pt-BR')} ações`
+              : periodLabel(vigenteImport)}
+          </MicroLabel>
+          <h1 className="mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.015em]">
+            {organization ? organizationDisplayName(organization) : 'Visão por órgão'}
+          </h1>
+          {organization && actions.length ? (
+            <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[13.5px] text-[#4a504b] [&_b]:font-semibold [&_b]:text-[#141714] [&_b]:tabular-nums">
+              <span>
+                Orçamento comprometido <b>{formatPercent(commitmentRate)}</b>
               </span>
-              {organization ? (
-                <>
-                  <span>{selectedUnitLabel}</span>
-                  <span>{actions.length.toLocaleString('pt-BR')} ação(ões) no recorte</span>
-                </>
-              ) : null}
-            </div>
-          </div>
-          <div className="fiscal-presentation-actions flex shrink-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!organization}
-              onClick={() => void present()}
-            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="fiscal-kpi-help inline-flex shrink-0 text-marca-escura focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca-escura"
+                    aria-label="Como é calculado: Orçamento comprometido"
+                  >
+                    <InfoIcon className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={6} className="max-w-sm">
+                  {commitmentHelpText}
+                </TooltipContent>
+              </Tooltip>
+              <span>
+                · disponível para empenho <b>{formatMoney(totals.available)}</b>
+              </span>
+            </p>
+          ) : (
+            <p className="mt-2 text-[13.5px] text-[#4a504b]">
+              Escolha a secretaria para ver a execução, a folha e a composição do orçamento.
+            </p>
+          )}
+        </div>
+        <div className="fiscal-selection-controls ml-auto flex flex-wrap items-center gap-2.5">
+          <SearchableCombobox
+            className="relative w-72 min-w-0"
+            value={organizationCode}
+            onChange={onOrganizationChange}
+            items={organizationOptions}
+            placeholder="Selecione uma secretaria"
+          />
+          <SearchableCombobox
+            className="relative w-56 min-w-0"
+            value={unitFilter}
+            onChange={onUnitChange}
+            items={unitOptions}
+            placeholder="Unidade: todas"
+            disabled={!organization}
+          />
+          <div className="fiscal-presentation-actions flex gap-2.5">
+            <Button variant="outline" disabled={!organization} onClick={() => void present()}>
               <Maximize2Icon data-icon="inline-start" />
               Apresentar
             </Button>
-            <Button size="sm" disabled={!organization} onClick={() => window.print()}>
+            <Button variant="outline" disabled={!organization} onClick={() => window.print()}>
               <PrinterIcon data-icon="inline-start" />
-              Imprimir / Salvar PDF
+              Imprimir
             </Button>
           </div>
         </div>
-
-        <div className="fiscal-selection-controls mt-3 grid gap-3 border-t pt-3 md:grid-cols-[minmax(280px,1.4fr)_minmax(240px,1fr)]">
-          <label className="grid min-w-0 gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Secretaria
-            </span>
-            <SearchableCombobox
-              value={organizationCode}
-              onChange={onOrganizationChange}
-              items={organizationOptions}
-              placeholder="Selecione uma secretaria"
-            />
-          </label>
-          <label className="grid min-w-0 gap-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Unidade
-            </span>
-            <SearchableCombobox
-              value={unitFilter}
-              onChange={onUnitChange}
-              items={unitOptions}
-              placeholder="Todas as unidades"
-              disabled={!organization}
-            />
-          </label>
-        </div>
-      </div>
+      </section>
 
       {!organization ? (
-        <Empty className="m-3 min-h-0 flex-1 border">
+        <div className="px-6 pb-10 xl:px-10">
+        <Empty className="min-h-72 border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Building2Icon />
             </EmptyMedia>
             <EmptyTitle>Selecione uma secretaria</EmptyTitle>
             <EmptyDescription>
-              Use o seletor acima para gerar a visão fiscal e, se necessário, detalhar uma unidade.
+              Use o seletor acima para gerar a visão do órgão e, se necessário, detalhar uma unidade.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
+        </div>
       ) : actions.length === 0 ? (
-        <Empty className="m-3 min-h-0 flex-1 border">
+        <div className="px-6 pb-10 xl:px-10">
+        <Empty className="min-h-72 border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <WalletCardsIcon />
@@ -562,355 +465,223 @@ export function FiscalSecretariatView({
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
+        </div>
       ) : (
-        <div className="fiscal-content min-h-0 flex-1 overflow-auto p-3">
-          <div className="grid gap-3">
-            <dl className="fiscal-kpis grid grid-cols-2 divide-x divide-y border bg-white md:grid-cols-4 2xl:grid-cols-7 2xl:divide-y-0">
-              {kpis.map((kpi) => (
-                <FiscalKpi
-                  key={kpi.label}
-                  label={kpi.label}
-                  value={formatMoney(kpi.value)}
-                />
-              ))}
-              <FiscalKpi
-                label="Orçamento Comprometido (%)"
-                value={formatPercent(commitmentRate)}
-                helpText={commitmentHelpText}
-              />
-            </dl>
-
-            <FiscalSection title="Execução da despesa" className="fiscal-print-section">
-              <div className="fiscal-cycle-grid grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[1.4fr_1fr] 2xl:divide-x">
-                <div className="min-w-0 2xl:pr-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Estágios orçamentários
-                  </h4>
-                  <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-                    Percentual de cada estágio sobre a dotação atualizada, considerada como 100%.
-                  </p>
-                <div className="grid gap-2">
-                  {cycle.map((item, index) => {
-                    const percent = safeRate(item.value, item.base);
-                    return (
-                      <div
-                        key={item.label}
-                        className="fiscal-cycle-row grid grid-cols-[86px_1fr_62px_104px] items-center gap-2"
-                      >
-                        <span className="text-sm font-medium">{item.label}</span>
-                        <div
-                          className="h-5 overflow-hidden bg-muted"
-                          role="img"
-                          aria-label={`${item.label}: ${formatPercent(percent)} da dotação atualizada`}
-                        >
-                          <div
-                            className="h-full min-w-1"
-                            style={{
-                              width: `${Math.min(100, Math.max(0, percent))}%`,
-                              backgroundColor: FISCAL_COLORS[index],
-                            }}
-                          />
-                        </div>
-                        <span className="text-right text-sm font-semibold tabular-nums">
-                          {formatPercent(percent)}
-                        </span>
-                        <span className="text-right text-sm font-semibold tabular-nums">
-                          {compactMoney(item.value)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                </div>
-
-                <div className="min-w-0 2xl:pl-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Índices de execução
-                  </h4>
-                  <div className="grid gap-3">
-                  {rates.map((item, index) => (
-                    <div key={item.label} className="fiscal-rate-row grid gap-1">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">{item.label}</p>
-                          <p className="text-xs text-muted-foreground">{item.detail}</p>
-                        </div>
-                        <span className="text-base font-bold tabular-nums">
-                          {formatPercent(item.value)}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-muted">
-                        <div
-                          className="h-full"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, item.value))}%`,
-                            backgroundColor: FISCAL_COLORS[index],
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+        <div className="fiscal-content">
+          <KpiStrip totals={totals} className="fiscal-kpis border-t" />
+          <div className="fiscal-grid grid grid-cols-1 gap-x-10 gap-y-8 px-6 pb-10 pt-8 xl:px-10 min-[1180px]:grid-cols-2">
+            <VizBlock
+              title="Folha de pagamento"
+              summary={
+                payroll.updatedBudget > 0 ? (
+                  <>
+                    Gastos de folha do QDD: <b>{compactMoney(payroll.updatedBudget)}</b>,{' '}
+                    {formatPercent(payrollShare)} do orçamento do órgão somado à parte dele na
+                    folha centralizada da SEAD. Sem terceirização.
+                  </>
+                ) : undefined
+              }
+            >
+              {payroll.updatedBudget > 0 ? (
+                <div className="grid items-center gap-x-7 gap-y-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+                  <div>
+                    <DonutChart
+                      items={payrollParts}
+                      total={payroll.updatedBudget}
+                      center={compactMoney(payroll.updatedBudget)}
+                      caption="de folha"
+                      size={190}
+                      label="Folha do próprio órgão e folha centralizada"
+                    />
+                    <ShareLegend
+                      items={payrollParts}
+                      total={payroll.updatedBudget}
+                      showValue={false}
+                      className="mt-3.5 text-[12.5px]"
+                    />
                   </div>
-                </div>
-              </div>
-            </FiscalSection>
-
-            <FiscalSection title="Despesas com pessoal" className="fiscal-print-section fiscal-personnel-section">
-              <div className="fiscal-personnel-heading mb-4 grid min-w-0 gap-4 border-b pb-3 xl:grid-cols-[minmax(280px,0.8fr)_minmax(460px,1.2fr)_auto] xl:items-start">
-                <div className="min-w-0">
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Pessoal consolidado da secretaria
-                  </h4>
-                  <p className="mt-1 text-sm font-semibold">{personnelScopeLabel}</p>
-                  <p className="mt-0.5 text-[0.8rem] leading-relaxed text-muted-foreground">
-                    {personnelScopeNote}
-                  </p>
-                  <p className="mt-1 text-[0.8rem] leading-relaxed text-muted-foreground">
-                    Grupo de Natureza 1 somado aos auxílios, benefícios e verbas
-                    indenizatórias registrados nas ações de folha.
-                  </p>
-                </div>
-
-                {payrollHeadcount?.contracts.length ? (
-                  <div className="min-w-0 xl:border-x xl:px-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                      <h4 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        Vínculos ativos por contrato
-                      </h4>
-                      <span className="text-xs text-muted-foreground">
-                        {payrollHeadcount.excludedInactiveHeadcount > 0
-                          ? `${payrollHeadcount.excludedInactiveHeadcount.toLocaleString('pt-BR')} inativo(s) fora do total`
-                          : 'Sem vínculos inativos'}
-                      </span>
-                    </div>
-                    <dl
-                      className={cn(
-                        'mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2',
-                        payrollHeadcount.contracts.length > 4
-                          ? '2xl:grid-cols-3'
-                          : '2xl:grid-cols-2',
-                      )}
-                    >
-                      {payrollHeadcount.contracts.map((contract) => {
-                        const share = payrollHeadcount.headcount
-                          ? (contract.headcount / payrollHeadcount.headcount) * 100
-                          : 0;
-                        return (
-                          <div
-                            key={contract.label}
-                            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2 border-l-2 border-marca-escura pl-2"
-                          >
-                            <dt
-                              className="truncate text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground"
-                              title={contract.label}
-                            >
-                              {contract.label}
-                            </dt>
-                            <dd className="shrink-0 text-base tabular-nums">
-                              <strong className="text-marca-escura">
-                                {contract.headcount.toLocaleString('pt-BR')}
-                              </strong>
-                              <span className="ml-1 text-xs text-muted-foreground">
-                                {formatPercent(share)}
-                              </span>
-                            </dd>
-                          </div>
-                        );
-                      })}
-                    </dl>
-                  </div>
-                ) : (
-                  <div className="hidden xl:block" />
-                )}
-
-                <div
-                  className="min-w-56 border-l-4 border-marca-escura bg-muted/40 px-3 py-2"
-                  title={
-                    payrollHeadcount?.matchedOrganizations.length
-                      ? `Correspondências na folha: ${payrollHeadcount.matchedOrganizations.join(', ')}`
-                      : undefined
-                  }
-                >
-                  <div className="flex items-center gap-1.5 text-[0.8rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <UsersIcon className="size-3.5" aria-hidden="true" />
-                    Vínculos ativos na folha
-                  </div>
-                  <p className="mt-1 text-[1.35rem] font-bold leading-none tabular-nums text-marca-escura">
-                    {payrollHeadcount?.headcount === null || !payrollHeadcount
-                      ? 'Não identificado'
-                      : payrollHeadcount.headcount.toLocaleString('pt-BR')}
-                  </p>
-                  <p className="mt-1 text-[0.8rem] text-muted-foreground">
-                    {payrollCompetence
-                      ? `${payrollScopeLabel} · competência ${payrollCompetence}`
-                      : 'Folha de pagamento indisponível'}
-                  </p>
-                </div>
-              </div>
-
-              {hasPersonnelData ? (
-                <div className="fiscal-personnel-grid grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr] lg:divide-x">
-                  <div className="min-w-0 lg:pr-4">
-                    <dl className="fiscal-personnel-metrics grid grid-cols-2 border sm:grid-cols-3">
-                      {personnelMetrics.map((item) => (
-                        <div
-                          key={item.label}
-                          className="min-w-0 bg-white px-3 py-2.5 text-foreground opacity-100"
-                        >
-                          <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                            {item.label}
-                          </dt>
-                          <dd
-                            className="mt-1 truncate text-sm font-bold tabular-nums"
-                            title={formatMoney(item.value)}
-                          >
-                            {formatMoney(item.value)}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      As ações centralizadas da SEAD são vinculadas por código à secretaria ou
-                      unidade correspondente, sem rateio.
+                  <div className="grid gap-3.5">
+                    <PayrollFact
+                      label="Dotação de folha"
+                      value={payroll.updatedBudget}
+                      detail={`${localPayroll.actionCount} ${localPayroll.actionCount === 1 ? 'ação' : 'ações'} do órgão + ${centralPayroll.actionCount} na SEAD`}
+                    />
+                    <PayrollFact
+                      label="Empenhado"
+                      value={payroll.committed}
+                      rate={shareOf(payroll.committed, payroll.updatedBudget)}
+                      color={STAGE_COLORS.committed}
+                      detail={`${formatPercent(shareOf(payroll.committed, payroll.updatedBudget))} da dotação de folha`}
+                    />
+                    <PayrollFact
+                      label="Liquidado"
+                      value={payroll.liquidated}
+                      rate={shareOf(payroll.liquidated, payroll.updatedBudget)}
+                      color={STAGE_COLORS.liquidated}
+                      detail={`${formatPercent(shareOf(payroll.liquidated, payroll.updatedBudget))} da dotação de folha`}
+                    />
+                    <p className="text-[12.5px] leading-snug text-[#80857f]">
+                      Fora do cálculo: terceirização (elemento 34) e serviços de terceiros pessoa
+                      física (36)
+                      {payroll.excluded > 0 ? `, somando ${compactMoney(payroll.excluded)}` : ''}.
+                      {unitFilter !== allValue && personnelScopeNote ? ` ${personnelScopeNote}` : ''}
                     </p>
-                  </div>
-
-                  <div className="flex min-w-0 flex-col lg:pl-4">
-                    <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                      Indicador orçamentário de pessoal
-                    </h4>
-                    <div className="flex min-h-0 flex-1 items-center">
-                    <div className="grid w-full gap-4">
-                      {personnelRates.map((item, index) => (
-                        <div key={item.label} className="fiscal-personnel-rate grid gap-2">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-base font-semibold">{item.label}</p>
-                              <p className="truncate text-sm text-muted-foreground">
-                                {item.detail}
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-2xl font-bold tabular-nums">
-                              {formatPercent(item.value)}
-                            </span>
-                          </div>
-                          <div className="h-2.5 bg-muted">
-                            <div
-                              className="h-full"
-                              style={{
-                                width: `${Math.min(100, Math.max(0, item.value))}%`,
-                                backgroundColor: FISCAL_COLORS[(index + 1) % FISCAL_COLORS.length],
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    </div>
+                    <p
+                      className="border-t border-[#e1e3dd] pt-3 text-[13px] text-[#4a504b] [&_b]:font-semibold [&_b]:text-[#141714] [&_b]:tabular-nums"
+                      title={
+                        payrollHeadcount?.matchedOrganizations.length
+                          ? `Correspondências na folha: ${payrollHeadcount.matchedOrganizations.join(', ')}`
+                          : undefined
+                      }
+                    >
+                      {payrollCompetence ? (
+                        <>
+                          Vínculos ativos na folha:{' '}
+                          <b>
+                            {payrollHeadcount?.headcount == null
+                              ? 'não identificado'
+                              : payrollHeadcount.headcount.toLocaleString('pt-BR')}
+                          </b>
+                          {payrollHeadcount?.isStatewidePayroll ? ' (folha estadual consolidada)' : ''} ·
+                          competência {payrollCompetence}
+                          {payrollHeadcount && payrollHeadcount.excludedInactiveHeadcount > 0
+                            ? ` · ${payrollHeadcount.excludedInactiveHeadcount.toLocaleString('pt-BR')} inativo(s) fora do total`
+                            : ''}
+                        </>
+                      ) : (
+                        'Folha de pagamento indisponível: a coleta do Portal da Transparência ainda não trouxe um mês.'
+                      )}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <div className="flex min-h-24 items-center justify-center text-center">
-                  <div>
-                    <p className="text-sm font-semibold">
-                      Nenhuma despesa de pessoal identificada
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Não há Grupo de Natureza 1 no órgão nem ação nominal correspondente na folha
-                      centralizada 714/002.
-                    </p>
-                  </div>
-                </div>
+                <VizEmpty>
+                  Nenhuma ação de folha de pagamento no órgão nem na folha centralizada 714/002.
+                </VizEmpty>
               )}
-            </FiscalSection>
+            </VizBlock>
 
-            <FiscalSection title="Composição do orçamento" className="fiscal-print-section">
-              <div
-                data-unit-composition={showUnitComposition ? 'visible' : 'hidden'}
-                className={cn(
-                  'fiscal-composition-grid grid min-w-0 grid-cols-1 gap-5 lg:divide-x',
-                  showUnitComposition
-                    ? 'lg:grid-cols-[0.8fr_0.8fr_1.4fr]'
-                    : 'lg:grid-cols-[0.8fr_1.7fr]',
-                )}
-              >
-                {showUnitComposition ? (
-                  <div className="min-w-0 lg:pr-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Por unidade
-                  </h4>
-                    <MiniBarList
-                      rows={unitRows}
-                      emptyLabel="Nenhuma unidade com orçamento atualizado."
-                    />
-                  </div>
-                ) : null}
-                <div className={cn('min-w-0', showUnitComposition ? 'lg:px-4' : 'lg:pr-4')}>
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Por categoria econômica
-                  </h4>
-                  <MiniBarList
-                    rows={categoryRows}
-                    emptyLabel="Nenhuma categoria econômica no recorte."
+            <VizBlock
+              title={showUnitComposition ? 'Por unidade' : 'Por elemento de despesa'}
+              summary={
+                compositionItems.length > 1 ? (
+                  showUnitComposition ? (
+                    <>
+                      Duas unidades concentram <b>{formatPercent(topTwoUnits)}</b> da dotação.
+                    </>
+                  ) : (
+                    <>
+                      {compositionItems[0]!.label} responde por{' '}
+                      <b>{formatPercent(largestShare(compositionItems))}</b> da dotação da unidade.
+                    </>
+                  )
+                ) : compositionItems.length === 1 ? (
+                  <>Toda a dotação está em {compositionItems[0]!.label}.</>
+                ) : undefined
+              }
+            >
+              {compositionItems.length ? (
+                <>
+                  <TreemapChart
+                    items={compositionItems.slice(0, 12)}
+                    height={230}
+                    label={showUnitComposition ? 'Dotação por unidade' : 'Dotação por elemento de despesa'}
                   />
-                </div>
-                <div className="min-w-0 lg:pl-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Por fonte de recurso
-                  </h4>
-                  <MiniBarList
-                    rows={sourceRows}
-                    emptyLabel="Nenhuma fonte de recurso no recorte."
+                  <ShareLegend
+                    items={compositionItems.slice(0, 4)}
+                    total={totals.updatedBudget}
+                    showValue={false}
+                    className="mt-3.5 gap-x-6 sm:grid-cols-2"
                   />
-                </div>
-              </div>
-            </FiscalSection>
+                </>
+              ) : (
+                <VizEmpty>Nenhuma dotação atualizada positiva no recorte.</VizEmpty>
+              )}
+            </VizBlock>
 
-            <FiscalSection title="Ações orçamentárias" className="fiscal-print-section">
-              <div className="fiscal-actions-grid grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-2 xl:divide-x">
-                <div className="min-w-0 xl:pr-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Maiores orçamentos atualizados
-                  </h4>
-                <MiniBarList
-                  rows={actionRows}
-                  emptyLabel="Nenhuma ação com orçamento atualizado."
+            <VizBlock
+              title="Por fonte de recurso"
+              summary={
+                sourceItems.length ? (
+                  <>
+                    A maior fonte responde por <b>{formatPercent(largestShare(sourceItems))}</b>. Cada
+                    quadrado é 1% da dotação.
+                  </>
+                ) : undefined
+              }
+            >
+              {sourceItems.length ? (
+                <div className="grid items-center gap-x-7 gap-y-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+                  <WaffleChart items={sourceItems} total={totals.updatedBudget} label="Dotação por fonte de recurso" />
+                  <ShareLegend items={sourceItems} total={totals.updatedBudget} />
+                </div>
+              ) : (
+                <VizEmpty>Nenhuma fonte de recurso com dotação no recorte.</VizEmpty>
+              )}
+            </VizBlock>
+
+            <VizBlock
+              title="Por categoria econômica"
+              summary={
+                currentCategory ? (
+                  <>
+                    <b>{formatPercent(shareOf(currentCategory.updatedBudget, totals.updatedBudget))}</b> é
+                    despesa corrente; o restante, de capital.
+                  </>
+                ) : undefined
+              }
+            >
+              {categoryItems.length ? (
+                <div className="grid items-center gap-x-7 gap-y-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+                  <DonutChart
+                    items={categoryItems}
+                    total={totals.updatedBudget}
+                    center={formatPercent(shareOf(currentCategory?.updatedBudget ?? 0, totals.updatedBudget))}
+                    caption="correntes"
+                    size={190}
+                    label="Dotação por categoria econômica"
+                  />
+                  <ShareLegend items={categoryItems} total={totals.updatedBudget} />
+                </div>
+              ) : (
+                <VizEmpty>Nenhuma categoria econômica com dotação no recorte.</VizEmpty>
+              )}
+            </VizBlock>
+
+            <VizBlock title="Maiores orçamentos" summary="As cinco ações com maior dotação atualizada.">
+              {topActions.length ? (
+                <LollipopList rows={topActions} />
+              ) : (
+                <VizEmpty>Nenhuma ação com dotação atualizada positiva.</VizEmpty>
+              )}
+            </VizBlock>
+
+            <VizBlock
+              title={watchByRate ? 'Menor execução' : 'Sem nenhum valor liquidado'}
+              summary={
+                watchByRate
+                  ? `Todas as ações já liquidaram algo; estas são as cinco com menor execução (sem emendas) até ${periodLabel(vigenteImport).replace(/^Acumulado até |^Mês de /, '')}.`
+                  : `Maiores dotações, sem emendas, que ainda não liquidaram nada (${periodLabel(vigenteImport).toLowerCase()}).`
+              }
+            >
+              {watchRows.length ? (
+                <WatchList
+                  rows={watchRows.map((row) => ({
+                    key: row.key,
+                    label: readableLabel(row.label),
+                    title: row.label,
+                    value: watchByRate
+                      ? `${formatPercent(row.executionRate)} de ${compactMoney(row.updatedBudget)}`
+                      : compactMoney(row.updatedBudget),
+                  }))}
                 />
-                </div>
-                <div className="min-w-0 xl:pl-4">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Menores índices de execução
-                  </h4>
-                {lowerExecutionActions.length ? (
-                  <div className="fiscal-low-execution-list divide-y">
-                    {lowerExecutionActions.map((row) => (
-                      <div
-                        key={row.key}
-                        className="fiscal-low-execution-row grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2 text-sm"
-                      >
-                        <span className="truncate font-medium" title={row.label}>
-                          {row.label}
-                        </span>
-                        <span className="tabular-nums text-muted-foreground">
-                          {compactMoney(row.updatedBudget)}
-                        </span>
-                        <span className="min-w-14 border-l-2 border-marca-escura pl-2 text-right font-bold tabular-nums">
-                          {formatPercent(row.executionRate)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex min-h-28 items-center justify-center text-sm text-muted-foreground">
-                    Nenhuma ação com orçamento positivo.
-                  </div>
-                )}
-                </div>
-              </div>
-            </FiscalSection>
+              ) : (
+                <VizEmpty>Nenhuma ação sem emenda com dotação positiva no recorte.</VizEmpty>
+              )}
+            </VizBlock>
           </div>
         </div>
       )}
     </div>
   );
-}
+});

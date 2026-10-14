@@ -262,25 +262,18 @@ textarea {
   width: 100vw;
   height: 100vh;
   max-width: none;
-  border: 0;
-  border-radius: 0;
+  overflow: auto;
   background: white;
-}
-
-.fiscal-presentation:fullscreen .fiscal-content {
-  padding: 1.25rem;
 }
 
 .fiscal-presentation:fullscreen .fiscal-selection-controls {
   display: none;
 }
 
-/* Secao 10.3 do contrato (docs/design-orcamento.md): o modulo e plano, sem
-   cantos arredondados. O escopo e .orcamento-main, ou seja, a area de conteudo
-   inteira (trilha de filtros + coluna de conteudo), e nao so a trilha: a visao
-   Orgao (fiscal-secretariat-view.tsx) nao tem trilha e ficava de fora.
-   O cabecalho do app esta fora de <main> e por isso nao e alcancado — a secao
-   3.1 documenta rounded-sm para os botoes dele e para o ExerciseSelect. */
+/* O modulo e plano, sem cantos arredondados (o contrato visual saiu em
+   2026-10-14, mas o redesenho aprovado manteve os campos retos). O escopo e
+   .orcamento-main: linha de filtros, abas e a visao Orgao. O cabecalho do app
+   esta fora de <main> e por isso nao e alcancado. */
 .orcamento-main [data-slot='button'],
 .orcamento-main [data-slot='input'],
 .orcamento-main [data-slot='select-trigger'],
@@ -310,29 +303,78 @@ body:has(.orcamento-page-root) [data-slot='searchable-combobox-content'] button 
   border-radius: 0 !important;
 }
 
-.orcamento-main {
-  scrollbar-color: rgb(22 101 52 / 55%) transparent;
-  scrollbar-width: thin;
+/* Régua de indicadores (KpiStrip, execution-visuals.tsx): filete à esquerda de cada
+   célula, menos na primeira de cada linha. Quantas células cabem por linha muda com
+   a largura — 2, 3 e, a partir de 1360px, 6 (docs/design-orcamento.md, seção 3.4). */
+.orcamento-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.fiscal-personnel-metrics {
-  gap: 1px !important;
-  border-color: #111 !important;
-  background: #111 !important;
+/* Em duas colunas (celular), a execução ocupa a linha inteira: o anel e o percentual grande não
+   cabem em meia tela de celular. Os pares seguintes começam nas células pares. */
+.orcamento-kpis > :first-child {
+  grid-column: span 2;
 }
 
-.fiscal-personnel-metrics > div {
-  border-color: #111 !important;
-  background: #fff !important;
-  color: var(--foreground) !important;
-  opacity: 1 !important;
+.orcamento-kpis > * {
+  min-width: 0;
+  padding-inline: 12px;
+  border-left: 1px solid #e1e3dd;
+}
+
+.orcamento-kpis > :first-child,
+.orcamento-kpis > :nth-child(2n) {
+  padding-left: 0;
+  border-left: 0;
+}
+
+@media (min-width: 40rem) {
+  .orcamento-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .orcamento-kpis > * {
+    padding-inline: 16px;
+  }
+
+  .orcamento-kpis > :first-child {
+    grid-column: auto;
+  }
+
+  .orcamento-kpis > :nth-child(2n) {
+    padding-left: 16px;
+    border-left: 1px solid #e1e3dd;
+  }
+
+  .orcamento-kpis > :nth-child(3n + 1) {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (min-width: 1360px) {
+  .orcamento-kpis {
+    grid-template-columns: 1fr 1fr 1.2fr 1fr 1fr 1fr;
+  }
+
+  .orcamento-kpis > :nth-child(3n + 1) {
+    padding-left: 16px;
+    border-left: 1px solid #e1e3dd;
+  }
+
+  .orcamento-kpis > :first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 
 @page fiscal {
   size: A4 landscape;
-  margin: 6mm;
+  margin: 8mm;
 }
 
+/* Impressão da visão Órgão ("Imprimir"): só a visão, sem cabeçalho, navegação,
+   filtros nem controles; régua em seis colunas e a grade em duas. */
 @media print {
   html,
   body {
@@ -345,49 +387,17 @@ body:has(.orcamento-page-root) [data-slot='searchable-combobox-content'] button 
   }
 
   .orcamento-page-root {
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  .orcamento-zoom-shell {
-    width: 100% !important;
-    height: auto !important;
-    transform: none !important;
-    overflow: visible !important;
+    min-height: 0 !important;
   }
 
   .orcamento-app-header,
-  .orcamento-sidebar,
-  .orcamento-view-footer,
-  .orcamento-page-heading,
+  .orcamento-view-bar,
+  .orcamento-filters,
   .orcamento-global-kpis,
   .fiscal-presentation-actions,
   .fiscal-selection-controls,
   .fiscal-kpi-help {
     display: none !important;
-  }
-
-  .orcamento-main {
-    display: block !important;
-    width: 100% !important;
-    overflow: visible !important;
-    padding: 0 !important;
-  }
-
-  .orcamento-content-column {
-    display: block !important;
-    height: auto !important;
-    overflow: visible !important;
-  }
-
-  .orcamento-main [data-slot='tabs'] {
-    display: block !important;
-    overflow: visible !important;
-  }
-
-  .orcamento-main [data-slot='tabs-content'][data-state='active'] {
-    height: auto !important;
-    overflow: visible !important;
   }
 
   .orcamento-main [data-slot='tabs-content']:not([data-state='active']) {
@@ -396,171 +406,48 @@ body:has(.orcamento-page-root) [data-slot='searchable-combobox-content'] button 
 
   .fiscal-presentation {
     page: fiscal;
-    display: block !important;
-    width: 100% !important;
-    max-width: none !important;
-    height: auto !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
-    border: 0 !important;
-    background: white !important;
-    break-inside: auto;
-  }
-
-  .fiscal-content {
-    width: 100% !important;
-    overflow: visible !important;
-    padding: 0 !important;
-  }
-
-  .fiscal-content > div {
-    min-width: 0 !important;
-    gap: 6px !important;
-  }
-
-  .fiscal-kpis {
-    grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-    margin-bottom: 0 !important;
-  }
-
-  .fiscal-kpis > div {
-    padding: 5px 7px !important;
-  }
-
-  .fiscal-kpis dt {
-    font-size: 7pt !important;
-    line-height: 1.15 !important;
-  }
-
-  .fiscal-kpis dd {
-    margin-top: 2px !important;
-    font-size: 9pt !important;
-    line-height: 1.15 !important;
-  }
-
-  .fiscal-cycle-grid {
-    grid-template-columns: 1.4fr 1fr !important;
-    gap: 10px !important;
-  }
-
-  .fiscal-personnel-grid {
-    grid-template-columns: 1.35fr 1fr !important;
-    gap: 10px !important;
-  }
-
-  .fiscal-personnel-grid dl {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-
-  .fiscal-personnel-grid dl > div {
-    padding: 5px 7px !important;
-  }
-
-  .fiscal-composition-grid {
-    grid-template-columns: 0.8fr 0.8fr 1.4fr !important;
-    gap: 10px !important;
-  }
-
-  .fiscal-composition-grid[data-unit-composition='hidden'] {
-    grid-template-columns: 0.8fr 1.7fr !important;
-  }
-
-  .fiscal-actions-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
   }
 
   .fiscal-presentation-header {
-    margin-bottom: 6px !important;
-    padding: 0 0 6px !important;
+    padding: 0 0 8px !important;
   }
 
-  .fiscal-presentation-header h2 {
-    font-size: 12pt !important;
-    line-height: 1.15 !important;
+  .fiscal-presentation-header h1 {
+    font-size: 16pt !important;
   }
 
-  .fiscal-presentation-header p,
-  .fiscal-presentation-header span {
-    font-size: 8pt !important;
-    line-height: 1.2 !important;
+  .fiscal-kpis {
+    grid-template-columns: 1fr 1fr 1.2fr 1fr 1fr 1fr !important;
+    padding: 8px 0 !important;
+  }
+
+  .fiscal-kpis > * {
+    padding-left: 10px !important;
+    border-left: 1px solid #e1e3dd !important;
+  }
+
+  .fiscal-kpis > :first-child {
+    padding-left: 0 !important;
+    border-left: 0 !important;
+  }
+
+  .fiscal-kpis .kpi-value {
+    font-size: 10pt !important;
+  }
+
+  .fiscal-kpis .kpi-main-value {
+    font-size: 20pt !important;
+  }
+
+  .fiscal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 14px 24px !important;
+    padding: 12px 0 0 !important;
   }
 
   .fiscal-print-section {
     break-inside: avoid-page;
     page-break-inside: avoid;
-  }
-
-  .fiscal-print-section > h3 {
-    padding: 4px 8px !important;
-    font-size: 8.5pt !important;
-    line-height: 1.15 !important;
-  }
-
-  .fiscal-print-section > div {
-    padding: 7px 8px !important;
-  }
-
-  .fiscal-print-section h4 {
-    margin-bottom: 5px !important;
-    font-size: 7.5pt !important;
-    line-height: 1.15 !important;
-  }
-
-  .fiscal-print-section p,
-  .fiscal-print-section span {
-    font-size: 7.5pt !important;
-    line-height: 1.2 !important;
-  }
-
-  .fiscal-cycle-grid > div + div,
-  .fiscal-personnel-grid > div + div,
-  .fiscal-composition-grid > div + div,
-  .fiscal-actions-grid > div + div {
-    border-left: 1px solid #111 !important;
-    padding-left: 10px !important;
-  }
-
-  .fiscal-cycle-grid > div:first-child,
-  .fiscal-personnel-grid > div:first-child,
-  .fiscal-composition-grid > div:first-child,
-  .fiscal-actions-grid > div:first-child {
-    padding-right: 0 !important;
-  }
-
-  .fiscal-cycle-row {
-    grid-template-columns: 62px minmax(0, 1fr) 42px 72px !important;
-    gap: 5px !important;
-  }
-
-  .fiscal-cycle-row > div {
-    height: 12px !important;
-  }
-
-  .fiscal-rate-row,
-  .fiscal-personnel-rate,
-  .fiscal-bar-row {
-    gap: 2px !important;
-  }
-
-  .fiscal-rate-row > div:last-child,
-  .fiscal-personnel-rate > div:last-child,
-  .fiscal-bar-row > div:last-child > div {
-    height: 4px !important;
-  }
-
-  .fiscal-bar-list {
-    gap: 5px !important;
-  }
-
-  .fiscal-low-execution-row {
-    gap: 6px !important;
-    padding-block: 4px !important;
-  }
-
-  .fiscal-low-execution-row:nth-child(n + 7) {
-    display: none !important;
   }
 
   .fiscal-presentation * {

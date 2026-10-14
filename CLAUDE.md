@@ -21,12 +21,14 @@ workspaces (`apps/web`), deploy na Vercel.
   `docs/design-orcamento.md`. **Leia-o antes** de qualquer edição em
   `apps/web/src/app/orcamento/**`, `execution-monitor.ts`, `expense-nature.ts`,
   `payroll-scope.ts`, `payroll-portal.ts`, `execution-breakdown-panel.tsx`,
-  `fiscal-secretariat-view.tsx`, `payroll-panel.tsx` ou
-  `overview-scheduled-actions-panel.tsx`.
-- Ele existe para **impedir AI slop**: fixa a paleta, proíbe gradientes/sombras/cantos
-  arredondados, registra na seção 9 as decisões que *parecem* bugs mas são deliberadas, e
-  traz um checklist obrigatório na seção 11. Ignorá-lo já custou retrabalho — uma sessão
-  inteira propondo âmbar e degradês que as seções 10.2 e 10.4 proíbem explicitamente.
+  `fiscal-secretariat-view.tsx`, `payroll-panel.tsx`,
+  `overview-scheduled-actions-panel.tsx` ou `execution-visuals.tsx`.
+- Ele documenta arquitetura, dados e cálculos (emendas, folha centralizada, comprometido,
+  créditos adicionais), registra na seção 9 as decisões que *parecem* bugs mas são
+  deliberadas, e traz um checklist obrigatório na seção 11.
+- O **contrato visual foi retirado em 2026-10-14** pelo dono do produto: paleta, cantos e
+  sombras deixaram de ser regra. O verde da marca fica no cromo (cabeçalho, faixas, títulos
+  de painel); as cores dos gráficos moram em `src/lib/chart-palette.ts`, separadas da marca.
 - Quando o documento e o código divergirem, **o código vence**: corrija o documento, não o
   código.
 
@@ -63,7 +65,8 @@ workspaces (`apps/web`), deploy na Vercel.
 
 - "Marcações"/curadoria = tabela `ThematicAssignment` (tema OCAD/OSG/CLIMATICO + eixo +
   classificação + ponderador por ação). A chave que liga marcações entre versões de QDD é
-  `actionLogicalKey` em `apps/web/src/lib/qdd-parser.ts`.
+  `actionLogicalKey` em `apps/web/src/lib/action-logical-key.ts` (reexportada por
+  `qdd-parser.ts`, que importa o SheetJS — por isso a chave mora fora dele).
 - Reimportar QDD atualiza a mesma base e conserva o ID das ações equivalentes pela chave
   lógica. Ações marcadas ausentes ficam com `presentInCurrentQdd=false`; consultas e
   escritas normais devem sempre excluir essas ações, que só aparecem no painel da SEPLAN.

@@ -349,6 +349,52 @@ export function personnelTotalsOf(actions: BudgetAction[]): ExecutionTotals {
   return totals;
 }
 
+// ── Folha de pagamento (visão Órgão) ─────────────────────────────────────────
+
+/**
+ * Elementos fora do gasto de folha da visão Órgão, mesmo dentro de uma ação de folha:
+ * 34 (outras despesas de pessoal decorrentes de terceirização) e 36 (serviços de
+ * terceiros — pessoa física). Pedido do dono do produto em 2026-10-14: medir
+ * terceirizados com precisão é inviável no QDD, e a visão passou a mostrar só a folha
+ * do Estado (contrato, seção 6.6).
+ */
+const PAYROLL_EXCLUDED_ELEMENTS = new Set(['34', '36']);
+
+/** Ação nominal de folha: "Gestão da folha de pagamento…" no QDD. */
+export function isPayrollAction(action: Pick<BudgetAction, 'application'>): boolean {
+  return normalizedIdentity(action.application ?? '').includes('folha de pagamento');
+}
+
+export interface PayrollBudgetTotals extends ExecutionTotals {
+  /** Ações de folha que entraram na soma. */
+  actionCount: number;
+  /** Dotação atualizada das linhas deixadas de fora (elementos 34 e 36). */
+  excludedUpdatedBudget: number;
+}
+
+/**
+ * Gasto de folha: todas as linhas das ações de folha de pagamento, menos os elementos
+ * 34 e 36. Ações que não são de folha são ignoradas, então pode receber o recorte
+ * inteiro do órgão. Linha com natureza ilegível entra — está numa ação de folha, e
+ * descartá-la faria a soma deixar de fechar com o QDD.
+ */
+export function payrollBudgetTotalsOf(actions: BudgetAction[]): PayrollBudgetTotals {
+  const totals: PayrollBudgetTotals = { ...EMPTY, actionCount: 0, excludedUpdatedBudget: 0 };
+  for (const action of actions) {
+    if (!isPayrollAction(action)) continue;
+    totals.actionCount += 1;
+    for (const line of action.expenseLines ?? []) {
+      const nature = parseExpenseAccount(line.expenseAccount);
+      if (nature && PAYROLL_EXCLUDED_ELEMENTS.has(nature.elementCode)) {
+        totals.excludedUpdatedBudget += line.updatedBudget;
+        continue;
+      }
+      addTotals(totals, line);
+    }
+  }
+  return totals;
+}
+
 // ── Por elemento de despesa ──────────────────────────────────────────────────
 
 /**
@@ -447,6 +493,65 @@ export function aggregateByOrganization(actions: BudgetAction[]): ExecutionRow[]
     addTotals(bucket, action.totals);
   }
   return finish(map);
+}
+
+// ── Créditos adicionais e reduções ───────────────────────────────────────────
+
+export interface BudgetChangeRow extends ExecutionRow {
+  /** Soma das linhas cuja dotação cresceu (≥ 0). */
+  increases: number;
+  /** Soma das linhas cuja dotação diminuiu (≤ 0, guardada com o sinal). */
+  reductions: number;
+  /** Dotação atualizada − inicial do recorte; igual a `increases + reductions`. */
+  netChange: number;
+}
+
+/**
+ * Alterações da dotação por órgão: acréscimos e reduções, linha a linha do QDD.
+ *
+ * A coluna "Suplementado" do QDD já vem líquida por linha (inicial + suplementado =
+ * atualizada, e há linhas negativas), então o arquivo não separa, dentro de uma
+ * linha, o crédito adicional da anulação que o financiou. Por isso `increases` e
+ * `reductions` são limites inferiores dos fluxos brutos; só o saldo é exato.
+ *
+ * A alteração sai de `updatedBudget − initialBudget`, e não de `supplemented`: assim
+ * a soma de `netChange` fecha com os KPIs por construção, mesmo em dado sem a coluna.
+ */
+export function aggregateBudgetChangesByOrganization(actions: BudgetAction[]): BudgetChangeRow[] {
+  const map = new Map<string, Bucket>();
+  const changes = new Map<string, { increases: number; reductions: number }>();
+  for (const action of actions) {
+    const name = action.organizationName?.trim() || action.organizationCode;
+    const acronym = organizationAcronym(action.organizationCode, name);
+    const bucket = bucketOf(
+      map,
+      action.organizationCode,
+      `${action.organizationCode} — ${name}`,
+      acronym,
+      acronym,
+    );
+    let change = changes.get(action.organizationCode);
+    if (!change) {
+      change = { increases: 0, reductions: 0 };
+      changes.set(action.organizationCode, change);
+    }
+    for (const line of action.expenseLines ?? []) {
+      bucket.count += 1;
+      addTotals(bucket, line);
+      const delta = line.updatedBudget - line.initialBudget;
+      if (delta > 0) change.increases += delta;
+      else if (delta < 0) change.reductions += delta;
+    }
+  }
+  return finish(map).map((row) => {
+    const change = changes.get(row.key) ?? { increases: 0, reductions: 0 };
+    return {
+      ...row,
+      increases: change.increases,
+      reductions: change.reductions,
+      netChange: row.updatedBudget - row.initialBudget,
+    };
+  });
 }
 
 // ── Emendas parlamentares ────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   Scatter,
   ScatterChart,
   XAxis,
@@ -18,8 +19,15 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatMoney } from '@/lib/api';
 import {
+  CHANGE_COLORS,
+  CHART_CATEGORICAL,
+  STAGE_COLORS,
+  metricColor,
+} from '@/lib/chart-palette';
+import {
   EXECUTION_METRIC_LABELS,
   EXECUTION_METRICS,
+  type BudgetChangeRow,
   type ExecutionMetric,
   type ExecutionRow,
 } from '@/lib/execution-monitor';
@@ -67,6 +75,12 @@ function chartTick(row: ExecutionRow): string {
   return truncate(`${prefix}${row.shortLabel}`, AXIS_TICK_MAX_CHARS);
 }
 
+// Um formatador por módulo, e não um por linha da tabela (ver `formatMoney`).
+const rateFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
 /** Abrevia valores no eixo (1.234.567 → "1,2 mi") para caber sem sobrepor. */
 function compactMoney(value: number): string {
   const abs = Math.abs(value);
@@ -76,7 +90,16 @@ function compactMoney(value: number): string {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
 }
 
-function EmptyState({ title, description }: { title: string; description?: string }) {
+function EmptyState({
+  title,
+  description,
+  message = 'Não há registros correspondentes aos filtros aplicados.',
+}: {
+  title: string;
+  description?: string;
+  /** Explicação do vazio; o padrão serve aos recortes que os filtros esvaziaram. */
+  message?: string;
+}) {
   return (
     <Card size="sm" className={cn('flex h-full min-h-0 flex-col', PANEL_CLASS)}>
       <CardHeader className={CHART_HEADER_CLASS}>
@@ -86,9 +109,7 @@ function EmptyState({ title, description }: { title: string; description?: strin
       <CardContent className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
         <div>
           <p className="text-sm font-semibold">Nenhum dado para exibir</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Não há registros correspondentes aos filtros aplicados.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{message}</p>
         </div>
       </CardContent>
     </Card>
@@ -119,6 +140,7 @@ function CycleTooltipContent({
   payload,
   headerKey,
   formatters,
+  summary,
 }: {
   active?: boolean;
   payload?: ReadonlyArray<{
@@ -131,6 +153,8 @@ function CycleTooltipContent({
   headerKey?: string;
   /** Formatadores por `dataKey`; o padrão é `formatMoney`. */
   formatters?: Record<string, (value: number) => string>;
+  /** Linha de fechamento abaixo dos itens, lida do próprio recorte (ex.: o saldo). */
+  summary?: { key: string; label: string; format?: (value: number) => string };
 }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
@@ -154,6 +178,32 @@ function CycleTooltipContent({
           );
         })}
       </div>
+      {summary && row ? (
+        <div className="mt-1 flex items-center justify-between gap-4 border-t border-black/20 pt-1">
+          <span className="font-semibold">{summary.label}</span>
+          <span className="font-semibold tabular-nums">
+            {(summary.format ?? formatMoney)(Number(row[summary.key] ?? 0))}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Legenda dos gráficos com mais de uma série. Fica no topo da área rolável do
+ * cartão (`sticky`), e não dentro do SVG: o gráfico cresce com o número de barras
+ * e a legenda do Recharts rolaria junto, para fora da vista.
+ */
+function SeriesLegend({ items }: { items: ReadonlyArray<{ label: string; color: string }> }) {
+  return (
+    <div className="sticky top-0 z-10 flex flex-wrap gap-x-3 gap-y-1 bg-white px-1 pb-1.5 pt-1 text-[11px] text-muted-foreground">
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 shrink-0" style={{ backgroundColor: item.color }} />
+          {item.label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -167,13 +217,13 @@ export type ExecutionChartCardProps = {
   metric: ExecutionMetric;
   /** Texto curto sob o título; omitido quando o título já basta. */
   description?: string;
-  /** Cor das barras; mantém a cor padrão do sistema quando não informada. */
+  /** Cor das barras; sem ela, a cor do estágio exibido (`metricColor`). */
   color?: string;
   className?: string;
 };
 
 /**
- * Card só com o gráfico, dimensionado para uma célula da grade 3×2. A tabela
+ * Card só com o gráfico, dimensionado para uma célula da grade 2×2. A tabela
  * detalhada correspondente fica em {@link ExecutionTablePanel}, abaixo da grade.
  *
  * Memoizado porque o dashboard mantém todas as abas montadas (`forceMount`, que é o
@@ -187,9 +237,10 @@ export const ExecutionChartCard = memo(function ExecutionChartCard({
   rows,
   metric,
   description,
-  color = 'var(--chart-1)',
+  color,
   className,
 }: ExecutionChartCardProps) {
+  const barColor = color ?? metricColor(metric);
   const chartData = useMemo(
     () =>
       sortByMetric(rows, metric)
@@ -208,8 +259,8 @@ export const ExecutionChartCard = memo(function ExecutionChartCard({
 
   // A chave do config precisa casar com o dataKey para o tooltip resolver o rótulo.
   const chartConfig = useMemo(
-    () => ({ [metric]: { label: EXECUTION_METRIC_LABELS[metric], color } }),
-    [metric, color],
+    () => ({ [metric]: { label: EXECUTION_METRIC_LABELS[metric], color: barColor } }),
+    [metric, barColor],
   );
 
   if (chartData.length === 0) return <EmptyState title={title} description={description} />;
@@ -269,7 +320,7 @@ export const ExecutionChartCard = memo(function ExecutionChartCard({
             />
             <Bar
               dataKey={metric}
-              fill={color}
+              fill={barColor}
               stroke="none"
               radius={0}
             />
@@ -385,10 +436,7 @@ export const ExecutionTablePanel = memo(function ExecutionTablePanel({
                   ))}
                   {hideRate ? null : (
                     <TableCell className="text-right tabular-nums">
-                      {row.executionRate.toLocaleString('pt-BR', {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1,
-                      })}
+                      {rateFormatter.format(row.executionRate)}
                       %
                     </TableCell>
                   )}
@@ -452,10 +500,10 @@ export const CycleStackedBarChart = memo(function CycleStackedBarChart({
   if (chartData.length === 0) return <EmptyState title={title} description={description} />;
 
   const config = {
-    notCommitted: { label: 'Não empenhado', color: '#c8c89f' },
-    committedNotLiquidated: { label: 'Empenhado não liquidado', color: '#b8b477' },
-    liquidatedNotPaid: { label: 'Liquidado não pago', color: '#8fa873' },
-    paid: { label: 'Pago', color: '#5f8f70' },
+    notCommitted: { label: 'Não empenhado', color: STAGE_COLORS.budget },
+    committedNotLiquidated: { label: 'Empenhado não liquidado', color: STAGE_COLORS.committed },
+    liquidatedNotPaid: { label: 'Liquidado não pago', color: STAGE_COLORS.liquidated },
+    paid: { label: 'Pago', color: STAGE_COLORS.paid },
   } as const;
 
   return (
@@ -468,6 +516,9 @@ export const CycleStackedBarChart = memo(function CycleStackedBarChart({
         {description ? <CardDescription className="text-xs">{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        <SeriesLegend
+          items={[config.paid, config.liquidatedNotPaid, config.committedNotLiquidated, config.notCommitted]}
+        />
         <ChartContainer
           config={config}
           className="min-h-full w-full shrink-0 aspect-auto"
@@ -519,28 +570,28 @@ export const CycleStackedBarChart = memo(function CycleStackedBarChart({
               dataKey="paid"
               name={config.paid.label}
               stackId="cycle"
-              fill="#5f8f70"
+              fill={config.paid.color}
               radius={0}
             />
             <Bar
               dataKey="liquidatedNotPaid"
               name={config.liquidatedNotPaid.label}
               stackId="cycle"
-              fill="#8fa873"
+              fill={config.liquidatedNotPaid.color}
               radius={0}
             />
             <Bar
               dataKey="committedNotLiquidated"
               name={config.committedNotLiquidated.label}
               stackId="cycle"
-              fill="#b8b477"
+              fill={config.committedNotLiquidated.color}
               radius={0}
             />
             <Bar
               dataKey="notCommitted"
               name={config.notCommitted.label}
               stackId="cycle"
-              fill="#c8c89f"
+              fill={config.notCommitted.color}
               radius={0}
             />
           </BarChart>
@@ -574,8 +625,8 @@ export const CycleLineChart = memo(function CycleLineChart({
     const top = sortByMetric(rows, 'updatedBudget')
       .filter((row) => row.updatedBudget > 0)
       .slice(0, topN);
-    // Paleta fixa da seção 4.1 (5 cores), cíclica para até 8 linhas.
-    const palette = ['#5f8f70', '#8fa873', '#b8b477', '#110f24', '#c8c89f'];
+    // Oito tons da paleta categórica para até oito linhas (`topN` padrão).
+    const palette: readonly string[] = CHART_CATEGORICAL;
     return {
       lines: top,
       palette,
@@ -687,7 +738,7 @@ export const ExecutionScatterChart = memo(function ExecutionScatterChart({
   if (chartData.length === 0) return <EmptyState title={title} description={description} />;
 
   const config = {
-    execution: { label: 'Execução (%)', color: '#5f8f70' },
+    execution: { label: 'Execução (%)', color: STAGE_COLORS.liquidated },
   } as const;
 
   return (
@@ -743,11 +794,158 @@ export const ExecutionScatterChart = memo(function ExecutionScatterChart({
             />
             <Scatter
               data={chartData}
-              fill="#5f8f70"
+              fill={config.execution.color}
               stroke="none"
               shape="circle"
             />
           </ScatterChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+});
+
+// ── Créditos adicionais e reduções (barras divergentes) ──────────────────────
+
+/** Arredonda a centavos; o `|| 0` evita exibir "-R$ 0,00" para um saldo nulo. */
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100 || 0;
+}
+
+function formatCents(value: number): string {
+  return formatMoney(toCents(value));
+}
+
+/**
+ * Uma linha por órgão: acréscimos da dotação à direita do zero e reduções à
+ * esquerda (seção 6.7 do contrato). As duas barras dividem o `stackId` com
+ * `stackOffset="sign"` — sem ele, o Recharts empilharia a redução a partir do fim
+ * do acréscimo, e não do zero.
+ *
+ * Diferente do {@link ExecutionChartCard}, não descarta valores não positivos: um
+ * órgão que só perdeu dotação precisa aparecer. Fica de fora só quem não teve
+ * alteração nenhuma.
+ */
+export const BudgetChangeChart = memo(function BudgetChangeChart({
+  title,
+  rows,
+  className,
+}: {
+  title: string;
+  rows: BudgetChangeRow[];
+  className?: string;
+}) {
+  const chartData = useMemo(
+    () =>
+      rows
+        .filter((row) => row.increases !== 0 || row.reductions !== 0)
+        .sort((a, b) => b.increases - a.increases || a.reductions - b.reductions)
+        .slice(0, CHART_MAX_ROWS)
+        .map((row) => ({ ...row, tick: chartTick(row) })),
+    [rows],
+  );
+  const axisWidth = useMemo(() => {
+    const longestTick = chartData.reduce(
+      (longest, row) => Math.max(longest, row.tick.length),
+      0,
+    );
+    return Math.min(AXIS_WIDTH, Math.max(52, Math.ceil(longestTick * 5.4 + 10)));
+  }, [chartData]);
+  const netChange = useMemo(
+    () => rows.reduce((total, row) => total + row.netChange, 0),
+    [rows],
+  );
+
+  // A coluna "Suplementado" do QDD já vem líquida por linha: dizer isso no cartão
+  // evita que os acréscimos sejam lidos como o total bruto de créditos abertos.
+  const description = `Acréscimos à direita e reduções à esquerda, por linha do QDD (que já vem líquida). Saldo do recorte: ${formatCents(netChange)}.`;
+
+  if (chartData.length === 0) {
+    // Sem nenhuma linha, quem esvaziou o recorte foram os filtros: vale o texto
+    // padrão. Com linhas, o vazio é a ausência de alteração.
+    return (
+      <EmptyState
+        title={title}
+        message={
+          rows.length > 0
+            ? 'Nenhuma alteração de dotação no recorte: a dotação atualizada é igual à inicial em todas as linhas.'
+            : undefined
+        }
+      />
+    );
+  }
+
+  const config = {
+    increases: { label: 'Acréscimos', color: CHANGE_COLORS.increase },
+    reductions: { label: 'Reduções', color: CHANGE_COLORS.reduction },
+  } as const;
+
+  return (
+    <Card
+      size="sm"
+      className={cn('flex h-full min-h-0 min-w-0 flex-col', PANEL_CLASS, className)}
+    >
+      <CardHeader className={CHART_HEADER_CLASS}>
+        <CardTitle className="font-semibold uppercase leading-snug tracking-wide">{title}</CardTitle>
+        <CardDescription className="text-xs">{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        <SeriesLegend items={[config.increases, config.reductions]} />
+        <ChartContainer
+          config={config}
+          className="min-h-full w-full shrink-0 aspect-auto"
+          style={{ height: `${Math.max(170, chartData.length * 26 + 34)}px` }}
+        >
+          <BarChart
+            accessibilityLayer
+            layout="vertical"
+            data={chartData}
+            margin={{ top: 2, right: 12, left: 2, bottom: 2 }}
+            barCategoryGap="16%"
+            stackOffset="sign"
+          >
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              tickFormatter={(value) => compactMoney(Number(value))}
+            />
+            <YAxis
+              type="category"
+              dataKey="tick"
+              width={axisWidth}
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10 }}
+              interval={0}
+            />
+            <ChartTooltip
+              content={
+                <CycleTooltipContent
+                  formatters={{ increases: formatCents, reductions: formatCents }}
+                  summary={{ key: 'netChange', label: 'Saldo líquido', format: formatCents }}
+                />
+              }
+            />
+            <ReferenceLine x={0} stroke="#000" strokeOpacity={0.7} />
+            {/* `name` pelo mesmo motivo do ciclo: o tooltip próprio lê `item.name`. */}
+            <Bar
+              dataKey="increases"
+              name={config.increases.label}
+              stackId="change"
+              fill={config.increases.color}
+              radius={0}
+            />
+            <Bar
+              dataKey="reductions"
+              name={config.reductions.label}
+              stackId="change"
+              fill={config.reductions.color}
+              radius={0}
+            />
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>

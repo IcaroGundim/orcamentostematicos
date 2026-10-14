@@ -40,12 +40,12 @@ import { formatMoney, themeLabels } from '@/lib/api';
 import { effectiveWeightingFactor } from '@/lib/classification-rules';
 import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
-import {
-  EXECUTION_METRIC_LABELS,
-  EXECUTION_METRICS,
-  type ExecutionMetric,
-} from '@/lib/execution-monitor';
+import { Ring } from '@/components/domain/execution-visuals';
+import { STAGE_COLORS } from '@/lib/chart-palette';
+import { executionRate, type ExecutionMetric } from '@/lib/execution-monitor';
+import { formatPercent } from '@/lib/number-format';
 import { organizationAcronym } from '@/lib/organization-acronym';
+import { readableName } from '@/lib/readable-name';
 import { cn } from '@/lib/utils';
 import type { BudgetAction, BudgetImport, ThemeBudget } from '@/types/domain';
 import { DataReferenceBadge } from '@/components/domain/data-reference-badge';
@@ -54,7 +54,8 @@ const ALL = 'ALL';
 const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
-const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[111rem]';
+const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[56rem]';
+const EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH = 'min-w-[82rem]';
 const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
 const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
@@ -64,6 +65,24 @@ const switchThumbClass =
   'absolute bottom-[0.3em] left-[0.3em] size-[1.4em] rounded-[8px] bg-white transition-transform duration-[400ms] group-data-[state=checked]:translate-x-[1.5em]';
 
 type OrganizationOption = { code: string; name: string };
+
+/**
+ * Colunas monetárias do monitor de execução, na ordem do ciclo da despesa. O
+ * essencial é dotação atualizada e liquidado; "Mostrar todos os estágios" traz o
+ * resto (contrato, seção 7.3). Cabeçalho e linhas leem esta mesma lista, então o
+ * botão esconde as duas células juntas.
+ */
+type ExecutionMoneyColumn = { key: ExecutionMetric; label: string; essential: boolean };
+const EXECUTION_MONEY_COLUMNS: ExecutionMoneyColumn[] = [
+  { key: 'initialBudget', label: 'Dotação inicial', essential: false },
+  { key: 'updatedBudget', label: 'Dotação atualizada', essential: true },
+  { key: 'committed', label: 'Empenhado', essential: false },
+  { key: 'liquidated', label: 'Liquidado', essential: true },
+  { key: 'paid', label: 'Pago', essential: false },
+];
+const ESSENTIAL_MONEY_COLUMNS = EXECUTION_MONEY_COLUMNS.filter((column) => column.essential);
+const EXECUTION_MONEY_CELL = 'w-[10.5rem]';
+const EXECUTION_RATE_CELL = 'w-[8.5rem]';
 
 type Props = {
   actions: BudgetAction[];
@@ -75,8 +94,8 @@ type Props = {
   lockedScopeLabel?: string;
   /** Adapta o painel para receber órgão, função, subfunção e busca de filtros externos. */
   variant?: 'thematic' | 'execution';
-  /** Estágio selecionado no monitor de execução, destacado como na aba Tabela. */
-  executionMetric?: ExecutionMetric;
+  /** Monitor de execução: todos os estágios em vez do essencial (contrato, seção 7.3). */
+  showAllStages?: boolean;
   /**
    * assignmentId → executado somado nas entregas de validações aprovadas. Alimenta as
    * categorias por entrega (OSG Cat. 2, Climático Indireta) na exportação da visão geral.
@@ -102,7 +121,7 @@ type OverviewActionRowProps = {
   selectedLineKeys: ReadonlySet<string>;
   relocated: boolean;
   institutional: boolean;
-  executionMetric?: ExecutionMetric;
+  executionColumns: ExecutionMoneyColumn[];
   expanded: boolean;
   onToggle: (id: string) => void;
   onToggleExpand: (id: string) => void;
@@ -119,7 +138,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
   selectedLineKeys,
   relocated,
   institutional,
-  executionMetric,
+  executionColumns,
   expanded,
   onToggle,
   onToggleExpand,
@@ -128,19 +147,22 @@ const OverviewActionRow = memo(function OverviewActionRow({
   const selected = selectionState !== 'none';
   const checkboxChecked =
     selectionState === 'full' ? true : selectionState === 'partial' ? 'indeterminate' : false;
+  const rate = executionRate(action.totals.liquidated, action.totals.updatedBudget);
   const minWidth = institutional
-    ? EXECUTION_TABLE_MIN_WIDTH
+    ? executionColumns.length > ESSENTIAL_MONEY_COLUMNS.length
+      ? EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH
+      : EXECUTION_TABLE_MIN_WIDTH
     : selectable
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;
   return (
-    <div className={`w-full ${institutional ? 'border-b border-black/30' : ''} ${minWidth}`}>
+    <div className={`w-full ${institutional ? 'border-b border-[#e1e3dd]' : ''} ${minWidth}`}>
       <Table className="table-fixed w-full">
         <TableBody>
           <TableRow
             data-state={selectable && selected ? 'selected' : undefined}
             onClick={selectable ? () => onToggle(action.id) : undefined}
-            className={`data-[state=selected]:bg-muted/40 ${institutional ? 'hover:bg-stone-50' : ''} ${selectable ? 'cursor-pointer' : ''}`}
+            className={`data-[state=selected]:bg-muted/40 ${institutional ? 'border-0 hover:bg-[#f8f9f6]' : ''} ${selectable ? 'cursor-pointer' : ''}`}
           >
             {selectable ? (
               <TableCell
@@ -157,8 +179,9 @@ const OverviewActionRow = memo(function OverviewActionRow({
             ) : null}
             <TableCell
               className={cn(
-                'whitespace-normal break-words py-2 align-top',
-                institutional ? 'w-[32rem]' : 'w-[36%] min-w-[12rem]',
+                'whitespace-normal break-words align-top',
+                // No monitor de execução a coluna Ação não tem largura: fica com o resto.
+                institutional ? 'py-3.5 pl-3.5' : 'w-[36%] min-w-[12rem] py-2',
               )}
             >
               <div className="flex min-w-0 items-start gap-1.5">
@@ -181,13 +204,20 @@ const OverviewActionRow = memo(function OverviewActionRow({
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <p
                     className="cursor-pointer text-sm font-medium leading-snug hover:underline"
-                    title={expanded ? 'Ocultar despesas' : 'Mostrar despesas'}
+                    title={
+                      institutional
+                        ? action.application
+                        : expanded
+                          ? 'Ocultar despesas'
+                          : 'Mostrar despesas'
+                    }
                     onClick={(event) => {
                       event.stopPropagation();
                       onToggleExpand(action.id);
                     }}
                   >
-                    {action.application}
+                    {/* Caixa normal só para exibição: o texto do QDD segue no `title`. */}
+                    {institutional ? readableName(action.application) : action.application}
                     {relocated ? (
                       <span
                         className="text-blue-600 dark:text-blue-400"
@@ -197,20 +227,56 @@ const OverviewActionRow = memo(function OverviewActionRow({
                       </span>
                     ) : null}
                   </p>
-                  <FunctionalProgramLine
-                    functionalProgram={action.functionalProgram}
-                    projectActivity={action.projectActivity}
-                  >
-                    {action.assignments.map((item) => (
-                      <ThemeBadge key={item.id} theme={item.theme} />
-                    ))}
-                  </FunctionalProgramLine>
+                  {institutional ? (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="tabular-nums">{action.projectActivity}</span>
+                      {' · '}
+                      <span title={`${action.organizationCode} — ${action.organizationName}`}>
+                        {organizationAcronym(action.organizationCode, action.organizationName)}
+                      </span>
+                      {' · '}
+                      <span title={`${action.unitCode} — ${action.unitName}`}>
+                        {readableName(action.unitName)}
+                      </span>
+                    </p>
+                  ) : (
+                    <FunctionalProgramLine
+                      functionalProgram={action.functionalProgram}
+                      projectActivity={action.projectActivity}
+                    >
+                      {action.assignments.map((item) => (
+                        <ThemeBadge key={item.id} theme={item.theme} />
+                      ))}
+                    </FunctionalProgramLine>
+                  )}
                 </div>
               </div>
             </TableCell>
-          <TableCell
-            className={cn('py-2 align-top text-sm', institutional ? 'w-[8rem]' : 'w-[6rem]')}
-          >
+          {institutional ? (
+            <>
+              {/* Órgão e unidade estão na linha de apoio; aqui, só os estágios. */}
+              {executionColumns.map((column) => (
+                <TableCell
+                  key={column.key}
+                  className={cn(
+                    EXECUTION_MONEY_CELL,
+                    'whitespace-nowrap px-3 py-3.5 text-right align-middle text-sm tabular-nums',
+                    column.key === 'updatedBudget' && 'font-semibold',
+                  )}
+                >
+                  {formatMoney(action.totals[column.key])}
+                </TableCell>
+              ))}
+              <TableCell className={cn(EXECUTION_RATE_CELL, 'px-3 py-3.5 align-middle')}>
+                <span className="inline-flex items-center gap-2.5 text-sm tabular-nums">
+                  <Ring value={rate} size={22} color={STAGE_COLORS.liquidated} />
+                  {formatPercent(rate)}
+                </span>
+              </TableCell>
+            </>
+          ) : (
+            <>
+          <TableCell className="w-[6rem] py-2 align-top text-sm">
             <span
               className="font-medium"
               title={`${action.organizationCode} — ${action.organizationName}`}
@@ -219,32 +285,13 @@ const OverviewActionRow = memo(function OverviewActionRow({
             </span>
           </TableCell>
           {showUnit ? (
-            <TableCell
-              className={cn(
-                'py-2 align-top text-sm',
-                institutional ? 'w-[16rem]' : 'w-[15%] max-w-[9rem]',
-              )}
-            >
+            <TableCell className="w-[15%] max-w-[9rem] py-2 align-top text-sm">
               <span className="text-xs text-muted-foreground">{action.unitCode}</span>
               <p className="truncate text-xs" title={action.unitName}>
                 {action.unitName}
               </p>
             </TableCell>
           ) : null}
-          {institutional ? (
-            EXECUTION_METRICS.map((metric) => (
-              <TableCell
-                key={metric}
-                className={cn(
-                  'w-[11rem] whitespace-nowrap border-l border-black/10 px-3 py-2 text-right align-top tabular-nums text-sm',
-                  metric === executionMetric && 'font-semibold',
-                )}
-              >
-                {formatMoney(action.totals[metric])}
-              </TableCell>
-            ))
-          ) : (
-            <>
               <TableCell className="w-[7.5rem] whitespace-nowrap py-2 text-right align-top tabular-nums text-sm">
                 {formatMoney(action.totals.initialBudget)}
               </TableCell>
@@ -285,7 +332,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   vigenteImport,
   lockedScopeLabel,
   variant = 'thematic',
-  executionMetric,
+  showAllStages = false,
   deliveryExecutedByAssignment,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
@@ -538,8 +585,11 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, [displayedActions, selectedIds]);
 
   const showUnit = unitCode === ALL;
+  const executionColumns = showAllStages ? EXECUTION_MONEY_COLUMNS : ESSENTIAL_MONEY_COLUMNS;
   const tableMinWidth = isExecutionVariant
-    ? EXECUTION_TABLE_MIN_WIDTH
+    ? showAllStages
+      ? EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH
+      : EXECUTION_TABLE_MIN_WIDTH
     : calculatorMode
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;
@@ -699,7 +749,9 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     <Card
       className={
         isExecutionVariant
-          ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-none border-black/70 bg-white py-0 shadow-none'
+          ? // Altura própria: a página rola inteira, mas a lista é virtualizada e
+            // precisa de um elemento de rolagem (contrato, R6).
+            'flex h-[max(28rem,calc(100svh-9rem))] min-h-0 min-w-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-white py-0 shadow-none'
           : 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
       }
       style={{ zoom: isExecutionVariant ? 1 : 0.85 }}
@@ -979,50 +1031,47 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                           />
                         </TableHead>
                       ) : null}
-                      <TableHead
-                        className={cn(
-                          'h-9 text-xs uppercase tracking-[0.12em]',
-                          isExecutionVariant ? 'w-[32rem]' : 'w-[36%] min-w-[12rem]',
-                          tableHeadClass,
-                        )}
-                      >
-                        Ação
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          'h-9 text-xs uppercase tracking-[0.12em]',
-                          isExecutionVariant ? 'w-[8rem]' : 'w-[6rem]',
-                          tableHeadClass,
-                        )}
-                      >
-                        Órgão
-                      </TableHead>
-                      {showUnit ? (
-                        <TableHead
-                          className={cn(
-                            'h-9 text-xs uppercase tracking-[0.12em]',
-                            isExecutionVariant ? 'w-[16rem]' : 'w-[15%] max-w-[9rem]',
-                            tableHeadClass,
-                          )}
-                        >
-                          Unidade
-                        </TableHead>
-                      ) : null}
                       {isExecutionVariant ? (
-                        EXECUTION_METRICS.map((metric) => (
+                        <>
+                          {/* Ação sem largura: fica com o resto, como nas linhas. */}
+                          <TableHead className={cn('h-11 pl-3.5 text-[11.5px] font-semibold uppercase tracking-[0.08em]', tableHeadClass)}>
+                            Ação
+                          </TableHead>
+                          {executionColumns.map((column) => (
+                            <TableHead
+                              key={column.key}
+                              className={cn(
+                                EXECUTION_MONEY_CELL,
+                                'h-11 px-3 text-right text-[11.5px] font-semibold uppercase tracking-[0.08em]',
+                                tableHeadClass,
+                              )}
+                            >
+                              {column.label}
+                            </TableHead>
+                          ))}
                           <TableHead
-                            key={metric}
                             className={cn(
-                              'h-9 w-[11rem] border-l border-white/25 px-3 text-right text-xs uppercase tracking-[0.12em]',
+                              EXECUTION_RATE_CELL,
+                              'h-11 px-3 text-[11.5px] font-semibold uppercase tracking-[0.08em]',
                               tableHeadClass,
-                              metric === executionMetric && 'font-semibold',
                             )}
                           >
-                            {EXECUTION_METRIC_LABELS[metric]}
+                            Execução
                           </TableHead>
-                        ))
+                        </>
                       ) : (
                         <>
+                          <TableHead className={cn('h-9 w-[36%] min-w-[12rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Ação
+                          </TableHead>
+                          <TableHead className={cn('h-9 w-[6rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                            Órgão
+                          </TableHead>
+                          {showUnit ? (
+                            <TableHead className={cn('h-9 w-[15%] max-w-[9rem] text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
+                              Unidade
+                            </TableHead>
+                          ) : null}
                           <TableHead className={cn('h-9 w-[7.5rem] text-right text-xs uppercase tracking-[0.12em]', tableHeadClass)}>
                             Inicial
                           </TableHead>
@@ -1070,7 +1119,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
                         selectedLineKeys={selectedLines.get(action.id) ?? EMPTY_LINE_KEYS}
                         relocated={relocatedUnitKeys?.has(`${action.organizationCode}|${action.unitCode}`) ?? false}
                         institutional={isExecutionVariant}
-                        executionMetric={executionMetric}
+                        executionColumns={executionColumns}
                         expanded={expandedIds.has(action.id)}
                         onToggle={toggleSelection}
                         onToggleExpand={toggleExpand}

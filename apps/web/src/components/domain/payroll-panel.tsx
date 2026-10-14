@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { formatMoney } from '@/lib/api';
+import { CHART_CATEGORICAL, categoricalColor } from '@/lib/chart-palette';
 import { cn } from '@/lib/utils';
 
 export interface PayrollGroupDto {
@@ -64,19 +65,11 @@ const MONTHS = [
   'dezembro',
 ] as const;
 
-const PAYROLL_COLORS = ['#5f8f70', '#8fa873', '#b8b477', '#110f24', '#c8c89f'] as const;
-const PAYROLL_PIE_COLORS = [
-  '#365f47',
-  '#5f8f70',
-  '#78966a',
-  '#8fa873',
-  '#b8b477',
-  '#8c8756',
-  '#29253d',
-  '#110f24',
-  '#d8d8bd',
-  '#6f735a',
-] as const;
+/**
+ * Quantos órgãos a pizza mostra antes de consolidar o resto em "Demais órgãos": um
+ * por tom da paleta categórica, que não pode ciclar (`chart-palette.ts`).
+ */
+const PIE_TOP_ORGANIZATIONS = CHART_CATEGORICAL.length;
 
 function compactMoney(value: number) {
   const absolute = Math.abs(value);
@@ -241,7 +234,7 @@ function PayrollBarList({
                   className="h-full"
                   style={{
                     width: `${Math.max(share > 0 ? 1 : 0, Math.min(100, share))}%`,
-                    backgroundColor: PAYROLL_COLORS[index % PAYROLL_COLORS.length],
+                    backgroundColor: categoricalColor(index),
                   }}
                 />
               </div>
@@ -454,7 +447,7 @@ function AverageEarningsByCareerList({
                             relativeWidth > 0 ? 1 : 0,
                             Math.min(100, relativeWidth),
                           )}%`,
-                          backgroundColor: PAYROLL_COLORS[row.rank % PAYROLL_COLORS.length],
+                          backgroundColor: CHART_CATEGORICAL[0],
                         }}
                       />
                     </div>
@@ -515,7 +508,7 @@ function OrganizationPayrollPie({
     const sortedRows = [...rows]
       .filter((row) => row.grossTotal > 0)
       .sort((a, b) => b.grossTotal - a.grossTotal);
-    const visibleRows = sortedRows.slice(0, 9);
+    const visibleRows = sortedRows.slice(0, PIE_TOP_ORGANIZATIONS);
     const remainingRows = sortedRows.slice(9);
     const result: OrganizationPieRow[] = visibleRows.map((row) => ({
       name: row.key,
@@ -564,7 +557,7 @@ function OrganizationPayrollPie({
               {chartData.map((row, index) => (
                 <Cell
                   key={row.name}
-                  fill={PAYROLL_PIE_COLORS[index % PAYROLL_PIE_COLORS.length]}
+                  fill={categoricalColor(index)}
                 />
               ))}
             </Pie>
@@ -584,7 +577,7 @@ function OrganizationPayrollPie({
               Participação na folha bruta
             </h4>
             <p className="mt-1 text-xs text-muted-foreground">
-              Nove maiores órgãos; os demais são consolidados em uma única fatia.
+              Oito maiores órgãos; os demais são consolidados em uma única fatia.
             </p>
           </div>
           <strong className="text-base tabular-nums">
@@ -597,14 +590,18 @@ function OrganizationPayrollPie({
             return (
               <div
                 key={row.name}
-                className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 bg-white px-3 py-2"
+                className={cn(
+                  'grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 bg-white px-3 py-2',
+                  // Com número ímpar de fatias, a última ocupa a linha inteira: sem isso
+                  // sobra uma célula vazia com o fundo cinza da grade.
+                  index === chartData.length - 1 && chartData.length % 2 === 1 && 'sm:col-span-2',
+                )}
               >
                 <span
                   className="size-3"
                   aria-hidden="true"
                   style={{
-                    backgroundColor:
-                      PAYROLL_PIE_COLORS[index % PAYROLL_PIE_COLORS.length],
+                    backgroundColor: categoricalColor(index),
                   }}
                 />
                 <span className="truncate text-xs font-medium" title={row.name}>

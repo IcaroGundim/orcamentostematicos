@@ -1,37 +1,36 @@
 'use client';
 
 import {
-  BanknoteIcon,
-  BarChart3Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CoinsIcon,
+  ArrowLeftIcon,
   DownloadIcon,
   LogOutIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   RefreshCwIcon,
-  ScrollTextIcon,
   SearchIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  CycleLineChart,
-  CycleStackedBarChart,
-  ExecutionChartCard,
-  ExecutionScatterChart,
-  ExecutionTablePanel,
-} from '@/components/domain/execution-breakdown-panel';
 import { PayrollPanel, type PayrollDto } from '@/components/domain/payroll-panel';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FiscalSecretariatView } from '@/components/domain/fiscal-secretariat-view';
+import {
+  BubbleScatter,
+  DonutChart,
+  DumbbellChart,
+  KpiStrip,
+  LollipopList,
+  SequentialLegend,
+  ShareLegend,
+  TreemapChart,
+  VizBlock,
+  VizEmpty,
+  paintItems,
+  readableLabel,
+} from '@/components/domain/execution-visuals';
 import { ExerciseSelect } from '@/components/domain/exercise-select';
 import { OverviewScheduledActionsPanel } from '@/components/domain/overview-scheduled-actions-panel';
 import { SearchableCombobox } from '@/components/domain/searchable-combobox';
 import { Button } from '@/components/ui/button';
-import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -47,178 +46,86 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, useHoverPill } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { filterFieldLabelClass } from '@/components/domain/filter-field-styles';
-import { api, clearStoredSession, formatMoney, getStoredSession, type Session } from '@/lib/api';
+import { api, clearStoredSession, getStoredSession, type Session } from '@/lib/api';
 import {
-  EXECUTION_METRIC_LABELS,
-  EXECUTION_METRICS,
-  type ExecutionMetric,
+  CHART_CATEGORICAL,
+  CHART_OTHER,
+  categoricalColor,
+  sequentialExecutionColor,
+  sequentialExecutionInk,
+} from '@/lib/chart-palette';
+import { shareOf, topWithOther } from '@/lib/chart-geometry';
+import {
+  aggregateBudgetChangesByOrganization,
   aggregateByAction,
-  aggregateByCategory,
   aggregateByElement,
-  aggregateByGroup,
-  aggregateByModality,
   aggregateByOrganization,
   aggregateBySource,
   amendmentActions,
   centralPayrollActionsForTargets,
-  executionRate,
   totalsOf,
+  type BudgetChangeRow,
+  type ExecutionRow,
+  type ExecutionTotals,
 } from '@/lib/execution-monitor';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { getFonteLabel } from '@/lib/fontes-recursos';
+import { compactMoney, formatPercent, signedCompactMoney } from '@/lib/number-format';
 import { organizationAcronym } from '@/lib/organization-acronym';
+import { readableName } from '@/lib/readable-name';
 import { exerciseQuery, useExercise } from '@/lib/use-exercise';
 import { payrollHeadcountForQddScope } from '@/lib/payroll-scope';
 import { cn } from '@/lib/utils';
 import type { BudgetAction, Metadata, Organization } from '@/types/domain';
 
 const allValue = 'ALL';
-const PAGE_ZOOM = 0.95;
 
 /**
- * Grade dos gráficos: 3 colunas × 2 linhas a partir de `xl`. Abaixo disso degrada
- * para 2 colunas e depois 1, porque uma célula de gráfico com eixo de categorias
- * fica ilegível em menos de ~330px.
- */
-const gridClass =
-  'grid h-full min-h-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 xl:grid-rows-2';
-
-/**
- * Tabelas empilhadas na aba "Tabela".
- *
- * `shrink-0` é essencial: os cards são itens flex com `min-h-0` e, sem isso, eram
- * espremidos até sobrar uma única linha visível em cada. O teto de altura evita que
- * uma tabela expandida (a de ação tem 74 registros) empurre as demais para fora da
- * vista — ela passa a rolar por dentro.
- */
-const STACKED_TABLE_CLASS = 'shrink-0 max-h-[34rem]';
-
-const chartColors = {
-  element: '#5f8f70',
-  group: '#8fa873',
-  category: '#b8b477',
-  modality: '#110f24',
-  organization: '#c8c89f',
-  source: '#5f8f70',
-  amendmentOrganization: '#c8c89f',
-  amendmentAction: '#110f24',
-  amendmentElement: '#5f8f70',
-  amendmentSource: '#8fa873',
-  amendmentGroup: '#b8b477',
-  amendmentCategory: '#110f24',
-} as const;
-
-/**
- * Dimensões de análise. Antes havia uma por recorte (elemento, ação, fonte), mas as
- * três exibiam o mesmo conjunto de gráficos em ordens diferentes — só mudavam de
- * posição. Foram fundidas em `geral`; as emendas continuam separadas porque ali os
- * recortes são calculados apenas sobre as ações de emenda, e não sobre o total.
+ * Recortes da tela. Antes havia uma dimensão por recorte (elemento, ação, fonte), mas
+ * as três exibiam o mesmo conjunto de gráficos em ordens diferentes — só mudavam de
+ * posição. Foram fundidas em `geral`; as emendas continuam separadas porque ali o
+ * recorte é feito apenas sobre as ações de emenda, e não sobre o total.
  */
 type ViewId = 'geral' | 'amendments';
-type ContentView = 'overview' | 'fiscal' | 'actions' | 'table' | 'payroll';
+/**
+ * Visualizações da execução. `Tabela` foi retirada em 2026-10-01; `Gráficos` saiu na
+ * mesma data e voltou em 2026-10-14 (contrato, seção 9, item 26).
+ */
+type ContentView = 'actions' | 'overview' | 'fiscal' | 'payroll';
 
-const VIEWS: { id: ViewId; label: string; icon: typeof BarChart3Icon }[] = [
-  { id: 'geral', label: 'Geral', icon: CoinsIcon },
-  { id: 'amendments', label: 'Emendas parlamentares', icon: ScrollTextIcon },
+const VIEWS: { id: ViewId; label: string }[] = [
+  { id: 'geral', label: 'Geral' },
+  { id: 'amendments', label: 'Emendas parlamentares' },
 ];
 
 const CONTENT_VIEWS: { id: ContentView; label: string }[] = [
   { id: 'actions', label: 'Ações' },
   { id: 'overview', label: 'Gráficos' },
   { id: 'fiscal', label: 'Órgão' },
-  { id: 'table', label: 'Tabela' },
   { id: 'payroll', label: 'Folha de pagamento' },
 ];
 
-function ExecutionViewNavigation({
-  activeView,
-  onSelect,
-  collapsed,
-}: {
-  activeView: ViewId;
-  onSelect: (view: ViewId) => void;
-  collapsed: boolean;
-}) {
-  const pill = useHoverPill(activeView);
+/**
+ * Grade da aba Gráficos: duas colunas só a partir de 1180px. Cada bloco tem gráfico e
+ * legenda lado a lado, e abaixo de ~520px por coluna a legenda espreme os nomes
+ * (contrato, seção 9, item 2).
+ */
+const gridClass = 'grid grid-cols-1 gap-x-10 gap-y-8 px-6 pb-10 pt-8 xl:px-10 min-[1180px]:grid-cols-2';
 
-  return (
-    <div
-      ref={pill.listRef}
-      className="relative flex flex-wrap border border-black/70 bg-white xl:flex-col xl:border-0"
-      role="tablist"
-      onMouseLeave={pill.resetHighlight}
-    >
-      {/*
-        Faixa que segue o mouse. Cobre a caixa inteira do item (e não só um eixo),
-        para funcionar tanto na coluna do desktop quanto na linha das telas menores.
-      */}
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute z-0 bg-marca',
-          'transition-[left,top,width,height] duration-500 ease-out',
-          pill.pill.ready ? 'opacity-100' : 'opacity-0',
-        )}
-        style={{
-          left: pill.pill.left,
-          top: pill.pill.top,
-          width: pill.pill.width,
-          height: pill.pill.height,
-        }}
-      />
-      {/* Marcador da seleção, na borda inicial do item — desliza junto. */}
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute z-20 w-[4px] bg-[#b8b477]',
-          'transition-[left,top,height] duration-300 ease-out',
-          pill.activePill.ready ? 'opacity-100' : 'opacity-0',
-        )}
-        style={{
-          left: pill.activePill.left,
-          top: pill.activePill.top,
-          height: pill.activePill.height,
-        }}
-      />
-      {VIEWS.map((item) => {
-        const Icon = item.icon;
-        const highlighted = pill.isHighlighted(item.id);
-        return (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={activeView === item.id}
-            data-execution-view={item.id}
-            data-hover-tab-value={item.id}
-            onClick={() => onSelect(item.id)}
-            onFocus={() => pill.highlight(item.id)}
-            onMouseEnter={() => pill.highlight(item.id)}
-            className={cn(
-              'relative z-10 inline-flex min-h-10 items-center gap-2 border-b border-black/20 px-3 py-2 text-xs font-semibold transition-colors',
-              'xl:w-full xl:border-l-4 xl:border-l-transparent',
-              collapsed ? 'xl:justify-center xl:px-2' : 'xl:justify-start',
-              highlighted ? 'text-marca-contraste' : 'text-muted-foreground hover:text-foreground',
-            )}
-            title={collapsed ? item.label : undefined}
-          >
-            <Icon className="size-4 shrink-0" />
-            <span className={cn('text-left leading-tight', collapsed && 'xl:sr-only')}>
-              {item.label}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+/** Margem lateral única da página (contrato, seção 3). */
+const pagePadding = 'px-6 xl:px-10';
+
+/** "Ações, Gráficos, Órgão e Folha de pagamento" — derivado para não desatualizar o rótulo. */
+const CONTENT_VIEWS_LABEL = new Intl.ListFormat('pt-BR', { type: 'conjunction' }).format(
+  CONTENT_VIEWS.map((item) => item.label),
+);
 
 function normalize(value: string) {
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
 }
 
@@ -226,6 +133,252 @@ function normalizeSourceCode(value: string) {
   const trimmed = value.trim();
   return trimmed.replace(/\D/g, '') || trimmed;
 }
+
+/** Ordena por dotação atualizada: as agregações chegam pelo liquidado. */
+function byBudget<T extends { updatedBudget: number }>(rows: T[]): T[] {
+  return [...rows].filter((row) => row.updatedBudget > 0).sort((a, b) => b.updatedBudget - a.updatedBudget);
+}
+
+/** Os oito órgãos que mais mudaram de dotação desde a lei, em valor absoluto. */
+function largestChanges(rows: BudgetChangeRow[]): BudgetChangeRow[] {
+  return rows
+    .filter((row) => Math.abs(row.netChange) > 0.005)
+    .sort((a, b) => Math.abs(b.netChange) - Math.abs(a.netChange))
+    .slice(0, 8);
+}
+
+/** Bloco comum às duas grades: halteres da dotação, lei → atualizada. */
+function BudgetChangeBlock({ rows }: { rows: BudgetChangeRow[] }) {
+  const increases = rows.reduce((sum, row) => sum + row.increases, 0);
+  const reductions = rows.reduce((sum, row) => sum + row.reductions, 0);
+  const net = increases + reductions;
+  const moved = largestChanges(rows);
+  return (
+    <VizBlock
+      title="Como a dotação mudou desde a lei"
+      summary={
+        moved.length ? (
+          <>
+            Saldo de <b>{signedCompactMoney(net)}</b>: {compactMoney(increases)} em acréscimos e{' '}
+            {compactMoney(-reductions)} em reduções, por linha do QDD.
+          </>
+        ) : undefined
+      }
+    >
+      {moved.length ? (
+        <DumbbellChart rows={moved} />
+      ) : (
+        <VizEmpty>
+          Nenhuma alteração de dotação no recorte: a dotação atualizada é igual à da lei em todas as linhas.
+        </VizEmpty>
+      )}
+    </VizBlock>
+  );
+}
+
+/** Grade do recorte Geral (contrato, seção 3.5). */
+const GeneralCharts = memo(function GeneralCharts({
+  totals,
+  elementRows,
+  sourceRows,
+  organizationRows,
+  changeRows,
+}: {
+  totals: ExecutionTotals;
+  elementRows: ExecutionRow[];
+  sourceRows: ExecutionRow[];
+  organizationRows: ExecutionRow[];
+  changeRows: BudgetChangeRow[];
+}) {
+  const elements = byBudget(elementRows).slice(0, 10);
+  const elementItems = elements.map((row) => ({
+    key: row.key,
+    label: row.label,
+    short: readableName(row.shortLabel),
+    value: row.updatedBudget,
+    rate: row.executionRate,
+    color: sequentialExecutionColor(row.executionRate),
+    ink: sequentialExecutionInk(row.executionRate),
+  }));
+  const sourceItems = paintItems(
+    topWithOther(
+      byBudget(sourceRows).map((row) => ({ key: row.key, label: readableName(row.shortLabel), value: row.updatedBudget })),
+      5,
+      'Demais fontes',
+      totals.updatedBudget,
+    ),
+    CHART_CATEGORICAL,
+  );
+  const organizations = organizationRows.filter((row) => row.updatedBudget > 0);
+  const lowExecution = organizations.filter((row) => row.executionRate < 25).length;
+  const firstElement = elements[0];
+  const firstSource = sourceItems[0];
+
+  return (
+    <div className={gridClass}>
+      <VizBlock
+        title="Para onde vai a despesa"
+        summary={
+          firstElement ? (
+            <>
+              {readableName(firstElement.shortLabel)} é o maior elemento (<b>{compactMoney(firstElement.updatedBudget)}</b>).
+              Área = dotação; cor = % executado.
+            </>
+          ) : undefined
+        }
+      >
+        {elementItems.length ? (
+          <>
+            <TreemapChart items={elementItems} label="Dotação atualizada por elemento de despesa" />
+            <SequentialLegend />
+          </>
+        ) : (
+          <VizEmpty>Nenhum elemento de despesa com dotação no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <VizBlock
+        title="De onde vem o recurso"
+        summary={
+          firstSource ? (
+            <>
+              {firstSource.label} financia <b>{formatPercent(shareOf(firstSource.value, totals.updatedBudget))}</b> da
+              dotação.
+            </>
+          ) : undefined
+        }
+      >
+        {sourceItems.length ? (
+          <div className="grid items-center gap-x-7 gap-y-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+            <DonutChart
+              items={sourceItems}
+              total={totals.updatedBudget}
+              center={compactMoney(totals.updatedBudget)}
+              caption="dotação"
+              label="Dotação atualizada por fonte de recurso"
+            />
+            <ShareLegend items={sourceItems} total={totals.updatedBudget} />
+          </div>
+        ) : (
+          <VizEmpty>Nenhuma fonte de recurso com dotação no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <VizBlock
+        title="Quem tem orçamento grande e execução baixa"
+        summary={
+          organizations.length ? (
+            <>
+              <b>
+                {lowExecution} de {organizations.length}
+              </b>{' '}
+              {organizations.length === 1 ? 'órgão' : 'órgãos'} abaixo de 25% de execução. Área do círculo = valor pago.
+            </>
+          ) : undefined
+        }
+      >
+        {organizations.length ? (
+          <BubbleScatter rows={organizations} />
+        ) : (
+          <VizEmpty>Nenhum órgão com dotação no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <BudgetChangeBlock rows={changeRows} />
+    </div>
+  );
+});
+
+/** Grade do recorte Emendas parlamentares (contrato, seção 3.5). */
+const AmendmentCharts = memo(function AmendmentCharts({
+  totals,
+  organizationRows,
+  actionRows,
+  elementRows,
+  changeRows,
+}: {
+  totals: ExecutionTotals;
+  organizationRows: ExecutionRow[];
+  actionRows: ExecutionRow[];
+  elementRows: ExecutionRow[];
+  changeRows: BudgetChangeRow[];
+}) {
+  const organizations = byBudget(organizationRows);
+  const organizationItems = organizations.slice(0, 12).map((row, index) => ({
+    key: row.key,
+    label: row.label,
+    short: row.chartLabel ?? row.shortLabel,
+    value: row.updatedBudget,
+    color: index < CHART_CATEGORICAL.length ? categoricalColor(index) : CHART_OTHER,
+    ink: '#ffffff',
+  }));
+  const largest = byBudget(actionRows)
+    .slice(0, 6)
+    .map((row) => ({ key: row.key, label: readableLabel(row.label), value: row.updatedBudget, rate: row.executionRate }));
+  const elementItems = paintItems(
+    topWithOther(
+      byBudget(elementRows).map((row) => ({ key: row.key, label: readableName(row.shortLabel), value: row.updatedBudget })),
+      5,
+      'Demais elementos',
+      totals.updatedBudget,
+    ),
+    CHART_CATEGORICAL,
+  );
+  const firstOrganization = organizations[0];
+  const firstElement = elementItems[0];
+
+  return (
+    <div className={gridClass}>
+      <VizBlock
+        title="Quem recebe as emendas"
+        summary={
+          firstOrganization ? (
+            <>
+              {firstOrganization.chartLabel ?? firstOrganization.shortLabel} lidera, com{' '}
+              <b>{compactMoney(firstOrganization.updatedBudget)}</b>.
+            </>
+          ) : undefined
+        }
+      >
+        {organizationItems.length ? (
+          <TreemapChart items={organizationItems} label="Dotação das emendas por órgão" />
+        ) : (
+          <VizEmpty>Nenhuma emenda parlamentar com dotação no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <VizBlock title="Maiores emendas" summary={largest.length ? 'As seis ações de emenda com maior dotação.' : undefined}>
+        {largest.length ? (
+          <LollipopList rows={largest} />
+        ) : (
+          <VizEmpty>Nenhuma ação de emenda com dotação no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <VizBlock
+        title="Onde o dinheiro das emendas é aplicado"
+        summary={
+          firstElement ? (
+            <>
+              {firstElement.label} responde por <b>{formatPercent(shareOf(firstElement.value, totals.updatedBudget))}</b>.
+            </>
+          ) : undefined
+        }
+      >
+        {elementItems.length ? (
+          <div className="grid items-center gap-x-7 gap-y-6 sm:grid-cols-[200px_minmax(0,1fr)]">
+            <DonutChart
+              items={elementItems}
+              total={totals.updatedBudget}
+              center={compactMoney(totals.updatedBudget)}
+              caption="em emendas"
+              label="Dotação das emendas por elemento de despesa"
+            />
+            <ShareLegend items={elementItems} total={totals.updatedBudget} />
+          </div>
+        ) : (
+          <VizEmpty>Nenhum elemento de despesa com dotação de emenda no recorte.</VizEmpty>
+        )}
+      </VizBlock>
+      <BudgetChangeBlock rows={changeRows} />
+    </div>
+  );
+});
 
 function OrcamentoPageContent() {
   const router = useRouter();
@@ -235,13 +388,9 @@ function OrcamentoPageContent() {
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [view, setView] = useState<ViewId>('geral');
   const [contentView, setContentView] = useState<ContentView>('actions');
-  // Declarado junto dos demais hooks: precisa vir antes do `return null` de sessão
-  // ausente, senão a chamada passa a ser condicional.
-  const contentViewPill = useHoverPill(contentView);
-  const [metric, setMetric] = useState<ExecutionMetric>('updatedBudget');
+  const [showAllStages, setShowAllStages] = useState(false);
   const [payroll, setPayroll] = useState<PayrollDto | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx');
@@ -391,8 +540,9 @@ function OrcamentoPageContent() {
       .map(([code, name]) => ({ value: code, label: `${code} — ${name}` }));
   }, [actions, organizations]);
 
+  // Sem rótulo visível na linha de filtros: o próprio valor diz o filtro.
   const organizationOptions = useMemo(
-    () => [{ value: allValue, label: 'Todos os órgãos' }, ...organizationEntries],
+    () => [{ value: allValue, label: 'Órgão: todos' }, ...organizationEntries],
     [organizationEntries],
   );
   const fiscalOrganizationOptions = useMemo(
@@ -415,7 +565,7 @@ function OrcamentoPageContent() {
       });
     }
     return [
-      { value: allValue, label: 'Todas as unidades' },
+      { value: allValue, label: 'Unidade: todas' },
       ...[...units.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
     ];
   }, [actions, organizationCode]);
@@ -440,10 +590,10 @@ function OrcamentoPageContent() {
       }
     }
     return [
-      { value: allValue, label: 'Todas as fontes' },
+      { value: allValue, label: 'Fonte: todas' },
       ...[...sources.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
     ];
-  }, [actions, organizationCode, unitFilter]);
+  }, [actions, organizationCode, unitFilter, loadedYear]);
 
   const filteredActions = useMemo(() => {
     const term = normalize(search.trim());
@@ -503,19 +653,19 @@ function OrcamentoPageContent() {
     () => organizations.find((organization) => organization.code === organizationCode),
     [organizations, organizationCode],
   );
-  // O heading nomeia o recorte da trilha: a unidade quando há uma escolhida, senão o
-  // órgão, senão o título genérico do módulo.
+  // Nome do recorte na linha de filtros: a unidade quando há uma escolhida, senão o
+  // órgão, senão nada (os demais filtros não têm nome curto).
   const headingTitle = useMemo(() => {
     if (unitFilter !== allValue) {
       const unitAction = actions.find(
         (action) => `${action.organizationCode}|${action.unitCode}` === unitFilter,
       );
-      if (unitAction) return `${unitAction.unitCode} — ${unitAction.unitName}`;
+      if (unitAction) return `${unitAction.unitCode} — ${readableName(unitAction.unitName)}`;
     }
     if (selectedOrganization) {
-      return `${selectedOrganization.code} — ${selectedOrganization.name}`;
+      return `${selectedOrganization.code} — ${readableName(selectedOrganization.name)}`;
     }
-    return 'Monitoramento da execução orçamentária';
+    return null;
   }, [actions, selectedOrganization, unitFilter]);
   const fiscalPayrollHeadcount = useMemo(
     () =>
@@ -595,35 +745,36 @@ function OrcamentoPageContent() {
         centralActions: organizationCentralActions,
         label: 'Secretaria consolidada',
         note:
-          'A unidade não possui ação própria na folha; por isso, pessoal é apresentado no nível da secretaria, sem rateio.',
+          'A unidade não possui ação própria na folha; por isso, a folha é apresentada no nível da secretaria, sem rateio.',
       };
     },
     [actions, fiscalActions, selectedOrganization, unitFilter],
   );
-  // Recortes sobre todas as ações filtradas.
-  const elementRows = useMemo(() => aggregateByElement(filteredActions), [filteredActions]);
-  const groupRows = useMemo(() => aggregateByGroup(filteredActions), [filteredActions]);
-  const categoryRows = useMemo(() => aggregateByCategory(filteredActions), [filteredActions]);
-  const modalityRows = useMemo(() => aggregateByModality(filteredActions), [filteredActions]);
-  const organizationRows = useMemo(() => aggregateByOrganization(filteredActions), [filteredActions]);
-  const actionRows = useMemo(() => aggregateByAction(filteredActions), [filteredActions]);
-  const sourceRows = useMemo(() => aggregateBySource(filteredActions), [filteredActions]);
-
-  // Aba de emendas: todos os recortes são calculados sobre as ações de emenda, e não
-  // sobre o conjunto todo — é isso que os torna informativos ali em vez de repetição
-  // das outras abas.
+  // Recorte de emendas: as ações de emenda dentro dos filtros da linha.
   const amendments = useMemo(() => amendmentActions(filteredActions), [filteredActions]);
-  const amendmentCount = amendments.length;
-  const amendmentRows = useMemo(() => aggregateByAction(amendments), [amendments]);
-  const amendmentOrganizationRows = useMemo(() => aggregateByOrganization(amendments), [amendments]);
-  const amendmentElementRows = useMemo(() => aggregateByElement(amendments), [amendments]);
-  const amendmentSourceRows = useMemo(() => aggregateBySource(amendments), [amendments]);
-  const amendmentGroupRows = useMemo(() => aggregateByGroup(amendments), [amendments]);
-  const amendmentCategoryRows = useMemo(() => aggregateByCategory(amendments), [amendments]);
+  const amendmentTotals = useMemo(() => totalsOf(amendments), [amendments]);
 
-  // A dimensão de análise é o recorte dominante da tela: com `Emendas
-  // parlamentares` ativa, KPIs, exportação e o painel de Ações refletem apenas
-  // as ações de emenda — os filtros da trilha continuam valendo dentro dele.
+  // Recortes da aba Gráficos. Na grade de emendas, todos são calculados sobre as
+  // ações de emenda, e não sobre o conjunto todo — é isso que os torna informativos
+  // ali em vez de repetição da grade geral.
+  const elementRows = useMemo(() => aggregateByElement(filteredActions), [filteredActions]);
+  const sourceRows = useMemo(() => aggregateBySource(filteredActions), [filteredActions]);
+  const organizationRows = useMemo(() => aggregateByOrganization(filteredActions), [filteredActions]);
+  const budgetChangeRows = useMemo(
+    () => aggregateBudgetChangesByOrganization(filteredActions),
+    [filteredActions],
+  );
+  const amendmentOrganizationRows = useMemo(() => aggregateByOrganization(amendments), [amendments]);
+  const amendmentRows = useMemo(() => aggregateByAction(amendments), [amendments]);
+  const amendmentElementRows = useMemo(() => aggregateByElement(amendments), [amendments]);
+  const amendmentBudgetChangeRows = useMemo(
+    () => aggregateBudgetChangesByOrganization(amendments),
+    [amendments],
+  );
+
+  // O recorte é dominante na tela: com `Emendas parlamentares` ativo, régua,
+  // exportação e a tabela de ações refletem apenas as ações de emenda — os filtros
+  // da linha continuam valendo dentro dele.
   const dimensionActions = view === 'amendments' ? amendments : filteredActions;
 
   const hasFilters =
@@ -643,10 +794,20 @@ function OrcamentoPageContent() {
     setSearch('');
   }
 
-  // Exportação cliente-side sobre o recorte da dimensão (`dimensionActions`):
-  // com Emendas parlamentares ativa, o arquivo carrega só as ações de emenda;
-  // em Geral, todo o recorte dos filtros da trilha. Import dinâmico, como no
-  // painel de ações, para não pesar o bundle.
+  const changeOrganization = useCallback((value: string) => {
+    setOrganizationCode(value);
+    setUnitFilter(allValue);
+    setSourceFilter(allValue);
+  }, []);
+  const changeUnit = useCallback((value: string) => {
+    setUnitFilter(value);
+    setSourceFilter(allValue);
+  }, []);
+
+  // Exportação cliente-side sobre o recorte (`dimensionActions`): com Emendas
+  // parlamentares ativo, o arquivo carrega só as ações de emenda; em Geral, todo o
+  // recorte dos filtros. Import dinâmico, como no painel de ações, para não pesar o
+  // bundle.
   const handleExport = useCallback(async () => {
     if (dimensionActions.length === 0) {
       toast.error('Não há ações correspondentes aos filtros aplicados para exportar.');
@@ -672,68 +833,39 @@ function OrcamentoPageContent() {
 
   if (!session) return null;
 
-  const rate = executionRate(totals.liquidated, totals.updatedBudget);
-  const contentViewIndex = CONTENT_VIEWS.findIndex((item) => item.id === contentView);
-  const previousContentView = CONTENT_VIEWS[Math.max(0, contentViewIndex - 1)]?.id ?? 'actions';
-  const nextContentView =
-    CONTENT_VIEWS[Math.min(CONTENT_VIEWS.length - 1, contentViewIndex + 1)]?.id ?? 'actions';
   const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll';
   const isAmendmentsDimension = view === 'amendments';
-
-  // KPIs globais seguem a dimensão: em Emendas parlamentares, os totais são os
-  // das ações de emenda. Sem memo de propósito: hooks não podem vir depois do
-  // guard de sessão (R11), e somar totais é aritmética barata sobre listas já
-  // calculadas.
-  const dimensionTotals = isAmendmentsDimension ? totalsOf(amendments) : totals;
-  const dimensionRate = executionRate(
-    dimensionTotals.liquidated,
-    dimensionTotals.updatedBudget,
-  );
-
-  const kpis = [
-    { label: 'Dotação inicial', value: formatMoney(dimensionTotals.initialBudget) },
-    { label: 'Dotação atualizada', value: formatMoney(dimensionTotals.updatedBudget) },
-    { label: 'Empenhado', value: formatMoney(dimensionTotals.committed) },
-    { label: 'Liquidado', value: formatMoney(dimensionTotals.liquidated) },
-    { label: 'Pago', value: formatMoney(dimensionTotals.paid) },
-    {
-      label: 'Execução',
-      value: `${dimensionRate.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`,
-    },
-  ];
+  // Régua segue o recorte: em Emendas parlamentares, os totais das ações de emenda.
+  const dimensionTotals = isAmendmentsDimension ? amendmentTotals : totals;
 
   return (
-    <div className="orcamento-page-root h-svh w-full overflow-hidden bg-background">
-      <div
-        className="orcamento-zoom-shell flex flex-col overflow-hidden bg-background"
-        style={{
-          width: `${100 / PAGE_ZOOM}%`,
-          height: `${100 / PAGE_ZOOM}%`,
-          transform: `scale(${PAGE_ZOOM})`,
-          transformOrigin: 'top left',
-        }}
-      >
-      <header className="orcamento-app-header sticky top-0 z-30 shrink-0 border-b border-black bg-marca text-marca-contraste">
-        <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <img src="/logo.svg" alt="Logo" className="h-8 w-auto shrink-0" />
-            <span className="hidden text-xl font-semibold uppercase tracking-widest text-primary-foreground/50 select-none lg:inline">
-              |
-            </span>
-            <span className="truncate font-semibold uppercase tracking-widest" style={{ fontSize: '22px' }}>
-              Execução Orçamentária
-            </span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ExerciseSelect
-              exercises={metadata?.exercises ?? []}
-              year={loadedYear ?? year}
-              onChange={changeYear}
-              disabled={isLoading}
-            />
+    <div className="orcamento-page-root min-h-svh w-full bg-white text-[#141714]">
+      <header className="orcamento-app-header flex h-14 items-center gap-5 bg-marca text-marca-contraste">
+        <div className={cn('flex w-full min-w-0 items-center gap-3 sm:gap-5', pagePadding)}>
+          <img src="/logo.svg" alt="SEPLAN" className="hidden h-7 w-auto shrink-0 sm:block" />
+          <span className="truncate text-base font-semibold">Execução orçamentária</span>
+          {/* Rota de fuga do módulo: no cabeçalho, porque ele existe em todas as abas. */}
+          <button
+            type="button"
+            onClick={() => router.push('/seplan')}
+            className="inline-flex shrink-0 items-center gap-1.5 text-[13.5px] text-marca-contraste/80 hover:text-marca-contraste focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca-contraste"
+            title="Voltar a Orçamentos Temáticos"
+          >
+            <ArrowLeftIcon className="size-4" aria-hidden />
+            <span className="hidden md:inline">Orçamentos Temáticos</span>
+          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <div className="mr-2">
+              <ExerciseSelect
+                exercises={metadata?.exercises ?? []}
+                year={loadedYear ?? year}
+                onChange={changeYear}
+                disabled={isLoading}
+              />
+            </div>
             <Button
-              variant="secondary"
-              className="rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100"
+              variant="ghost"
+              className="rounded-none text-marca-contraste shadow-none hover:bg-marca-hover hover:text-marca-contraste"
               onClick={() => void load()}
               disabled={isLoading}
             >
@@ -741,8 +873,8 @@ function OrcamentoPageContent() {
               <span className="hidden lg:inline">Atualizar</span>
             </Button>
             <Button
-              variant="secondary"
-              className="rounded-sm border-black/50 bg-white text-foreground shadow-none hover:bg-stone-100"
+              variant="ghost"
+              className="rounded-none text-marca-contraste shadow-none hover:bg-marca-hover hover:text-marca-contraste"
               onClick={signOut}
               disabled={isSigningOut}
             >
@@ -754,343 +886,266 @@ function OrcamentoPageContent() {
       </header>
 
       {/*
-        Layout em três colunas a partir de `xl`: trilha das visões à esquerda, conteúdo
-        (KPIs, filtros e gráficos) no meio e a ótica dos dados à direita. As trilhas são
-        fixas ao rolar para ficarem sempre alcançáveis sem cobrir o conteúdo. Abaixo de
-        `xl` elas voltam a ser faixas horizontais acima do conteúdo.
+        Faixa de navegação: fica fora do `<main>` e presa ao topo ao rolar. Nas visões
+        executivas (Órgão, Folha) é a única navegação da tela.
       */}
-      <main className="orcamento-main flex min-h-0 w-full flex-1 flex-col gap-3 overflow-y-auto p-3 xl:flex-row xl:items-stretch xl:gap-3 xl:overflow-hidden xl:p-3">
-        {/* Trilha esquerda — ótica dos dados, filtros e visões */}
-        {!isExecutiveView ? (
+      <nav
+        aria-label="Navegação entre visualizações"
+        className={cn(
+          'orcamento-view-bar sticky top-0 z-30 flex items-end gap-8 border-b border-[#e1e3dd] bg-white',
+          pagePadding,
+        )}
+      >
+        <div className="flex min-w-0 overflow-x-auto">
+          <div role="tablist" aria-label="Visualizações da execução" className="flex shrink-0 gap-8">
+            {CONTENT_VIEWS.map((item) => {
+              const active = contentView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setContentView(item.id)}
+                  className={cn(
+                    '-mb-px shrink-0 border-b-[3px] pb-3.5 pt-[18px] text-[15px] font-semibold transition-colors',
+                    'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-marca',
+                    active
+                      ? 'border-marca text-[#141714]'
+                      : 'border-transparent text-[#80857f] hover:text-[#141714]',
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {/* Some sem tirar o lugar: as abas não mudam de posição ao trocar de visão. */}
         <div
-          className={cn(
-            'orcamento-sidebar',
-            'flex shrink-0 flex-col overflow-hidden border border-black/70 bg-white transition-[width] duration-300 ease-out',
-            sidebarCollapsed ? 'xl:w-16' : 'xl:w-64',
-            // No desktop, a trilha ocupa a altura disponível e rola internamente,
-            // sem provocar scroll no documento.
-            'xl:h-full xl:min-h-0 xl:overflow-hidden',
-          )}
+          className={cn('ml-auto hidden shrink-0 items-baseline gap-4 pb-[15px] sm:flex', isExecutiveView && 'invisible')}
+          aria-hidden={isExecutiveView}
         >
-          <div
-            className={cn(
-              'shrink-0 bg-marca px-3 py-2 text-xs font-semibold uppercase tracking-wide text-marca-contraste',
-              sidebarCollapsed && 'xl:hidden',
-            )}
-          >
-            Filtros da execução
-          </div>
-          <div
-            className={cn(
-              'flex shrink-0 flex-col gap-1.5 border-b border-black/30 bg-white p-3',
-              sidebarCollapsed && 'xl:hidden',
-            )}
-          >
-            <label htmlFor="execution-metric" className="text-xs font-medium text-muted-foreground">
-              Exibir valores de
-            </label>
-            <Select value={metric} onValueChange={(value) => setMetric(value as ExecutionMetric)}>
-              <SelectTrigger
-                id="execution-metric"
-                className="w-full"
-                aria-label="Estágio da despesa exibido nos gráficos"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="start">
-                {EXECUTION_METRICS.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {EXECUTION_METRIC_LABELS[item]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <span className="text-[11.5px] font-semibold uppercase tracking-[0.09em] text-[#80857f]">Recorte</span>
+          {VIEWS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={view === item.id}
+              tabIndex={isExecutiveView ? -1 : undefined}
+              onClick={() => setView(item.id)}
+              className={cn(
+                'border-b-2 pb-0.5 text-sm transition-colors',
+                view === item.id
+                  ? 'border-[#141714] font-semibold text-[#141714]'
+                  : 'border-transparent text-[#80857f] hover:text-[#141714]',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </nav>
 
-          {/* Filtros */}
-          <div
-            className={cn(
-              'flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-b border-black/30 bg-white p-3',
-              sidebarCollapsed && 'xl:hidden',
-            )}
-          >
-            <Field className="min-w-0 gap-1.5">
-              <FieldLabel className={filterFieldLabelClass}>Buscar</FieldLabel>
-              <div className="relative">
+      <main className="orcamento-main min-w-0">
+        {!isExecutiveView ? (
+          <>
+            <div
+              className={cn(
+                'orcamento-filters flex flex-wrap items-center gap-2.5 border-b border-[#e1e3dd] py-3.5',
+                pagePadding,
+              )}
+            >
+              {/* Abaixo de `sm` o recorte sai da faixa e vem para cá. */}
+              <div className="flex w-full gap-4 pb-1 sm:hidden">
+                {VIEWS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={view === item.id}
+                    onClick={() => setView(item.id)}
+                    className={cn(
+                      'border-b-2 pb-0.5 text-sm',
+                      view === item.id ? 'border-[#141714] font-semibold' : 'border-transparent text-[#80857f]',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative w-60 max-w-full">
                 <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Ação, programa…"
+                  placeholder="Buscar ação, programa…"
+                  aria-label="Buscar ação ou programa"
                   className="pl-8"
                 />
               </div>
-            </Field>
-            <Field className="min-w-0 gap-1.5">
-              <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
               <SearchableCombobox
-                className="relative w-full min-w-0"
+                className="relative w-40 min-w-0"
                 value={organizationCode}
-                onChange={(value) => {
-                  setOrganizationCode(value);
-                  setUnitFilter(allValue);
-                  setSourceFilter(allValue);
-                }}
-                placeholder="Todos os órgãos"
+                onChange={changeOrganization}
+                placeholder="Órgão: todos"
                 items={organizationOptions}
               />
-            </Field>
-            <Field className="min-w-0 gap-1.5">
-              <FieldLabel className={filterFieldLabelClass}>Unidade</FieldLabel>
               <SearchableCombobox
-                className="relative w-full min-w-0"
+                className="relative w-40 min-w-0"
                 value={unitFilter}
-                onChange={(value) => {
-                  setUnitFilter(value);
-                  setSourceFilter(allValue);
-                }}
-                placeholder="Todas as unidades"
+                onChange={changeUnit}
+                placeholder="Unidade: todas"
                 items={unitOptions}
               />
-            </Field>
-            <Field className="min-w-0 gap-1.5">
-              <FieldLabel className={filterFieldLabelClass}>Fonte de recurso</FieldLabel>
               <SearchableCombobox
-                className="relative w-full min-w-0"
+                className="relative w-40 min-w-0"
                 value={sourceFilter}
                 onChange={setSourceFilter}
-                placeholder="Todas as fontes"
+                placeholder="Fonte: todas"
                 items={sourceOptions}
               />
-            </Field>
-            <FunctionalClassificationFilters
-              actions={actions}
-              functionFilter={functionFilter}
-              subfunctionFilter={subfunctionFilter}
-              onFunctionChange={setFunctionFilter}
-              onSubfunctionChange={setSubfunctionFilter}
-              allValue={allValue}
-            />
-            {/*
-              Sempre presente para o bloco não mudar de altura ao filtrar; fica
-              desabilitado quando não há nada a limpar.
-            */}
-            <Button
-              variant={hasFilters ? 'destructive' : 'outline'}
-              size="sm"
-              // A variante `destructive` não sobrescreve o `border-transparent` da
-              // base do Button — só a `outline` o faz. Sem isto a borda preta
-              // (`--border`, seção 4.1) some justamente no estado ativo.
-              className="border-border"
-              onClick={clearFilters}
-              disabled={!hasFilters}
-            >
-              Limpar filtros
-            </Button>
-          </div>
-
-          {/* Visões — abaixo dos filtros e do seletor. Presente também na aba
-              Ações: a dimensão (Geral/Emendas) recorta o painel de ações do mesmo
-              modo que recorta os gráficos e as tabelas. */}
-          <nav
-            className="shrink-0 bg-white"
-            aria-label="Visões da execução orçamentária"
-          >
-            <div
-              className={cn(
-                'border-b border-black/30 px-3 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground',
-                sidebarCollapsed && 'xl:sr-only',
-              )}
-            >
-              Dimensão de análise
-            </div>
-            <ExecutionViewNavigation
-              activeView={view}
-              collapsed={sidebarCollapsed}
-              onSelect={setView}
-            />
-          </nav>
-        </div>
-        ) : null}
-
-        {/* Coluna central — conteúdo */}
-        <div className="orcamento-content-column flex min-h-0 min-w-0 flex-1 flex-col gap-2 xl:h-full xl:overflow-hidden">
-        {!isExecutiveView ? (
-        <div className="orcamento-page-heading flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b border-black/70 pb-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="hidden shrink-0 self-center rounded-sm border-black/60 shadow-none xl:inline-flex"
-            aria-label={sidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
-            title={sidebarCollapsed ? 'Expandir barra lateral' : 'Recolher barra lateral'}
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-          >
-            {sidebarCollapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
-          </Button>
-          <h1 className="font-heading text-xl font-bold tracking-tight">
-            {headingTitle}
-            {isAmendmentsDimension ? ' — Emendas parlamentares' : ''}
-          </h1>
-          <p className="border-l border-black/40 pl-3 text-sm text-muted-foreground">
-            {isLoading
-              ? 'Carregando dados do QDD vigente…'
-              : `${dimensionActions.length.toLocaleString('pt-BR')} ação(ões)`}
-          </p>
-          {/*
-            Exportação do recorte da dimensão ativa: em Geral, as ações do QDD sob
-            os filtros da trilha; em Emendas parlamentares, só as ações de emenda.
-            A folha de pagamento fica de fora por construção: o arquivo nunca contém
-            dado da folha.
-          */}
-          <Popover open={exportOpen} onOpenChange={setExportOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto shrink-0 border-black bg-white shadow-none hover:bg-stone-100"
-                disabled={isLoading}
-              >
-                <DownloadIcon data-icon="inline-start" />
-                Exportar
+              <FunctionalClassificationFilters
+                actions={actions}
+                functionFilter={functionFilter}
+                subfunctionFilter={subfunctionFilter}
+                onFunctionChange={setFunctionFilter}
+                onSubfunctionChange={setSubfunctionFilter}
+                allValue={allValue}
+                showLabels={false}
+                className="contents *:w-40"
+              />
+              {/* Sempre presente, para a linha não mudar de forma ao filtrar. */}
+              <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="text-[13.5px]">
+                Limpar
               </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 space-y-4">
-              <div className="space-y-1.5">
-                <Label className={filterFieldLabelClass}>Formato</Label>
-                <Select
-                  value={exportFormat}
-                  onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
-                    <SelectItem value="csv">CSV (.csv)</SelectItem>
-                    <SelectItem value="json">JSON (.json)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => void handleExport()}
-                disabled={dimensionActions.length === 0}
-              >
-                <DownloadIcon />
-                Exportar recorte filtrado
-              </Button>
-            </PopoverContent>
-          </Popover>
-          {/*
-            Retorno ao painel dos orçamentos temáticos. Verde escuro (identidade do
-            módulo), no heading ao lado do Exportar: é a rota de fuga do módulo e
-            precisa ser achada de imediato, sem competir com os contornos discretos
-            do restante da linha.
-          */}
-          <Button
-            size="sm"
-            className="shrink-0 rounded-sm border border-black/70 bg-marca text-marca-contraste shadow-none hover:bg-marca-hover"
-            onClick={() => router.push('/seplan')}
-          >
-            <BanknoteIcon data-icon="inline-start" />
-            Voltar a Orçamentos Temáticos
-          </Button>
-        </div>
-        ) : null}
-
-        {/* Totais */}
-        {/*
-          Seis colunas só a partir de `2xl`: com a trilha lateral ocupando espaço, em
-          1440px cada célula ficaria com ~147px e os valores (que precisam de ~170px)
-          apareceriam cortados.
-        */}
-        {!isExecutiveView ? (
-        <dl className="orcamento-global-kpis grid grid-cols-2 overflow-hidden border border-black/70 bg-white lg:grid-cols-3 2xl:grid-cols-6">
-          {kpis.map((kpi) => (
-            <div
-              key={kpi.label}
-              className="min-w-0 border-b border-r border-black/20 px-3 py-2.5 last:border-r-0 2xl:border-b-0"
-            >
-                <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  {kpi.label}
-                </dt>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-24" />
-                ) : (
-                  <dd className="mt-1 truncate text-base font-bold tabular-nums" title={kpi.value}>
-                    {kpi.value}
-                  </dd>
-                )}
+              <span className="ml-auto truncate text-[13px] text-[#80857f]" title={headingTitle ?? undefined}>
+                {hasFilters ? (headingTitle ?? 'Filtros aplicados') : 'Nenhum filtro aplicado'}
+              </span>
             </div>
-          ))}
-        </dl>
+
+            <KpiStrip
+              totals={dimensionTotals}
+              isLoading={isLoading}
+              amendments={isAmendmentsDimension}
+              className="orcamento-global-kpis"
+            />
+          </>
         ) : null}
 
         {isLoading ? (
-          <Skeleton className="h-96" />
+          <div className={cn('py-8', pagePadding)}>
+            <Skeleton className="h-96" />
+          </div>
         ) : (
           <Tabs
             value={contentView}
             onValueChange={(value) => setContentView(value as ContentView)}
-            className="min-h-0 flex-1 overflow-hidden"
             role="group"
-            aria-label="Visualização da execução — use as setas do teclado para alternar entre Ações, Gráficos, Órgão, Tabela e Folha de pagamento"
+            aria-label={`Visualização da execução — use as setas do teclado para alternar entre ${CONTENT_VIEWS_LABEL}`}
           >
-            <TabsContent value="overview" forceMount className="min-h-0 overflow-hidden">
-              <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
-                <TabsContent value="geral" forceMount className="min-h-0 overflow-hidden">
-                  <div className={gridClass}>
-                    <CycleStackedBarChart
-                      title="Ciclo da despesa por elemento"
-                      description="Dotação atualizada dividida em não empenhado, empenhado não liquidado, liquidado não pago e pago."
-                      rows={elementRows}
-                    />
-                    <CycleLineChart
-                      title="Curva do ciclo — grupos de natureza"
-                      description="Top 8 grupos de natureza pelo orçamento atualizado, ao longo dos 5 estágios da despesa."
-                      rows={groupRows}
-                    />
-                    <ExecutionChartCard
-                      title="Por categoria econômica"
-                      rows={categoryRows}
-                      metric={metric}
-                      color={chartColors.category}
-                    />
-                    <ExecutionChartCard
-                      title="Por modalidade de aplicação"
-                      rows={modalityRows}
-                      metric={metric}
-                      color={chartColors.modality}
-                    />
-                    <ExecutionScatterChart
-                      title="Dotação × execução por órgão"
-                      description="Cada bolha é um órgão: eixo X = dotação atualizada, eixo Y = % liquidado, tamanho = pago."
-                      rows={organizationRows}
-                    />
-                    <CycleStackedBarChart
-                      title="Ciclo da despesa por fonte"
-                      description="Top fontes de recurso pelo orçamento atualizado, com o percurso da execução."
-                      rows={sourceRows}
-                    />
+            <TabsContent value="actions" forceMount>
+              {/*
+                O recorte recorta a aba Ações do mesmo modo que recorta régua e
+                exportação: Geral mostra todas as ações filtradas; Emendas
+                parlamentares, apenas as ações de emenda.
+              */}
+              <section className={cn('pb-10 pt-8', pagePadding)}>
+                <div className="mb-[18px] flex flex-wrap items-baseline gap-x-4 gap-y-2">
+                  <h2 className="text-[21px] font-semibold tracking-[-0.01em]">
+                    Ações orçamentárias{isAmendmentsDimension ? ' — emendas parlamentares' : ''}
+                  </h2>
+                  <p className="text-sm text-[#80857f] tabular-nums">
+                    {dimensionActions.length.toLocaleString('pt-BR')}{' '}
+                    {dimensionActions.length === 1 ? 'ação' : 'ações'}, na ordem do QDD
+                  </p>
+                  <div className="ml-auto flex gap-2">
+                    <Button
+                      variant="outline"
+                      aria-pressed={showAllStages}
+                      onClick={() => setShowAllStages((value) => !value)}
+                      className="border-[#141714] bg-white shadow-none hover:bg-stone-100"
+                    >
+                      {showAllStages ? 'Mostrar só o essencial' : 'Mostrar todos os estágios'}
+                    </Button>
+                    {/*
+                      Exporta o recorte ativo: em Geral, as ações do QDD sob os filtros; em
+                      Emendas parlamentares, só as ações de emenda. A folha de pagamento
+                      fica de fora por construção: o arquivo nunca contém dado da folha.
+                    */}
+                    <Popover open={exportOpen} onOpenChange={setExportOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="border-[#c3c6bf] bg-white text-[#4a504b] shadow-none hover:bg-stone-100">
+                          <DownloadIcon data-icon="inline-start" />
+                          Exportar
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-72 space-y-4">
+                        <div className="space-y-1.5">
+                          <Label className={filterFieldLabelClass}>Formato</Label>
+                          <Select
+                            value={exportFormat}
+                            onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                              <SelectItem value="csv">CSV (.csv)</SelectItem>
+                              <SelectItem value="json">JSON (.json)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => void handleExport()}
+                          disabled={dimensionActions.length === 0}
+                        >
+                          <DownloadIcon />
+                          Exportar recorte filtrado
+                        </Button>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                </TabsContent>
+                </div>
+                <OverviewScheduledActionsPanel
+                  actions={dimensionActions}
+                  organizations={organizations}
+                  variant="execution"
+                  showAllStages={showAllStages}
+                />
+              </section>
+            </TabsContent>
 
-                <TabsContent value="amendments" forceMount className="min-h-0 overflow-hidden">
-                  <div className={gridClass}>
-                    <ExecutionChartCard title="Emendas por órgão" rows={amendmentOrganizationRows} metric={metric} color={chartColors.amendmentOrganization} />
-                    <ExecutionChartCard title="Emendas por ação" rows={amendmentRows} metric={metric} color={chartColors.amendmentAction} />
-                    <ExecutionChartCard title="Emendas por elemento" rows={amendmentElementRows} metric={metric} color={chartColors.amendmentElement} />
-                    <ExecutionChartCard title="Emendas por fonte" rows={amendmentSourceRows} metric={metric} color={chartColors.amendmentSource} />
-                    <ExecutionChartCard title="Emendas por grupo de natureza" rows={amendmentGroupRows} metric={metric} color={chartColors.amendmentGroup} />
-                    <ExecutionChartCard title="Emendas por categoria econômica" rows={amendmentCategoryRows} metric={metric} color={chartColors.amendmentCategory} />
-                  </div>
+            {/*
+              Gráficos: uma grade por recorte, as duas montadas (`forceMount`) para não
+              piscar ao trocar o recorte (contrato, seção 3.5).
+            */}
+            <TabsContent value="overview" forceMount>
+              <Tabs value={view}>
+                <TabsContent value="geral" forceMount>
+                  <GeneralCharts
+                    totals={totals}
+                    elementRows={elementRows}
+                    sourceRows={sourceRows}
+                    organizationRows={organizationRows}
+                    changeRows={budgetChangeRows}
+                  />
                 </TabsContent>
-
+                <TabsContent value="amendments" forceMount>
+                  <AmendmentCharts
+                    totals={amendmentTotals}
+                    organizationRows={amendmentOrganizationRows}
+                    actionRows={amendmentRows}
+                    elementRows={amendmentElementRows}
+                    changeRows={amendmentBudgetChangeRows}
+                  />
+                </TabsContent>
               </Tabs>
             </TabsContent>
 
-            <TabsContent value="fiscal" forceMount className="h-full min-h-0 overflow-hidden">
+            <TabsContent value="fiscal" forceMount>
               <FiscalSecretariatView
                 actions={fiscalActions}
                 personnelActions={personnelScope.localActions}
@@ -1104,108 +1159,10 @@ function OrcamentoPageContent() {
                 unitOptions={unitOptions}
                 payrollHeadcount={fiscalPayrollHeadcount}
                 allValue={allValue}
-                onOrganizationChange={(value) => {
-                  setOrganizationCode(value);
-                  setUnitFilter(allValue);
-                  setSourceFilter(allValue);
-                }}
-                onUnitChange={(value) => {
-                  setUnitFilter(value);
-                  setSourceFilter(allValue);
-                }}
+                onOrganizationChange={changeOrganization}
+                onUnitChange={changeUnit}
                 vigenteImport={metadata?.vigenteImport}
               />
-            </TabsContent>
-
-            <TabsContent value="actions" forceMount className="h-full min-h-0 overflow-hidden">
-              {/*
-                A dimensão de análise recorta a aba Ações do mesmo modo que recorta
-                gráficos e tabelas: Geral mostra todas as ações filtradas; Emendas
-                parlamentares mostra apenas as ações de emenda.
-              */}
-              <OverviewScheduledActionsPanel
-                actions={dimensionActions}
-                organizations={organizations}
-                variant="execution"
-                executionMetric={metric}
-              />
-            </TabsContent>
-
-            <TabsContent value="table" forceMount className="min-h-0 overflow-hidden">
-              <Tabs value={view} className="h-full min-h-0 flex-1 overflow-hidden">
-                {/*
-                  As tabelas, diferente dos gráficos, não eram redundantes entre as
-                  antigas dimensões — cada uma trazia um recorte próprio. Ao fundir as
-                  dimensões, todas passam a conviver aqui, empilhadas com rolagem.
-
-                  STACKED_TABLE_CLASS é essencial: sem shrink-0 os cards, sendo itens
-                  flex com min-h-0, encolhiam até sobrar só uma linha visível em cada.
-                */}
-                <TabsContent
-                  value="geral"
-                  forceMount
-                  className="flex min-h-0 flex-col gap-2 overflow-y-auto"
-                >
-                  <ExecutionTablePanel
-                    title="Execução por elemento de despesa"
-                    description="Elemento é a 4ª posição do código da natureza da despesa (ex.: 3 1 90 13 → elemento 13). Valores somados das linhas de despesa do QDD vigente."
-                    rows={elementRows}
-                    metric={metric}
-                    entityLabel="Elemento de despesa"
-                    countLabel="Linhas"
-                    className={STACKED_TABLE_CLASS}
-                  />
-                  <ExecutionTablePanel
-                    title="Execução por grupo de natureza"
-                    description="Visão mais agregada: pessoal, outras despesas correntes, investimentos, dívida."
-                    rows={groupRows}
-                    metric={metric}
-                    entityLabel="Grupo de natureza"
-                    countLabel="Linhas"
-                    className={STACKED_TABLE_CLASS}
-                  />
-                  <ExecutionTablePanel
-                    title="Execução por ação orçamentária"
-                    description="Cada ação do QDD (projeto/atividade + aplicação programada), ordenada pelo valor selecionado."
-                    rows={actionRows}
-                    metric={metric}
-                    entityLabel="Ação orçamentária"
-                    countLabel="Ações"
-                    className={STACKED_TABLE_CLASS}
-                  />
-                  <ExecutionTablePanel
-                    title="Execução por fonte de recurso"
-                    description="Fonte/destinação de recursos conforme o anexo da SEPLAN para o exercício vigente."
-                    rows={sourceRows}
-                    metric={metric}
-                    entityLabel="Fonte de recurso"
-                    countLabel="Linhas"
-                    className={STACKED_TABLE_CLASS}
-                  />
-                </TabsContent>
-
-                <TabsContent value="amendments" forceMount className="grid min-h-0 grid-rows-2 gap-2 overflow-hidden">
-                  <ExecutionTablePanel
-                    title="Emendas por órgão"
-                    description={`${amendmentCount.toLocaleString('pt-BR')} ação(ões) identificadas como emenda — projeto/atividade iniciado em 8, exceto os códigos de controle da dívida.`}
-                    rows={amendmentOrganizationRows}
-                    metric={metric}
-                    entityLabel="Órgão"
-                    countLabel="Ações"
-                    className="min-h-0 overflow-hidden"
-                  />
-                  <ExecutionTablePanel
-                    title="Emendas por ação"
-                    description="Detalhamento de cada ação classificada como emenda parlamentar."
-                    rows={amendmentRows}
-                    metric={metric}
-                    entityLabel="Ação (emenda)"
-                    countLabel="Ações"
-                    className="min-h-0 overflow-hidden"
-                  />
-                </TabsContent>
-
-              </Tabs>
             </TabsContent>
 
             {/*
@@ -1213,117 +1170,14 @@ function OrcamentoPageContent() {
               job diário e lido do banco — não depende dos filtros do QDD, que são de
               orçamento e não se aplicam a servidores.
             */}
-            <TabsContent value="payroll" forceMount className="h-full min-h-0 overflow-hidden">
-              {payroll ? (
-                <PayrollPanel data={payroll} />
-              ) : (
-                <Skeleton className="h-96 w-full" />
-              )}
+            <TabsContent value="payroll" forceMount>
+              <div className={cn('py-8', pagePadding)}>
+                {payroll ? <PayrollPanel data={payroll} /> : <Skeleton className="h-96 w-full" />}
+              </div>
             </TabsContent>
-
           </Tabs>
         )}
-        </div>
-        </main>
-        <div className="orcamento-view-footer z-10 flex min-h-11 shrink-0 items-stretch justify-between border-t border-black/70 bg-white">
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Visualização anterior"
-            aria-disabled={contentViewIndex === 0}
-            className={cn(
-              'h-auto rounded-none border-r border-black/20 px-3 shadow-none',
-              contentViewIndex === 0 && 'pointer-events-none opacity-40',
-            )}
-            onClick={() => setContentView(previousContentView)}
-          >
-            <ChevronLeftIcon data-icon="inline-start" />
-            <span className="hidden sm:inline">Anterior</span>
-          </Button>
-
-          {/*
-            Mesma animação das abas dos orçamentos temáticos: uma faixa verde desliza
-            até o item sob o mouse e volta para o ativo ao sair da lista. A cor do
-            item ativo vem da faixa, não de um fundo próprio — por isso aqui os
-            botões só controlam a borda e a cor do texto.
-          */}
-          <div
-            ref={contentViewPill.listRef}
-            className="relative flex min-w-0 items-stretch overflow-x-auto"
-            role="tablist"
-            aria-label="Visualizações da execução"
-            onMouseLeave={contentViewPill.resetHighlight}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'pointer-events-none absolute inset-y-0 z-0 bg-marca',
-                'transition-[left,width] duration-500 ease-out',
-                contentViewPill.pill.ready ? 'opacity-100' : 'opacity-0',
-              )}
-              style={{ left: contentViewPill.pill.left, width: contentViewPill.pill.width }}
-            />
-            {/*
-              Marcador da aba selecionada, em creme. Fica acima da faixa (z-20) para
-              continuar visível quando ela estiver por cima — se fosse verde sobre
-              verde, sumiria justamente na aba ativa. O tom acompanha os bege da
-              paleta usada nos gráficos da folha de pagamento.
-            */}
-            <span
-              aria-hidden
-              className={cn(
-                'pointer-events-none absolute bottom-0 z-20 h-[3px] bg-[#b8b477]',
-                'transition-[left,width] duration-300 ease-out',
-                contentViewPill.activePill.ready ? 'opacity-100' : 'opacity-0',
-              )}
-              style={{
-                left: contentViewPill.activePill.left,
-                width: contentViewPill.activePill.width,
-              }}
-            />
-            {CONTENT_VIEWS.map((item) => {
-              const active = contentView === item.id;
-              const highlighted = contentViewPill.isHighlighted(item.id);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  aria-label={item.label}
-                  data-hover-tab-value={item.id}
-                  onClick={() => setContentView(item.id)}
-                  onFocus={() => contentViewPill.highlight(item.id)}
-                  onMouseEnter={() => contentViewPill.highlight(item.id)}
-                  className={cn(
-                    // A borda de baixo continua aqui só como reserva de espaço: o
-                    // marcador visível é o retângulo deslizante acima.
-                    'relative z-10 shrink-0 border-b-[3px] border-transparent px-4 py-2 text-xs font-semibold transition-colors',
-                    highlighted ? 'text-marca-contraste' : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label="Próxima visualização"
-            aria-disabled={contentViewIndex === CONTENT_VIEWS.length - 1}
-            className={cn(
-              'h-auto rounded-none border-l border-black/20 px-3 shadow-none',
-              contentViewIndex === CONTENT_VIEWS.length - 1 && 'pointer-events-none opacity-40',
-            )}
-            onClick={() => setContentView(nextContentView)}
-          >
-            <span className="hidden sm:inline">Próximo</span>
-            <ChevronRightIcon data-icon="inline-end" />
-          </Button>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
