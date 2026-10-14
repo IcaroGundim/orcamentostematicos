@@ -1,4 +1,9 @@
 import * as XLSX from 'xlsx';
+import { actionLogicalKey, normalize } from './action-logical-key';
+
+// Reexportados: a chave lógica mora em módulo próprio (sem SheetJS) para que as rotas
+// que só a usam não carreguem o parser de planilhas na partida a frio.
+export { actionLogicalKey, normalize } from './action-logical-key';
 
 export interface BudgetTotals {
   initialBudget: number; supplemented: number; updatedBudget: number;
@@ -136,19 +141,6 @@ export function parseQdd(
 }
 
 function cleanText(value: unknown) { return String(value ?? '').replace(/\s+/g, ' ').trim(); }
-export function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase(); }
-
-/**
- * Chave l\u00f3gica est\u00e1vel de uma a\u00e7\u00e3o or\u00e7ament\u00e1ria, id\u00eantica \u00e0 usada na agrega\u00e7\u00e3o
- * de linhas em `parseQdd`. Identifica a "mesma" a\u00e7\u00e3o entre vers\u00f5es de QDD mesmo
- * quando o `id` (aleat\u00f3rio) muda a cada importa\u00e7\u00e3o.
- */
-export function actionLogicalKey(a: {
-  year: number; organizationCode: string; unitCode: string;
-  projectActivity: string; application: string;
-}) {
-  return [a.year, a.organizationCode, a.unitCode, a.projectActivity, normalize(a.application)].join('|');
-}
 function splitCodeName(value: unknown) {
   const text = cleanText(value);
   const match = text.match(/^(\d+)\s*(.*)$/);

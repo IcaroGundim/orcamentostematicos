@@ -28,13 +28,11 @@ import {
   Trash2Icon,
   UploadIcon,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Cell, Pie, PieChart } from 'recharts';
-import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
-import { ClassificationLiquidatedSummaryChart } from '@/components/charts/ClassificationLiquidatedSummaryChart';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -44,7 +42,6 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AxisExecutionByThemePanel } from '@/components/domain/axis-execution-by-theme-panel';
 import { AcreDeliveriesMap } from '@/components/domain/acre-deliveries-map';
 import { DeliveryReviewList } from '@/components/domain/delivery-review-list';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -402,6 +399,38 @@ const initialAssignment = {
   justification: '',
 };
 
+// Os gráficos só aparecem em "Relatórios". Carregá-los sob demanda tira o `recharts`
+// (~120 KB gzip) do bundle de entrada; `preloadReportCharts` os busca em segundo plano
+// assim que o navegador fica ocioso, para o primeiro clique em Relatórios não esperar.
+// Os `import()` precisam ser literais em cada chamada — por isso a repetição.
+const ThemeExecutionGauge = dynamic(
+  () => import('@/components/charts/theme-execution-gauge').then((m) => m.ThemeExecutionGauge),
+  { loading: () => <div className="h-[120px] w-[220px]" aria-hidden /> },
+);
+const ThemeLiquidatedSummaryChart = dynamic(
+  () => import('@/components/charts/ThemeLiquidatedSummaryChart').then((m) => m.ThemeLiquidatedSummaryChart),
+  { loading: () => <div className="min-h-[200px] w-full flex-1" aria-hidden /> },
+);
+const ClassificationLiquidatedSummaryChart = dynamic(
+  () =>
+    import('@/components/charts/ClassificationLiquidatedSummaryChart').then(
+      (m) => m.ClassificationLiquidatedSummaryChart,
+    ),
+  { loading: () => <div className="min-h-[200px] w-full flex-1" aria-hidden /> },
+);
+const AxisExecutionByThemePanel = dynamic(
+  () =>
+    import('@/components/domain/axis-execution-by-theme-panel').then((m) => m.AxisExecutionByThemePanel),
+  { loading: () => <div className="min-h-64 w-full" aria-hidden /> },
+);
+
+function preloadReportCharts() {
+  void import('@/components/charts/theme-execution-gauge');
+  void import('@/components/charts/ThemeLiquidatedSummaryChart');
+  void import('@/components/charts/ClassificationLiquidatedSummaryChart');
+  void import('@/components/domain/axis-execution-by-theme-panel');
+}
+
 /**
  * Cor do arco do velocimetro de execucao, em 6 faixas.
  * A rampa (--gauge-1..6) vai de vermelho a verde escuro e esta definida nos dois
@@ -481,6 +510,15 @@ function SeplanPageContent() {
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
   const [resultsThemeTab, setResultsThemeTab] = useState<ThemeBudget>('OSG');
   const [resultsCategoryFilter, setResultsCategoryFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preloadReportCharts);
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preloadReportCharts, 2000);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Setas ← → alternam as subabas de "Informações Gerais". Fica no window (fase de
   // bubble) para funcionar sem depender de qual elemento está com foco; ignora campos
@@ -593,6 +631,14 @@ function SeplanPageContent() {
   async function load() {
     // `requestedYear` (e não `year`) para não recarregar quando o metadata chega.
     const q = exerciseQuery(requestedYear);
+    // A conferência do QDD vigente não depende das demais respostas, mas era pedida só
+    // depois de todas — uma ida ao servidor a mais no fim da carga. Sai agora junto com
+    // elas; se não houver QDD para conferir, o resultado é descartado (abaixo).
+    const diffParams = new URLSearchParams({ source: 'vigente' });
+    if (requestedYear != null) diffParams.set('year', String(requestedYear));
+    const vigenteDiffRequest = api<StructureDiff>(`/government-structure/diff?${diffParams.toString()}`).catch(
+      () => null,
+    );
     const [
       meta,
       summaryData,
@@ -631,7 +677,7 @@ function SeplanPageContent() {
 
     const loaded = meta.year ?? null;
     if (importsData.some((i) => i.status === 'VIGENTE' && (loaded == null || i.year === loaded)) || actionData.length > 0) {
-      await loadStructureDiff('vigente');
+      setStructureDiff(await vigenteDiffRequest);
     } else {
       setStructureDiff(null);
     }
@@ -2826,22 +2872,7 @@ function SeplanPageContent() {
                         {themeGaugeData.map(({ key, label, liquidated, planned, pct }) => (
                           <div key={key} className="flex flex-col items-center gap-2">
                             <div className="relative mx-auto w-[220px]">
-                              <PieChart width={220} height={120}>
-                                <Pie
-                                  data={[{ value: pct }, { value: 100 - pct }]}
-                                  cx={110}
-                                  cy={110}
-                                  startAngle={180}
-                                  endAngle={0}
-                                  innerRadius={68}
-                                  outerRadius={100}
-                                  dataKey="value"
-                                  strokeWidth={0}
-                                >
-                                  <Cell fill={gaugeColor(pct)} />
-                                  <Cell fill="var(--color-muted)" />
-                                </Pie>
-                              </PieChart>
+                              <ThemeExecutionGauge pct={pct} color={gaugeColor(pct)} />
                               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
                                 <p className="text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
                               </div>

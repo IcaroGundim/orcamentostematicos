@@ -22,7 +22,8 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
 
   const session = await prisma.session.findUnique({
     where: { token },
-    include: { user: true },
+    // A senha do usuário não precisa viajar do banco a cada requisição.
+    include: { user: { omit: { password: true } } },
   });
   if (!session) return null;
   // Sessão expirada vale tanto quanto sessão inexistente. A linha continua no

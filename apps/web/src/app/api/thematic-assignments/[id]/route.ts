@@ -33,10 +33,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
     // Secretaria atua somente no exercício corrente.
-    if (existing.action.year !== (await getCurrentYear())) return forbidden();
-    const allowed = await userControlsUnit(
-      user, existing.action.organizationCode, existing.action.unitCode, existing.action.year,
-    );
+    const [currentYear, allowed] = await Promise.all([
+      getCurrentYear(),
+      userControlsUnit(
+        user, existing.action.organizationCode, existing.action.unitCode, existing.action.year,
+      ),
+    ]);
+    if (existing.action.year !== currentYear) return forbidden();
     if (!allowed) return forbidden();
   }
 
@@ -98,10 +101,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   if (user.role === 'SECRETARIA_REPRESENTANTE') {
-    if (row.action.year !== (await getCurrentYear())) return forbidden();
-    const allowed = await userControlsUnit(
-      user, row.action.organizationCode, row.action.unitCode, row.action.year,
-    );
+    const [currentYear, allowed] = await Promise.all([
+      getCurrentYear(),
+      userControlsUnit(user, row.action.organizationCode, row.action.unitCode, row.action.year),
+    ]);
+    if (row.action.year !== currentYear) return forbidden();
     if (!allowed) return forbidden();
   } else if (user.role !== 'SEPLAN_ADMIN') {
     return forbidden();

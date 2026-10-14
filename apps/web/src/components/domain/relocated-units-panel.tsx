@@ -42,7 +42,7 @@ function occurrenceKey(occ: Pick<Occurrence, 'organizationCode' | 'unitCode'>) {
 function normalizeName(value: string) {
   return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
 }

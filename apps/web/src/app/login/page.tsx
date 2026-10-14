@@ -16,7 +16,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { z } from 'zod';
+// `zod/mini`: o `zod` completo pesa ~60 KB gzip e estes três schemas só usam `minLength`
+// e uma checagem entre campos. Sem locale carregado, a mensagem padrão é genérica — por
+// isso toda regra exibida em tela leva mensagem explícita.
+import * as z from 'zod/mini';
 import { LoginQuickAccess } from '@/components/domain/login-quick-access';
 import {
   AlertDialog,
@@ -98,25 +101,27 @@ function BiDashboardLinks({ mobile = false }: { mobile?: boolean }) {
 type View = 'login' | 'forgot' | 'reset';
 
 const loginSchema = z.object({
-  identifier: z.string().min(1, 'Informe seu e-mail ou nome de usuário.'),
-  password: z.string().min(3),
+  identifier: z.string().check(z.minLength(1, 'Informe seu e-mail ou nome de usuário.')),
+  password: z.string().check(z.minLength(3)),
 });
 type LoginFormData = z.infer<typeof loginSchema>;
 
 const forgotSchema = z.object({
-  identifier: z.string().min(1, 'Informe seu e-mail ou nome de usuário.'),
+  identifier: z.string().check(z.minLength(1, 'Informe seu e-mail ou nome de usuário.')),
 });
 type ForgotFormData = z.infer<typeof forgotSchema>;
 
 const resetSchema = z
   .object({
-    password: z.string().min(3, 'A senha deve ter pelo menos 3 caracteres.'),
-    confirmarSenha: z.string().min(1, 'Confirme a nova senha.'),
+    password: z.string().check(z.minLength(3, 'A senha deve ter pelo menos 3 caracteres.')),
+    confirmarSenha: z.string().check(z.minLength(1, 'Confirme a nova senha.')),
   })
-  .refine((data) => data.password === data.confirmarSenha, {
-    message: 'As senhas não coincidem.',
-    path: ['confirmarSenha'],
-  });
+  .check(
+    z.refine((data) => data.password === data.confirmarSenha, {
+      message: 'As senhas não coincidem.',
+      path: ['confirmarSenha'],
+    }),
+  );
 type ResetFormData = z.infer<typeof resetSchema>;
 
 type PendingQuickAccessSave = {

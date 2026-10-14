@@ -1,4 +1,4 @@
-import { actionLogicalKey } from './qdd-parser';
+import { actionLogicalKey } from './action-logical-key';
 
 export type ReplacementActionKey = {
   year: number;

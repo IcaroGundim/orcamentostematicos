@@ -409,10 +409,13 @@ export default function SecretariaPage() {
       setSummary((prev) => incrementSummaryAssignments(prev, 1));
       toast.success('Ação classificada no orçamento temático.');
       try {
-        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A validação RASCUNHO é gerada automaticamente no backend; recarrega
-        // para que apareça imediatamente na aba Validações.
-        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        // para que apareça imediatamente na aba Validações. As duas leituras são
+        // independentes, então correm juntas: a aba não espera o download das ações.
+        const [, freshValidations] = await Promise.all([
+          reconcileCurationSnapshot(optimistic, setActions, setSummary),
+          api<ValidationItem[]>('/validations/my'),
+        ]);
         setValidations(freshValidations);
       } catch {
         /* mantém estado otimista */
@@ -448,9 +451,11 @@ export default function SecretariaPage() {
       setActions(optimistic);
       toast.success('Classificação atualizada.');
       try {
-        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A classificação alterada reflete na aba Validações.
-        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        const [, freshValidations] = await Promise.all([
+          reconcileCurationSnapshot(optimistic, setActions, setSummary),
+          api<ValidationItem[]>('/validations/my'),
+        ]);
         setValidations(freshValidations);
       } catch {
         /* mantém estado otimista */
