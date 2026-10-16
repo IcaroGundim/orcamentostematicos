@@ -13,6 +13,7 @@
     "cf:preview": "opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare deploy",
     "db:backup": "node scripts/backup.mjs",
+    "collect:revenue": "node scripts/collect-revenue.mjs",
     "db:push": "node scripts/safe-push.mjs",
     "db:diff": "prisma migrate diff --from-schema ./prisma/schema.prisma --to-config-datasource ./prisma.config.ts --script",
     "db:consolidate-qdd": "node scripts/consolidate-qdd-imports.mjs",

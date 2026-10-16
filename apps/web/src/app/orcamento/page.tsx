@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { Suspense, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { PayrollPanel, type PayrollDto } from '@/components/domain/payroll-panel';
+import { RevenuePanel } from '@/components/domain/revenue-panel';
 import { FunctionalClassificationFilters } from '@/components/domain/functional-classification-filters';
 import { FiscalSecretariatView } from '@/components/domain/fiscal-secretariat-view';
 import {
@@ -77,6 +78,7 @@ import { organizationAcronym } from '@/lib/organization-acronym';
 import { readableName } from '@/lib/readable-name';
 import { exerciseQuery, useExercise } from '@/lib/use-exercise';
 import { payrollHeadcountForQddScope } from '@/lib/payroll-scope';
+import type { RevenueDto } from '@/lib/revenue';
 import { cn } from '@/lib/utils';
 import type { BudgetAction, Metadata, Organization } from '@/types/domain';
 
@@ -91,9 +93,10 @@ const allValue = 'ALL';
 type ViewId = 'geral' | 'amendments';
 /**
  * Visualizações da execução. `Tabela` foi retirada em 2026-10-01; `Gráficos` saiu na
- * mesma data e voltou em 2026-10-14 (contrato, seção 9, item 26).
+ * mesma data e voltou em 2026-10-14 (contrato, seção 9, item 26). `Receitas` entrou em
+ * 2026-10-15, por último: depois do ciclo da despesa (seção 9, item 15).
  */
-type ContentView = 'actions' | 'overview' | 'fiscal' | 'payroll';
+type ContentView = 'actions' | 'overview' | 'fiscal' | 'payroll' | 'revenue';
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: 'geral', label: 'Geral' },
@@ -105,6 +108,7 @@ const CONTENT_VIEWS: { id: ContentView; label: string }[] = [
   { id: 'overview', label: 'Gráficos' },
   { id: 'fiscal', label: 'Órgão' },
   { id: 'payroll', label: 'Folha de pagamento' },
+  { id: 'revenue', label: 'Receitas' },
 ];
 
 /**
@@ -117,7 +121,7 @@ const gridClass = 'grid grid-cols-1 gap-x-10 gap-y-8 px-6 pb-10 pt-8 xl:px-10 mi
 /** Margem lateral única da página (contrato, seção 3). */
 const pagePadding = 'px-6 xl:px-10';
 
-/** "Ações, Gráficos, Órgão e Folha de pagamento" — derivado para não desatualizar o rótulo. */
+/** "Ações, Gráficos, Órgão, Folha de pagamento e Receitas" — derivado para não desatualizar o rótulo. */
 const CONTENT_VIEWS_LABEL = new Intl.ListFormat('pt-BR', { type: 'conjunction' }).format(
   CONTENT_VIEWS.map((item) => item.label),
 );
@@ -139,12 +143,14 @@ function byBudget<T extends { updatedBudget: number }>(rows: T[]): T[] {
   return [...rows].filter((row) => row.updatedBudget > 0).sort((a, b) => b.updatedBudget - a.updatedBudget);
 }
 
-/** Os oito órgãos que mais mudaram de dotação desde a lei, em valor absoluto. */
+/**
+ * Todos os órgãos que mudaram de dotação desde a lei, do maior saldo para o menor
+ * em valor absoluto; o gráfico rola por dentro.
+ */
 function largestChanges(rows: BudgetChangeRow[]): BudgetChangeRow[] {
   return rows
     .filter((row) => Math.abs(row.netChange) > 0.005)
-    .sort((a, b) => Math.abs(b.netChange) - Math.abs(a.netChange))
-    .slice(0, 8);
+    .sort((a, b) => Math.abs(b.netChange) - Math.abs(a.netChange));
 }
 
 /** Bloco comum às duas grades: halteres da dotação, lei → atualizada. */
@@ -390,8 +396,10 @@ function OrcamentoPageContent() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [view, setView] = useState<ViewId>('geral');
   const [contentView, setContentView] = useState<ContentView>('actions');
-  const [showAllStages, setShowAllStages] = useState(false);
   const [payroll, setPayroll] = useState<PayrollDto | null>(null);
+  /** Um resumo por ano coletado (série desde 2016); `undefined` = carregando. */
+  const [revenue, setRevenue] = useState<RevenueDto[] | undefined>(undefined);
+  const [revenueError, setRevenueError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv' | 'json'>('xlsx');
 
@@ -430,6 +438,16 @@ function OrcamentoPageContent() {
       api<PayrollDto>('/payroll')
         .then(setPayroll)
         .catch(() => setPayroll(null));
+
+      // Receitas: também externas (job semanal) e opcionais. Vêm todos os anos de uma
+      // vez — a aba tem o próprio seletor de ano. Falha vira mensagem na própria aba.
+      setRevenue(undefined);
+      setRevenueError(null);
+      api<{ summaries: RevenueDto[] }>('/revenue')
+        .then((response) => setRevenue(response.summaries))
+        .catch((error: unknown) =>
+          setRevenueError(error instanceof Error ? error.message : 'falha ao consultar a API.'),
+        );
     } finally {
       setIsLoading(false);
     }
@@ -496,6 +514,8 @@ function OrcamentoPageContent() {
         tag === 'SELECT' ||
         target.isContentEditable ||
         target.closest('[role="combobox"]') ||
+        // Caixas de seleção (filtro de tributos da aba Receitas) são `button`, não `input`.
+        target.closest('[role="checkbox"]') ||
         target.closest('[data-slot="tabs-trigger"]')
       ) {
         return;
@@ -833,7 +853,7 @@ function OrcamentoPageContent() {
 
   if (!session) return null;
 
-  const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll';
+  const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll' || contentView === 'revenue';
   const isAmendmentsDimension = view === 'amendments';
   // Régua segue o recorte: em Emendas parlamentares, os totais das ações de emenda.
   const dimensionTotals = isAmendmentsDimension ? amendmentTotals : totals;
@@ -896,7 +916,12 @@ function OrcamentoPageContent() {
           pagePadding,
         )}
       >
-        <div className="flex min-w-0 overflow-x-auto">
+        {/*
+          `overflow-x-auto` força `overflow-y: auto`: o `-mb-px` que põe o sublinhado sobre
+          a borda da faixa fica no contêiner (não nos botões), senão o 1px vazado vira
+          barra de rolagem vertical. A barra horizontal das telas estreitas fica oculta.
+        */}
+        <div className="-mb-px flex min-w-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div role="tablist" aria-label="Visualizações da execução" className="flex shrink-0 gap-8">
             {CONTENT_VIEWS.map((item) => {
               const active = contentView === item.id;
@@ -908,14 +933,24 @@ function OrcamentoPageContent() {
                   aria-selected={active}
                   onClick={() => setContentView(item.id)}
                   className={cn(
-                    '-mb-px shrink-0 border-b-[3px] pb-3.5 pt-[18px] text-[15px] font-semibold transition-colors',
+                    // 4px de sublinhado + 13px de respiro = a mesma altura de antes (3 + 14).
+                    'shrink-0 border-b-4 pb-[13px] pt-[18px] text-[15px] transition-colors',
                     'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-marca',
                     active
-                      ? 'border-marca text-[#141714]'
-                      : 'border-transparent text-[#80857f] hover:text-[#141714]',
+                      ? 'border-marca font-bold text-marca-escura'
+                      : 'border-transparent font-medium text-[#80857f] hover:border-[#e1e3dd] hover:text-[#141714]',
                   )}
                 >
-                  {item.label}
+                  {/*
+                    A versão em negrito, invisível, reserva a largura: a aba ativa
+                    engrossa sem empurrar as vizinhas ao trocar de aba.
+                  */}
+                  <span className="grid">
+                    <span className="col-start-1 row-start-1">{item.label}</span>
+                    <span aria-hidden className="invisible col-start-1 row-start-1 font-bold">
+                      {item.label}
+                    </span>
+                  </span>
                 </button>
               );
             })}
@@ -950,6 +985,13 @@ function OrcamentoPageContent() {
       <main className="orcamento-main min-w-0">
         {!isExecutiveView ? (
           <>
+            <KpiStrip
+              totals={dimensionTotals}
+              isLoading={isLoading}
+              amendments={isAmendmentsDimension}
+              className="orcamento-global-kpis"
+            />
+
             <div
               className={cn(
                 'orcamento-filters flex flex-wrap items-center gap-2.5 border-b border-[#e1e3dd] py-3.5',
@@ -1018,17 +1060,62 @@ function OrcamentoPageContent() {
               <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="text-[13.5px]">
                 Limpar
               </Button>
-              <span className="ml-auto truncate text-[13px] text-[#80857f]" title={headingTitle ?? undefined}>
+              {/*
+                O resumo ocupa só o que sobra entre os filtros e o Exportar e encolhe com
+                reticências (texto inteiro no `title`): um nome de órgão longo jogava
+                o botão para uma segunda linha.
+              */}
+              <span
+                className="min-w-0 flex-1 basis-0 truncate text-right text-[13px] text-[#80857f]"
+                title={hasFilters ? (headingTitle ?? undefined) : undefined}
+              >
                 {hasFilters ? (headingTitle ?? 'Filtros aplicados') : 'Nenhum filtro aplicado'}
               </span>
+              {contentView === 'actions' ? (
+                <div className="flex shrink-0 gap-2">
+                  {/*
+                    Exporta o recorte ativo: em Geral, as ações do QDD sob os filtros; em
+                    Emendas parlamentares, só as ações de emenda. A folha de pagamento
+                    fica de fora por construção: o arquivo nunca contém dado da folha.
+                  */}
+                  <Popover open={exportOpen} onOpenChange={setExportOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="border-[#c3c6bf] bg-white text-[#4a504b] shadow-none hover:bg-stone-100">
+                        <DownloadIcon data-icon="inline-start" />
+                        Exportar
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 space-y-4">
+                      <div className="space-y-1.5">
+                        <Label className={filterFieldLabelClass}>Formato</Label>
+                        <Select
+                          value={exportFormat}
+                          onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper">
+                            <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                            <SelectItem value="csv">CSV (.csv)</SelectItem>
+                            <SelectItem value="json">JSON (.json)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => void handleExport()}
+                        disabled={dimensionActions.length === 0}
+                      >
+                        <DownloadIcon />
+                        Exportar recorte filtrado
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              ) : null}
             </div>
-
-            <KpiStrip
-              totals={dimensionTotals}
-              isLoading={isLoading}
-              amendments={isAmendmentsDimension}
-              className="orcamento-global-kpis"
-            />
           </>
         ) : null}
 
@@ -1049,71 +1136,15 @@ function OrcamentoPageContent() {
                 exportação: Geral mostra todas as ações filtradas; Emendas
                 parlamentares, apenas as ações de emenda.
               */}
-              <section className={cn('pb-10 pt-8', pagePadding)}>
-                <div className="mb-[18px] flex flex-wrap items-baseline gap-x-4 gap-y-2">
-                  <h2 className="text-[21px] font-semibold tracking-[-0.01em]">
-                    Ações orçamentárias{isAmendmentsDimension ? ' — emendas parlamentares' : ''}
-                  </h2>
-                  <p className="text-sm text-[#80857f] tabular-nums">
-                    {dimensionActions.length.toLocaleString('pt-BR')}{' '}
-                    {dimensionActions.length === 1 ? 'ação' : 'ações'}, na ordem do QDD
-                  </p>
-                  <div className="ml-auto flex gap-2">
-                    <Button
-                      variant="outline"
-                      aria-pressed={showAllStages}
-                      onClick={() => setShowAllStages((value) => !value)}
-                      className="border-[#141714] bg-white shadow-none hover:bg-stone-100"
-                    >
-                      {showAllStages ? 'Mostrar só o essencial' : 'Mostrar todos os estágios'}
-                    </Button>
-                    {/*
-                      Exporta o recorte ativo: em Geral, as ações do QDD sob os filtros; em
-                      Emendas parlamentares, só as ações de emenda. A folha de pagamento
-                      fica de fora por construção: o arquivo nunca contém dado da folha.
-                    */}
-                    <Popover open={exportOpen} onOpenChange={setExportOpen}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="border-[#c3c6bf] bg-white text-[#4a504b] shadow-none hover:bg-stone-100">
-                          <DownloadIcon data-icon="inline-start" />
-                          Exportar
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-72 space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className={filterFieldLabelClass}>Formato</Label>
-                          <Select
-                            value={exportFormat}
-                            onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent position="popper">
-                              <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
-                              <SelectItem value="csv">CSV (.csv)</SelectItem>
-                              <SelectItem value="json">JSON (.json)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => void handleExport()}
-                          disabled={dimensionActions.length === 0}
-                        >
-                          <DownloadIcon />
-                          Exportar recorte filtrado
-                        </Button>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
+              {/*
+                Sem cabeçalho próprio desde 2026-10-15: a linha de filtros (com o
+                Exportar) fica logo acima, no lugar dele. Sempre todos os estágios.
+              */}
+              <section className={cn('pb-10 pt-6', pagePadding)}>
                 <OverviewScheduledActionsPanel
                   actions={dimensionActions}
                   organizations={organizations}
                   variant="execution"
-                  showAllStages={showAllStages}
                 />
               </section>
             </TabsContent>
@@ -1174,6 +1205,21 @@ function OrcamentoPageContent() {
               <div className={cn('py-8', pagePadding)}>
                 {payroll ? <PayrollPanel data={payroll} /> : <Skeleton className="h-96 w-full" />}
               </div>
+            </TabsContent>
+
+            {/*
+              Receitas: Portal da Transparência, coletado por job semanal e lido do banco
+              (`/api/revenue`), todos os anos; a aba tem seletor de ano próprio, que
+              começa no exercício do cabeçalho. Como a folha, não usa os filtros do QDD,
+              que são de despesa.
+            */}
+            <TabsContent value="revenue" forceMount>
+              <RevenuePanel
+                data={revenue}
+                error={revenueError}
+                pagePadding={pagePadding}
+                defaultYear={loadedYear}
+              />
             </TabsContent>
           </Tabs>
         )}

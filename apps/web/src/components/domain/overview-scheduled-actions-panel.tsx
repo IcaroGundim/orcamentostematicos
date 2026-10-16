@@ -54,8 +54,7 @@ const ALL = 'ALL';
 const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
-const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[56rem]';
-const EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH = 'min-w-[82rem]';
+const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[82rem]';
 const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
 const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
@@ -67,20 +66,18 @@ const switchThumbClass =
 type OrganizationOption = { code: string; name: string };
 
 /**
- * Colunas monetárias do monitor de execução, na ordem do ciclo da despesa. O
- * essencial é dotação atualizada e liquidado; "Mostrar todos os estágios" traz o
- * resto (contrato, seção 7.3). Cabeçalho e linhas leem esta mesma lista, então o
- * botão esconde as duas células juntas.
+ * Colunas monetárias do monitor de execução, na ordem do ciclo da despesa — todos
+ * os estágios, sempre (o modo "essencial" saiu em 2026-10-15; contrato, seção
+ * 7.3). Cabeçalho e linhas leem esta mesma lista.
  */
-type ExecutionMoneyColumn = { key: ExecutionMetric; label: string; essential: boolean };
+type ExecutionMoneyColumn = { key: ExecutionMetric; label: string };
 const EXECUTION_MONEY_COLUMNS: ExecutionMoneyColumn[] = [
-  { key: 'initialBudget', label: 'Dotação inicial', essential: false },
-  { key: 'updatedBudget', label: 'Dotação atualizada', essential: true },
-  { key: 'committed', label: 'Empenhado', essential: false },
-  { key: 'liquidated', label: 'Liquidado', essential: true },
-  { key: 'paid', label: 'Pago', essential: false },
+  { key: 'initialBudget', label: 'Dotação inicial' },
+  { key: 'updatedBudget', label: 'Dotação atualizada' },
+  { key: 'committed', label: 'Empenhado' },
+  { key: 'liquidated', label: 'Liquidado' },
+  { key: 'paid', label: 'Pago' },
 ];
-const ESSENTIAL_MONEY_COLUMNS = EXECUTION_MONEY_COLUMNS.filter((column) => column.essential);
 const EXECUTION_MONEY_CELL = 'w-[10.5rem]';
 const EXECUTION_RATE_CELL = 'w-[8.5rem]';
 
@@ -94,8 +91,6 @@ type Props = {
   lockedScopeLabel?: string;
   /** Adapta o painel para receber órgão, função, subfunção e busca de filtros externos. */
   variant?: 'thematic' | 'execution';
-  /** Monitor de execução: todos os estágios em vez do essencial (contrato, seção 7.3). */
-  showAllStages?: boolean;
   /**
    * assignmentId → executado somado nas entregas de validações aprovadas. Alimenta as
    * categorias por entrega (OSG Cat. 2, Climático Indireta) na exportação da visão geral.
@@ -149,9 +144,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
     selectionState === 'full' ? true : selectionState === 'partial' ? 'indeterminate' : false;
   const rate = executionRate(action.totals.liquidated, action.totals.updatedBudget);
   const minWidth = institutional
-    ? executionColumns.length > ESSENTIAL_MONEY_COLUMNS.length
-      ? EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH
-      : EXECUTION_TABLE_MIN_WIDTH
+    ? EXECUTION_TABLE_MIN_WIDTH
     : selectable
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;
@@ -203,7 +196,12 @@ const OverviewActionRow = memo(function OverviewActionRow({
                 </button>
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <p
-                    className="cursor-pointer text-sm font-medium leading-snug hover:underline"
+                    className={cn(
+                      'cursor-pointer text-sm font-medium leading-snug hover:underline',
+                      // Execução: nome da ação em caixa alta (pedido do dono do produto,
+                      // 2026-10-15), sobre o texto já limpo por `readableName`.
+                      institutional && 'uppercase tracking-[0.01em]',
+                    )}
                     title={
                       institutional
                         ? action.application
@@ -216,7 +214,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
                       onToggleExpand(action.id);
                     }}
                   >
-                    {/* Caixa normal só para exibição: o texto do QDD segue no `title`. */}
+                    {/* Texto limpo por `readableName` (caixa alta por CSS na execução); o do QDD segue no `title`. */}
                     {institutional ? readableName(action.application) : action.application}
                     {relocated ? (
                       <span
@@ -332,7 +330,6 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   vigenteImport,
   lockedScopeLabel,
   variant = 'thematic',
-  showAllStages = false,
   deliveryExecutedByAssignment,
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
@@ -585,11 +582,9 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   }, [displayedActions, selectedIds]);
 
   const showUnit = unitCode === ALL;
-  const executionColumns = showAllStages ? EXECUTION_MONEY_COLUMNS : ESSENTIAL_MONEY_COLUMNS;
+  const executionColumns = EXECUTION_MONEY_COLUMNS;
   const tableMinWidth = isExecutionVariant
-    ? showAllStages
-      ? EXECUTION_TABLE_ALL_STAGES_MIN_WIDTH
-      : EXECUTION_TABLE_MIN_WIDTH
+    ? EXECUTION_TABLE_MIN_WIDTH
     : calculatorMode
       ? SELECTABLE_TABLE_MIN_WIDTH
       : DEFAULT_TABLE_MIN_WIDTH;

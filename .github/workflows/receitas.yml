@@ -1,0 +1,54 @@
+name: Coleta das receitas
+
+# Puxa a receita do Estado do Portal da Transparência do Acre e grava os AGREGADOS
+# por categoria (tributo, transferência…) e mês na tabela RevenueMonth.
+#
+# A arrecadação muda devagar e o painel não precisa dela no dia, então roda uma vez
+# por semana. O script é idempotente: recoletar um exercício substitui as linhas dele.
+# Sem `ano`, coleta o ano corrente, o anterior e os exercícios com QDD; a série
+# histórica antiga (desde 2016) foi carregada uma vez com `ano=2016-2025`.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # segunda-feira, 09:00 UTC (04:00 America/Rio_Branco)
+  workflow_dispatch:
+    inputs:
+      ano:
+        description: 'Exercício ou faixa, ex.: 2026 ou 2016-2025 (vazio: ano corrente, anterior e os com QDD)'
+        required: false
+
+concurrency:
+  group: coleta-receitas
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    # ~24 consultas ao portal (dois exercícios), ~0,2 s cada, com pausa; sobra folga.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # O script importa src/lib/revenue.ts direto: exige Node ≥ 22.18 (remoção
+          # de tipos nativa). `22` resolve para a versão 22 mais recente.
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npx prisma generate
+        working-directory: apps/web
+
+      - name: Coletar receitas
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.ano }}" ]; then
+            ARGS="--ano=${{ github.event.inputs.ano }}"
+          fi
+          node apps/web/scripts/collect-revenue.mjs $ARGS

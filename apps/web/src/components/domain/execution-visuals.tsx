@@ -174,6 +174,23 @@ export function useChartTooltip() {
   return { bind, tooltip };
 }
 
+/**
+ * Largura do conteúdo de `ref`, para o SVG desenhar na largura real do card (escala
+ * 1:1, fontes no tamanho nominal). Até a primeira medida vale `fallback`, que o
+ * `viewBox` escala.
+ */
+export function useMeasuredWidth(ref: React.RefObject<HTMLElement | null>, fallback: number): number {
+  const [measured, setMeasured] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setMeasured(Math.round(entry.contentRect.width)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return measured && measured > 0 ? measured : fallback;
+}
+
 // ── Peças pequenas ───────────────────────────────────────────────────────────
 
 /** Anel de percentual (0–100). */
@@ -667,21 +684,31 @@ export const LollipopList = memo(function LollipopList({
 /**
  * Halteres: dotação inicial (círculo vazado) → atualizada (cheio, azul se cresceu,
  * vermelho se caiu), com o saldo à direita.
+ *
+ * Recebe todos os órgãos: as linhas rolam dentro de um teto de altura e o eixo fica
+ * num SVG à parte, fixo embaixo. Os dois reservam o mesmo espaço da barra de rolagem
+ * (`scrollbar-gutter: stable`) para terem a mesma largura e a escala casar.
  */
 export const DumbbellChart = memo(function DumbbellChart({
   rows,
-  width = 640,
+  width: fallbackWidth = 640,
 }: {
   rows: BudgetChangeRow[];
   width?: number;
 }) {
   const { bind, tooltip } = useChartTooltip();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const width = useMeasuredWidth(scrollRef, fallbackWidth);
   const rowHeight = 36;
-  const height = rows.length * rowHeight + 40;
+  const height = rows.length * rowHeight + 4;
+  const axisHeight = 30;
   const left = 110;
   const right = 120;
   const max = Math.max(0, ...rows.map((row) => Math.max(row.initialBudget, row.updatedBudget)));
   const x = (value: number) => left + (max > 0 ? (value / max) * (width - left - right) : 0);
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  // A última linha visível é cortada pelo teto: esmaece o pé enquanto há mais abaixo.
+  const [atEnd, setAtEnd] = useState(false);
   return (
     <>
       <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 text-[13.5px] text-[#4a504b]">
@@ -698,57 +725,76 @@ export const DumbbellChart = memo(function DumbbellChart({
           Atualizada, caiu
         </span>
       </div>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="Dotação inicial e atualizada por órgão"
-        className="block h-auto w-full max-w-[720px] overflow-visible"
+      <div
+        ref={scrollRef}
+        className={cn(
+          'max-h-[296px] overflow-y-auto pr-2 [scrollbar-color:#c3c6bf_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin]',
+          !atEnd && '[mask-image:linear-gradient(to_bottom,#000_calc(100%-40px),transparent)]',
+        )}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          setAtEnd(el.scrollTop + el.clientHeight >= el.scrollHeight - 2);
+        }}
       >
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-          <g key={fraction}>
-            <line x1={x(max * fraction)} x2={x(max * fraction)} y1={0} y2={height - 26} stroke={GRID} />
-            <text x={x(max * fraction)} y={height - 8} textAnchor="middle" fontSize={12} fill={INK_3}>
-              {compactAxis(max * fraction)}
-            </text>
-          </g>
-        ))}
-        {rows.map((row, index) => {
-          const y = 20 + index * rowHeight;
-          const net = row.updatedBudget - row.initialBudget;
-          const grew = net >= 0;
-          const color = grew ? CHANGE_COLORS.increase : CHANGE_COLORS.reduction;
-          const textColor = grew ? CHANGE_TEXT_COLORS.increase : CHANGE_TEXT_COLORS.reduction;
-          return (
-            <g
-              key={row.key}
-              {...bind({
-                title: row.label,
-                big: { label: 'saldo desde a lei', value: signedMoney(net), color: textColor },
-                rows: [
-                  { label: 'Dotação inicial (lei)', value: formatMoney(row.initialBudget), color: INK_2, marker: 'ring' },
-                  { label: 'Dotação atualizada', value: formatMoney(row.updatedBudget), color, marker: 'dot' },
-                  'divider',
-                  { label: 'Acréscimos', value: signedMoney(row.increases), color: CHANGE_COLORS.increase },
-                  { label: 'Reduções', value: signedMoney(row.reductions), color: CHANGE_COLORS.reduction },
-                ],
-                note: 'Acréscimos e reduções somados por linha do QDD, que já vem líquida: um remanejamento dentro da mesma linha não aparece.',
-              })}
-            >
-              {/* Faixa invisível: a linha inteira responde ao mouse, não só os pontos. */}
-              <rect x={0} y={y - rowHeight / 2} width={width} height={rowHeight} fill="transparent" />
-              <text x={0} y={y + 5} fontSize={14} fill={INK}>
-                {clip(row.chartLabel ?? row.shortLabel, 13)}
-              </text>
-              <line x1={x(row.initialBudget)} x2={x(row.updatedBudget)} y1={y} y2={y} stroke={color} strokeWidth={3} />
-              <circle cx={x(row.initialBudget)} cy={y} r={6} fill="#fff" stroke={INK_2} strokeWidth={2} />
-              <circle cx={x(row.updatedBudget)} cy={y} r={7} fill={color} />
-              <text x={width} y={y + 5} textAnchor="end" fontSize={14} fontWeight={600} fill={textColor}>
-                {signedCompactMoney(net)}
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label="Dotação inicial e atualizada por órgão"
+          className="block h-auto w-full"
+        >
+          {ticks.map((fraction) => (
+            <line key={fraction} x1={x(max * fraction)} x2={x(max * fraction)} y1={0} y2={height} stroke={GRID} />
+          ))}
+          {rows.map((row, index) => {
+            const y = 20 + index * rowHeight;
+            const net = row.updatedBudget - row.initialBudget;
+            const grew = net >= 0;
+            const color = grew ? CHANGE_COLORS.increase : CHANGE_COLORS.reduction;
+            const textColor = grew ? CHANGE_TEXT_COLORS.increase : CHANGE_TEXT_COLORS.reduction;
+            return (
+              <g
+                key={row.key}
+                {...bind({
+                  title: row.label,
+                  big: { label: 'saldo desde a lei', value: signedMoney(net), color: textColor },
+                  rows: [
+                    { label: 'Dotação inicial (lei)', value: formatMoney(row.initialBudget), color: INK_2, marker: 'ring' },
+                    { label: 'Dotação atualizada', value: formatMoney(row.updatedBudget), color, marker: 'dot' },
+                    'divider',
+                    { label: 'Acréscimos', value: signedMoney(row.increases), color: CHANGE_COLORS.increase },
+                    { label: 'Reduções', value: signedMoney(row.reductions), color: CHANGE_COLORS.reduction },
+                  ],
+                  note: 'Acréscimos e reduções somados por linha do QDD, que já vem líquida: um remanejamento dentro da mesma linha não aparece.',
+                })}
+              >
+                {/* Faixa invisível: a linha inteira responde ao mouse, não só os pontos. */}
+                <rect x={0} y={y - rowHeight / 2} width={width} height={rowHeight} fill="transparent" />
+                <text x={0} y={y + 5} fontSize={14} fill={INK}>
+                  {clip(row.chartLabel ?? row.shortLabel, 13)}
+                </text>
+                <line x1={x(row.initialBudget)} x2={x(row.updatedBudget)} y1={y} y2={y} stroke={color} strokeWidth={3} />
+                <circle cx={x(row.initialBudget)} cy={y} r={6} fill="#fff" stroke={INK_2} strokeWidth={2} />
+                <circle cx={x(row.updatedBudget)} cy={y} r={7} fill={color} />
+                <text x={width} y={y + 5} textAnchor="end" fontSize={14} fontWeight={600} fill={textColor}>
+                  {signedCompactMoney(net)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="overflow-y-hidden pr-2 [scrollbar-gutter:stable] [scrollbar-width:thin]">
+        <svg viewBox={`0 0 ${width} ${axisHeight}`} aria-hidden className="block h-auto w-full">
+          {ticks.map((fraction) => (
+            <g key={fraction}>
+              <line x1={x(max * fraction)} x2={x(max * fraction)} y1={0} y2={8} stroke={GRID} />
+              <text x={x(max * fraction)} y={axisHeight - 8} textAnchor="middle" fontSize={12} fill={INK_3}>
+                {compactAxis(max * fraction)}
               </text>
             </g>
-          );
-        })}
-      </svg>
+          ))}
+        </svg>
+      </div>
       {tooltip}
     </>
   );

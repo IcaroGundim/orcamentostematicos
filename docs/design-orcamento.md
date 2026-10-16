@@ -61,7 +61,10 @@ Regras de uso:
    `/budget-actions`, `/organizations` e `/metadata`, e busca `/payroll` em
    paralelo com `catch` próprio que resulta em `null` — a folha é fonte externa e
    opcional; se a coleta não rodou ou o portal caiu, o restante do painel não pode
-   deixar de carregar. Nenhuma rota nova pode ser consultada a cada interação;
+   deixar de carregar. Do mesmo jeito busca `/revenue` (aba `Receitas`, seção
+   6.8): **todos** os anos coletados de uma vez, porque a aba tem seletor de ano
+   próprio e trocar o ano não pode disparar requisição; o `catch` vira mensagem na
+   própria aba. Nenhuma rota nova pode ser consultada a cada interação;
    nada é re-carregado por troca de aba, filtro ou métrica.
    **A única exceção é a troca de exercício** (seção 3.1): ela recarrega tudo,
    porque o QDD é outro. `load()` depende de `year`, e o efeito de sessão/redirect
@@ -84,7 +87,7 @@ Regras de uso:
    re-renderizaria os painéis de **todas** as abas, inclusive as ocultas — e a
    tabela de ações chega a milhares de linhas.
 5. **R5 — Navegação em dois níveis, preservada.** Visualização
-   (`Ações`/`Gráficos`/`Órgão`/`Folha de pagamento`, abas da faixa de navegação
+   (`Ações`/`Gráficos`/`Órgão`/`Folha de pagamento`/`Receitas`, abas da faixa de navegação
    — seção 3.2; `Ações` é a primeira e a principal — estado inicial da página) ×
    Recorte (`Geral`/`Emendas parlamentares`, `VIEWS`, na mesma faixa, à direita).
    Até 2026-10-14 o recorte ficava na trilha lateral, como "Dimensão de
@@ -108,13 +111,13 @@ Regras de uso:
    contêiner tem altura própria (`h-[max(28rem,calc(100svh-9rem))]`). Trocar
    isso por rolagem da janela exige trocar o virtualizador junto.
 7. **R7 — Filtros numa linha, sem trilha lateral.** Os filtros do QDD ocupam a
-   linha `orcamento-filters` sob a faixa (seção 3.3). A trilha lateral com
+   linha `orcamento-filters` sob a régua de indicadores (seção 3.3). A trilha lateral com
    colapso (`xl:w-64`/`xl:w-16`) saiu em 2026-10-14, e com ela o seletor
-   "Exibir valores de": a tabela mostra os estágios por botão ("Mostrar todos
-   os estágios", seção 7.3) e os gráficos não dependem de um estágio escolhido.
+   "Exibir valores de": a tabela mostra sempre todos os estágios (seção 7.3) e
+   os gráficos não dependem de um estágio escolhido.
    A linha de filtros e a régua de indicadores **somem** nas visões executivas
-   (`Órgão` e `Folha de pagamento`, `isExecutiveView`), que ou não usam os
-   filtros do QDD (folha) ou têm os próprios controles (órgão).
+   (`Órgão`, `Folha de pagamento` e `Receitas`, `isExecutiveView`), que ou não
+   usam os filtros do QDD (folha, receitas) ou têm os próprios controles (órgão).
 8. **R8 — Filtros em cascata.** Órgão → Unidade → Fonte. Trocar órgão limpa
    unidade e fonte; trocar unidade limpa fonte (`page.tsx:718-737`). As opções de
    unidade e fonte são derivadas das ações já filtradas pelo nível anterior
@@ -126,6 +129,10 @@ Regras de uso:
    GitHub), persistência **somente de agregados**, leitura por rota `/api/*`
    protegida por sessão. Proibido buscar em portal externo a partir do cliente,
    proibido persistir dado pessoal identificável.
+   As receitas (aba `Receitas`, desde 2026-10-15) seguem esse padrão com uma
+   diferença: o job é **semanal** (`.github/workflows/receitas.yml`) e o script
+   importa a classificação de `src/lib/revenue.ts` direto, em vez de manter uma
+   cópia como a folha (seção 8).
 10. **R10 — Autorização e somente-leitura.** A página redireciona para
     `/secretaria` qualquer sessão que não seja `SEPLAN_ADMIN` (`page.tsx:270-272`)
     e para `/login` sem sessão. O módulo não escreve em nenhuma tabela: nenhuma
@@ -138,7 +145,9 @@ Regras de uso:
 12. **R12 — Sem mudança de schema para este módulo.** Ele é somente leitura.
     Se um dia precisar de tabela nova, siga o fluxo protegido do CLAUDE.md
     (`npm run db:push`, backup antes, bloqueio de DROP) e registre aqui. Alterar
-    `PayrollSnapshot`/`PayrollGroup` exige reescrever as seções 6.6 e 8.
+    `PayrollSnapshot`/`PayrollGroup` exige reescrever as seções 6.6 e 8; alterar
+    `RevenueMonth` (criada em 2026-10-15 pelo push protegido, para as receitas),
+    as seções 6.8 e 8.
 
 ## 3. Anatomia da tela
 
@@ -150,9 +159,10 @@ orcamento-page-root (min-h-svh; a página rola inteira)
 ├─ header.orcamento-app-header (h-14, bg-marca) — rola junto com a página
 ├─ nav.orcamento-view-bar (sticky top-0 z-30) — abas · recorte; sempre visível
 └─ main.orcamento-main
-   ├─ orcamento-filters (linha de filtros) — oculta nas visões executivas
    ├─ orcamento-global-kpis (régua de indicadores) — oculta nas visões executivas
-   └─ Tabs das visualizações (Ações, Gráficos, Órgão, Folha de pagamento)
+   ├─ orcamento-filters (linha de filtros; em Ações, com Exportar à direita)
+   │  — oculta nas visões executivas
+   └─ Tabs das visualizações (Ações, Gráficos, Órgão, Folha de pagamento, Receitas)
 ```
 
 Margem lateral única para tudo: `px-6`, `xl:px-10`.
@@ -194,10 +204,16 @@ e é a única navegação nas visões executivas — não condicioná-la a
 
 - **Abas** (`role="tablist"`, `aria-label="Visualizações da execução"`): um
   botão por item de `CONTENT_VIEWS` (`role="tab"`, `aria-selected`), texto
-  `text-[15px] font-semibold`, cinza quando inativo; a ativa fica com o texto
-  escuro e um sublinhado de 3px no verde da marca (`border-b-[3px]
-  border-marca`). Sem ícone e sem a pílula deslizante de `useHoverPill` desde
-  2026-10-14 (seção 3.7). Externo com `overflow-x-auto` para telas estreitas.
+  `text-[15px]`. Inativa: `font-medium` cinza (`#80857f`), escurece no hover com
+  um filete claro embaixo. Ativa (reforçada em 2026-10-15, pedido do dono do
+  produto): `font-bold` no verde-escuro da marca (`text-marca-escura`) com
+  sublinhado de 4px no verde da marca (`border-b-4 border-marca`; `pb-[13px]`
+  mantém a altura). Cada rótulo reserva a largura da versão em negrito (cópia
+  invisível no mesmo `grid`), para a troca de aba não empurrar as vizinhas. Sem ícone e sem a pílula deslizante de `useHoverPill` desde
+  2026-10-14 (seção 3.7). Externo com `overflow-x-auto overflow-y-hidden` e
+  barra de rolagem oculta para telas estreitas; o `-mb-px` que leva o
+  sublinhado sobre a borda da faixa fica nesse contêiner, não nos botões
+  (nos botões ele vazava 1px e criava rolagem vertical nas abas).
 - **Recorte** (à direita, `ml-auto`): rótulo `Recorte` e um botão por item de
   `VIEWS` (`Geral`, `Emendas parlamentares`), `aria-pressed`, o ativo em
   negrito com sublinhado escuro de 2px. Fica `invisible` (e não some) nas
@@ -211,7 +227,14 @@ continuam navegando (seção 11, item 3).
 ### 3.3 Linha de filtros
 
 `orcamento-filters flex flex-wrap items-center gap-2.5 border-b py-3.5`, logo
-abaixo da faixa, **só** em `Ações` e `Gráficos`. Os campos não têm rótulo
+abaixo da régua de indicadores, **só** em `Ações` e `Gráficos`. Até 2026-10-15
+ficava acima da régua; desceu quando a aba Ações perdeu o cabeçalho próprio
+(seção 3.5), para os filtros ficarem colados à tabela que filtram. Na aba
+`Ações`, a linha termina com **Exportar** (seção 3.5), depois do resumo
+"Nenhum filtro aplicado". O resumo é `min-w-0 flex-1 basis-0 truncate
+text-right`: ocupa só a sobra entre Limpar e o botão e corta com reticências
+(texto inteiro no `title`), e o botão é `shrink-0`. Sem isso, um nome de órgão
+longo no resumo jogava o botão para uma segunda linha. Os campos não têm rótulo
 visível: o próprio valor diz o filtro (`Órgão: todos`, `Unidade: todas`,
 `Fonte: todas`; escolhido, o rótulo da opção já diz o código e o nome). A
 busca tem `aria-label`.
@@ -259,11 +282,12 @@ nos valores durante o carregamento. Cores dos anéis: `STAGE_COLORS`.
 
 ### 3.5 Conteúdo por aba
 
-- `actions` — seção "Ações orçamentárias" (seção 7.3):
-  - cabeçalho `h2` "Ações orçamentárias" (+ " — emendas parlamentares" no
-    recorte de emendas) e "{N} ações, na ordem do QDD";
-  - à direita, **Mostrar todos os estágios** (`aria-pressed`; alterna com
-    "Mostrar só o essencial") e **Exportar**;
+- `actions` — tabela de ações (seção 7.3), **sem cabeçalho próprio** desde
+  2026-10-15 (pedido do dono do produto): saíram o `h2` "Ações orçamentárias" e
+  a contagem "{N} ações, na ordem do QDD", e a linha de filtros ocupa o lugar;
+  - na linha de filtros, à direita: **Exportar**. O botão "Mostrar todos os
+    estágios / só o essencial" saiu em 2026-10-15 (pedido do dono do produto):
+    a tabela mostra sempre todos os estágios da despesa;
   - **Exportar** (`Popover` com `Select` de formato Excel/CSV/JSON + botão
     "Exportar recorte filtrado"): exporta **client-side** o recorte do recorte
     ativo (`dimensionActions`: `filteredActions` em Geral; só as ações de
@@ -289,7 +313,11 @@ nos valores durante o carregamento. Cores dos anéis: `STAGE_COLORS`.
     elementos, área = dotação, cor = % executado na rampa sequencial) · **De onde
     vem o recurso** (rosca das 5 maiores fontes + "Demais fontes") · **Quem tem
     orçamento grande e execução baixa** (dispersão dos órgãos) · **Como a
-    dotação mudou desde a lei** (halteres dos 8 órgãos com maior alteração);
+    dotação mudou desde a lei** (halteres de todos os órgãos com alteração,
+    do maior saldo absoluto para o menor; as linhas rolam dentro de um teto de
+    296px e o eixo fica fixo embaixo, desde 2026-10-15; ocupa a largura toda
+    do card, medida por `ResizeObserver`, em escala 1:1 — sem o teto de 720px
+    dos demais SVGs);
   - `amendments`: **Quem recebe as emendas** (mapa de áreas dos 12 maiores
     órgãos, cor categórica) · **Maiores emendas** (pirulito das 6 maiores ações)
     · **Onde o dinheiro das emendas é aplicado** (rosca dos 5 maiores elementos
@@ -300,6 +328,11 @@ nos valores durante o carregamento. Cores dos anéis: `STAGE_COLORS`.
   bloco é decisão de layout desta seção.
 - `fiscal`: `FiscalSecretariatView` (seção 7.4).
 - `payroll`: `PayrollPanel` (seção 7.5) ou `Skeleton h-96 w-full`.
+- `revenue` (`Receitas`): `RevenuePanel` (seção 7.8) — seletor **Ano das
+  receitas** (2016 até o corrente), régua própria da receita, **Arrecadação mês
+  a mês** (colunas empilhadas por grupo) e **Receita por tributo** (tabela
+  tributo × mês). O ano começa no exercício do cabeçalho; depois de escolhido na
+  aba, fica.
 
 ### 3.6 Estados da página
 
@@ -386,6 +419,7 @@ comportam exatamente como antes.
 | Ações | `GET /api/budget-actions?year=` | `listActions` (`src/lib/store.ts`) — a importação `VIGENTE` **daquele exercício**; `year` SELECIONA o import, não filtra dentro dele; para admin, aceita ainda `organizationCode` e `unitCode`; inclui `expenseLines` (via `expenseLineSelect`) e `assignments`; ordena por órgão/unidade/projeto-atividade |
 | Órgãos | `GET /api/organizations?year=` | cadastro do exercício (`ExerciseOrganization`/`ExerciseUnit`), ordenado por código. **As opções do filtro de órgão não vêm daqui** — veja a seção 9.18 |
 | Metadados | `GET /api/metadata?year=` | inclui `exercises`, `currentYear`, `comparisonOnly` e o `vigenteImport` **do exercício selecionado** |
+| Receitas | `GET /api/revenue` | `RevenueMonth` inteira (série desde 2016, ~2 mil linhas), gravada pelo job semanal (seção 8.1); restrita a `SEPLAN_ADMIN`; devolve `summaries`, um resumo de `summarizeRevenue` (seção 6.8) por ano, do mais recente ao mais antigo, cada um com `collectedAt` (última coleta do ano) e `partialMonth` (mês corrente, se já coletado). **Não** recebe `?year=`: o seletor de ano é da aba. Carregada em `load()` em paralelo, com `catch` próprio — a falha vira mensagem na aba, o resto do painel carrega |
 | Folha | `GET /api/payroll` | `PayrollSnapshot` mais recente (`orderBy year desc, month desc`) com `groups`; rota restrita a `SEPLAN_ADMIN`; devolve só somas, agrupadas por `dimension` e ordenadas por `grossTotal` desc (`src/app/api/payroll/route.ts`) |
 
 ### 5.2 Formato dos dados
@@ -698,6 +732,70 @@ R$ 300.000,00 de elementos 34/36 fora.
   redução): estado vazio próprio ("Nenhuma alteração de dotação no recorte…"),
   não o genérico de filtros.
 
+### 6.8 Receitas (`src/lib/revenue.ts`)
+
+Duas etapas puras: `bucketRevenue` (linhas do portal → um agregado por mês e
+categoria, o que o job grava em `RevenueMonth`) e `summarizeRevenue` (agregados →
+resumo da tela, o que a rota devolve). `aggregateRevenue` encadeia as duas.
+
+Fonte: `/receitas/listar` do Portal da Transparência, **um mês por consulta**
+(`periodo=3`, `mes`), com `orgao=0` e `filtro=0` — vazios derrubam a rota com
+HTTP 500. Conferido em 2026-10-15: o `arrecadado` de cada linha é **do mês**,
+não acumulado; `previsto` é a previsão anual da lei, repetida em todo mês;
+`previstoatualizado` muda ao longo do ano.
+
+- **Classificação** (`classifyRevenue(código, ano)`): natureza nos 8 primeiros
+  dígitos; vence o primeiro prefixo de `REVENUE_NATURE_PREFIXES` que casar, na
+  **estrutura em vigor no ano** (`revenueNatureEra`). A STN reorganizou os
+  códigos duas vezes no período, e o mesmo código muda de sentido: `11130200` é
+  ICMS em 2016 e IRRF hoje. Estruturas (conferidas nos dados em 2026-10-15):
+  - `antiga`, até 2017: ICMS `111302`, IPVA `111205`, ITCMD `111207`, IRRF
+    `111204`, FPE `172101`, FUNDEB `1724`, SUS `172133`, royalties `172122`;
+    multas e juros (`191142`) e dívida ativa (`193115`) do ICMS ficavam fora do
+    imposto e são trazidos para ele;
+  - `transicao`, 2018–2021: ICMS `111802`, IPVA `1118012`, ITCMD `1118013`,
+    IRRF `11130`, FPE `1718011`, FUNDEB `1758`, SUS `171803`, royalties `171802`;
+  - `atual`, de 2022 (Portaria Conjunta STN/SOF 650/2019, `C.O.E.D.DD.D.T`):
+    ICMS `111450`, IPVA `111251`, ITCMD `111252`, IRRF `11130`, FPE `171150`,
+    FUNDEB `175`, SUS `1713`, royalties `1712`; o tipo (principal, multas,
+    dívida ativa) cai no mesmo tributo.
+  Os prefixos genéricos (taxas `112`, contribuições `12`, intra `7`/`8`…) são os
+  mesmos nas três. Grupos: `tributaria`
+  (ICMS, IPVA, ITCMD, IRRF, Taxas, Outros tributos), `transferencias` (FPE,
+  FUNDEB, SUS, royalties, outras correntes, capital) e `demais`.
+- **Deduções**: código com 9 no lugar do primeiro dígito (`91145011` ↔ ICMS
+  `11145011`). Entram no tributo de origem com o sinal do portal (negativo).
+  Por tributo e mês: `net = gross + deductions`. A tabela mostra o **líquido**;
+  o bruto fica no detalhe da célula. O FUNDEB **recebido** (natureza `175…`)
+  aparece em Transferências; a dedução para formá-lo, no tributo de origem.
+- **Intraorçamentárias** (7… e 8…) ficam num item próprio, dentro do total —
+  como no total anual do portal.
+- **Grupos** (`groups`): subtotal líquido por mês, no ano e da previsão
+  atualizada de cada grupo, calculado em `aggregateRevenue` — a linha de grupo da
+  tabela e as colunas empilhadas só leem esses valores (R3).
+- **Fechamento**: nenhuma linha é descartada (o último prefixo é vazio); uma
+  categoria gravada que saiu do catálogo cai em "Outras receitas correntes".
+  Conferido em 2026-10-15 ano a ano, 2016–2025, contra o total anual de
+  `/receitas/valores`: igual ao centavo em todos (2016: R$ 5.529,66 mi; 2020:
+  R$ 7.026,97 mi; 2024: R$ 11.867,23 mi). Com as três estruturas, a série por
+  tributo não tem saltos na troca de estrutura (ICMS líquido: R$ 863 mi em 2016,
+  1.201 em 2018, 1.522 em 2022, 1.887 em 2025) e nada cai em "Outros tributos".
+- **Filtro do gráfico mensal** (`selectedGroupNet`): líquido mensal por grupo
+  somando só as categorias marcadas; com todas marcadas, igual a `groups`.
+- **Comparação com o ano anterior** (`compareSamePeriod`): líquido dos meses
+  fechados do ano escolhido contra os mesmos meses do ano anterior; o mês em
+  curso fica de fora, para não comparar mês parcial com mês inteiro. Conferido
+  em 2026-10-15 contra o total anual de `/receitas/valores`: líquido 2026
+  (jan–out) = R$ 11.036.517.915,93 e 2025 = R$ 13.412.211.059,34, iguais ao
+  centavo. A previsão atualizada vem da **soma das linhas** do último mês: o
+  campo `previstoatualizado` do total anual do portal sai quase o dobro da
+  soma das linhas (R$ 24,85 bi contra R$ 13,94 bi em 2026) e não é usado.
+- **Realizado** = líquido arrecadado ÷ previsão atualizada (líquida), via
+  `shareOf`.
+- **Mês em curso** (`partialMonth`): no exercício corrente, se a última coleta
+  já pegou o mês corrente, ele ainda está arrecadando; leva `*` e cor esmaecida, e fica fora da
+  média mensal e do "último mês fechado" da régua.
+
 ## 7. Componentes do módulo
 
 ### 7.1 `ExecutionChartCard` (`execution-breakdown-panel.tsx:110-206`)
@@ -760,8 +858,7 @@ Mecânica:
 ### 7.3 `OverviewScheduledActionsPanel` (`overview-scheduled-actions-panel.tsx`)
 
 Compartilhado com os orçamentos temáticos; no módulo é usado com
-`variant="execution"`, `actions={dimensionActions}`, `organizations` e
-`showAllStages`. O variant adapta o painel para receber filtros externos (órgão,
+`variant="execution"`, `actions={dimensionActions}` e `organizations`. O variant adapta o painel para receber filtros externos (órgão,
 função, subfunção, busca) em vez de expor os próprios. O painel e a linha da
 tabela (`OverviewActionRow`) são `memo` — a lista chega a milhares de linhas.
 Não criar um painel de ações paralelo para o módulo; evoluir este. **Só os ramos
@@ -769,22 +866,23 @@ Não criar um painel de ações paralelo para o módulo; evoluir este. **Só os 
 
 No variant de execução (desde 2026-10-14):
 
-- **Coluna Ação** sem largura fixa (ocupa o resto): nome legível em
-  `font-medium` (`readableName`, só exibição; o `title` traz o texto original
-  do QDD) e uma linha de apoio com `{projeto/atividade} · {sigla do órgão} ·
+- **Coluna Ação** sem largura fixa (ocupa o resto): nome em `font-medium`,
+  **caixa alta** desde 2026-10-15 (pedido do dono do produto; `uppercase` por
+  CSS sobre o texto limpo por `readableName`, que preserva acentos e corrige
+  espaços; o `title` traz o texto original do QDD) e uma linha de apoio com `{projeto/atividade} · {sigla do órgão} ·
   {unidade}` em `text-xs text-muted-foreground`. As colunas Órgão e Unidade
   saíram para essa linha. O chevron continua abrindo o detalhamento por
   natureza e fonte (`ExpenseBreakdownTable`).
-- **Essencial** (padrão): Dotação atualizada (`font-semibold`), Liquidado e
-  Execução. **Todos os estágios** (`showAllStages`): Dotação inicial, Dotação
-  atualizada, Empenhado, Liquidado, Pago e Execução, na ordem do ciclo. Cada
-  coluna monetária reserva `10.5rem`; a de execução, `8.5rem`, com anel de 22px
+- **Sempre todos os estágios**: Dotação inicial, Dotação atualizada
+  (`font-semibold`), Empenhado, Liquidado, Pago e Execução, na ordem do ciclo.
+  O modo "essencial" (só atualizada, liquidado e execução, com o botão que
+  alternava) saiu em 2026-10-15, com a prop `showAllStages`. Cada coluna
+  monetária reserva `10.5rem`; a de execução, `8.5rem`, com anel de 22px
   (`STAGE_COLORS.liquidated`) e o percentual. Cabeçalho e linhas leem a mesma
-  lista de colunas (`executionColumns`), então o botão esconde a célula do
-  cabeçalho e a das linhas juntas.
+  lista de colunas (`EXECUTION_MONEY_COLUMNS`).
 - **Cabeçalho** `bg-marca text-marca-contraste`, rótulos em caixa alta
   espaçada, `sticky`. Largura mínima compartilhada pelo cabeçalho e pelas
-  linhas (`min-w-[56rem]` no essencial, `min-w-[82rem]` com todos os estágios).
+  linhas (`min-w-[82rem]`).
 - O contêiner da lista concentra a rolagem vertical e horizontal (R6).
 
 ### 7.4 `FiscalSecretariatView` (`fiscal-secretariat-view.tsx`)
@@ -947,6 +1045,52 @@ Os cartões Recharts da grade anterior (`CycleStackedBarChart`,
 `ExecutionTablePanel` desde 2026-10-01. Recharts continua no módulo pela
 `PayrollPanel`.
 
+### 7.8 `RevenuePanel` (`revenue-panel.tsx`)
+
+`memo`. Recebe `data` (um `RevenueDto` por ano; `undefined` carregando →
+`Skeleton`; lista vazia → estado vazio próprio), `error` (mensagem da rota →
+estado vazio com o texto da falha), `pagePadding` e `defaultYear`.
+
+- **Ano das receitas** (`YearSelector`): um botão por ano coletado (`aria-pressed`,
+  o ativo em negrito com sublinhado escuro, o mesmo do Recorte), rola na
+  horizontal em tela estreita. O ano começa em `defaultYear` (o exercício do
+  cabeçalho, `loadedYear`) e, se ele não tiver receita, no mais recente; a
+  escolha na aba vale até a página recarregar. Só troca o resumo mostrado.
+- **Régua** (`RevenueStrip`): Realizado (anel grande, arrecadado ÷ previsão
+  atualizada) · Arrecadado no ano (líquido, com a variação sobre o mesmo
+  período do ano anterior) · Previsão atualizada (com a da lei) · último mês
+  fechado (com a média mensal) · Deduções (com o bruto).
+- **Arrecadação mês a mês** (`MonthlyColumns`): 12 colunas, empilhadas pelo
+  líquido de cada grupo (`CHART_CATEGORICAL` 0–2, ordem fixa); largura medida
+  com `useMeasuredWidth` (o mesmo hook do halteres).
+  - **Filtro de tributos** (`CategoryFilter`, 2026-10-15): caixa reta de borda
+    fina, fundo branco, sem cantos nem sombra, com "TRIBUTOS" em caixa alta e o
+    valor ("Todos", em negrito) dentro, mais a seta. Com filtro ativo, a borda e o valor
+    escurecem e a seta vira um × que volta a todos. Histórico: o botão
+    arredondado dos filtros de Órgão foi recusado (destoava), e só o texto
+    sublinhado ficou "escondido". Abre um `Popover` de cantos
+    retos e borda fina, sem sombra, com uma caixa de seleção por
+    categoria presente no ano, agrupadas, a caixa do grupo (intermediária quando
+    parcial), "Marcar todos" e "Desmarcar todos". O valor resume a seleção ("Todos", o nome quando
+    é um só, "3 de 19", "Nenhum"). Ao lado, a legenda de cor só dos grupos que
+    têm algo marcado. Primeiro as caixas ficavam todas abertas sobre o gráfico;
+    o dono do produto pediu a caixa expansível. As colunas somam só as
+    marcadas, por grupo (`selectedGroupNet`, seção 6.8), e o eixo se reescala.
+    O estado guarda as **desmarcadas**, vive no `MonthlyColumns` e sobrevive à
+    troca de ano; categoria nova entra marcada. Nada marcado → estado vazio.
+    Vale só para o gráfico: régua e tabela seguem com tudo.
+  - Detalhe por mês: com tudo marcado, os grupos, o bruto e as deduções; com
+    filtro, cada categoria marcada e o total do mês para comparação.
+- **Sem frase de leitura nos dois blocos** (2026-10-15, pedido do dono do
+  produto): repetiam a régua e a tabela. A única explicação fica na nota de
+  rodapé da tabela (líquido × bruto, mês em curso, fonte, FUNDEB).
+- **Receita por tributo** (`RevenueTable`): linhas por grupo (subtotal) e
+  tributo, colunas pelos meses consultados + No ano + Previsão atualizada +
+  Realizado; valores compactos com o valor por extenso (e o bruto, quando há
+  dedução) no `title`. Rola na horizontal com a primeira coluna fixa. Não usa
+  `ExecutionTablePanel` (10.13): aquele é de `ExecutionRow` por recorte, e esta
+  é uma matriz tributo × mês.
+
 ## 8. Coleta da folha — job
 
 `.github/workflows/folha.yml`:
@@ -971,6 +1115,32 @@ Regra de manutenção: **as duas implementações (lib e script) devem continuar
 idênticas em comportamento**. Mudar a varredura exige mudar as duas. Se um dia
 isso doer, o refactor certo é extrair um módulo compartilhado `server-only` — e
 documentar aqui.
+
+### 8.1 Coleta das receitas — job semanal
+
+`.github/workflows/receitas.yml`:
+
+- `schedule: cron '0 9 * * 1'` (segunda, 09:00 UTC = 04:00 America/Rio_Branco)
+  + `workflow_dispatch` com input `ano`; semanal por decisão do dono do
+  produto (2026-10-15): a arrecadação não precisa estar no painel no dia;
+- `concurrency: group coleta-receitas`; `timeout-minutes: 15`;
+- mesmos steps da folha; `node-version: 22` precisa resolver para ≥ 22.18.
+
+`scripts/collect-revenue.mjs` (local: `npm run collect:revenue` em `apps/web`,
+lê o `.env.local`):
+
+- sem `--ano`, coleta o ano corrente, o anterior (o portal ainda lança ajustes
+  de encerramento no começo do ano) e os exercícios com QDD (`BudgetImport`) —
+  cada um até o mês corrente (Rio Branco) ou os 12 meses. A série antiga não
+  muda e não é recoletada toda semana;
+- `--ano=AAAA` ou `--ano=AAAA-AAAA` (faixa): a série histórica 2016–2025 foi
+  carregada assim em 2026-10-15 (`--ano=2016-2026`), 216 agregados por ano;
+- `--dry-run` consulta e mostra os totais sem gravar;
+- importa `bucketRevenue`/`summarizeRevenue` de `src/lib/revenue.ts` (remoção
+  de tipos nativa do Node), então **não há** segunda implementação a manter;
+- falha (HTTP, página única estourada, mês sem linhas) aborta só aquele
+  exercício, que mantém os dados anteriores; o job sai com erro no fim;
+- grava o exercício inteiro numa transação (`deleteMany` + `createMany`).
 
 ## 9. Decisões deliberadas (não "corrigir")
 
@@ -1091,6 +1261,17 @@ documentar aqui.
     fora do mockup e seguem como estavam: a `PayrollPanel` (aba Folha de
     pagamento) e a exportação.
 
+28. **Receitas por job semanal e tabela própria** (2026-10-15). O dono do
+    produto pediu a aba "pelo portal", desagregada por tributo, no padrão da
+    folha e com coleta semanal. O SICAF não foi usado: o pipeline dele coleta só
+    o QDD (despesa), e as telas de receita exigiriam reconhecer GeneXus com
+    login pessoal. Uma primeira versão lia o portal ao vivo com cache; foi
+    trocada pelo job a pedido do dono do produto. A aba fica por último,
+    depois do ciclo da despesa (item 15). No mesmo dia entrou a série histórica
+    (2016 em diante, também a pedido) com seletor de ano próprio na aba — a
+    receita não depende de haver QDD do ano, então não usa o seletor de
+    exercício do cabeçalho.
+
 ## 10. Proibições explícitas
 
 Violação de qualquer item é motivo para rejeitar a mudança:
@@ -1120,7 +1301,8 @@ Violação de qualquer item é motivo para rejeitar a mudança:
     leitura (R12). Os modelos `FiscalYear`, `ExerciseOrganization`,
     `ExerciseUnit` e `ExerciseUnitExecutor`, criados para os múltiplos
     exercícios, pertencem à importação e à curadoria; este módulo apenas lê o que
-    elas alimentam.
+    elas alimentam. `PayrollSnapshot`/`PayrollGroup` e `RevenueMonth` são
+    escritas só pelos jobs de coleta (seção 8), nunca por rota do módulo.
 13. **Nenhuma tabela nova ad-hoc com markup próprio** onde `ExecutionTablePanel`
     serve (com `moneyColumns`/`hideRate`). O componente está sem uso desde
     2026-10-01 (seção 9, item 26), mas segue sendo o caminho para qualquer
@@ -1140,8 +1322,9 @@ Violação de qualquer item é motivo para rejeitar a mudança:
 2. Testado em **três larguras**: ≥ 1360px (régua em 6 colunas, grades em 2),
    1024–1180px (régua 3 × 2, grades em 1 coluna), < `sm` (régua 2 colunas,
    filtros quebrando linha, abas rolando).
-3. Navegação por setas ← → funciona e **ignora** inputs, selects, comboboxes e
-   abas internas por tema (o guard do handler deve continuar intacto).
+3. Navegação por setas ← → funciona e **ignora** inputs, selects, comboboxes,
+   caixas de seleção (`role="checkbox"`, filtro da aba Receitas) e abas
+   internas por tema (o guard do handler deve continuar intacto).
 4. Abas não piscam ao alternar (`forceMount` mantido); `React DevTools` (ou
    profiler) não mostra re-render das abas ocultas em troca de recorte/filtro
    (`memo` mantido).
@@ -1179,6 +1362,7 @@ destes, nunca lógica nova de adivinhação:
 | Catálogos da natureza (STN/SOF) | `src/lib/expense-nature.ts` | atualização da tabela oficial |
 | Códigos de controle da dívida | `AMENDMENT_DEBT_CONTROL_CODES` (`functional-classification.ts:240-243`) | novos códigos de dívida iniciados em 8 |
 | Siglas de órgão | `ACRONYM_OVERRIDES` (`organization-acronym.ts:10-23`) | órgão sem sigla extraível do nome |
+| Categorias de receita por natureza (tributos, transferências) | `REVENUE_NATURE_PREFIXES` e `revenueNatureEra` (`src/lib/revenue.ts`) | natureza nova relevante que hoje cai em "Outras…", ou nova reorganização da STN (nova estrutura = nova era, com o ano de corte); o primeiro prefixo que casa vence, então o específico vai antes do genérico. Depois de mudar, recolete os anos afetados (`--ano=`) |
 | Renomeações de família de carreira | ramo `else` de `careerFamilyLabel` (`payroll-panel.tsx`) | denominação nova do portal que precisa de nome legível no ranking |
 
 ## 13. Limitações conhecidas (contexto, não tarefas)
@@ -1197,6 +1381,12 @@ atualizar este documento.
   compacta.
 - `listActions` não filtra por fonte no banco; a carga do QDD vigente inteiro
   (com `expenseLines`) trafega para o navegador a cada `load()`.
+- As receitas dependem do endpoint interno `/receitas/listar` do portal, que não
+  é contrato público; uma mudança nele derruba o job semanal até ser detectada
+  (os dados anteriores ficam). Se o portal passar de 5.000 linhas num mês, a
+  coleta falha em vez de somar só a primeira página. Com coleta semanal, o
+  painel pode estar até uma semana atrás do portal; o rodapé da aba mostra a
+  data da coleta.
 - O portal publica a folha com atraso; o painel mostra o mês mais recente
   disponível, que pode não ser o corrente.
 - O `payroll` carregado em paralelo com `catch` pode ficar `null` sem aviso ao
@@ -1230,6 +1420,9 @@ atualizar este documento.
 | `src/components/domain/execution-breakdown-panel.tsx` | cartões da aba `Gráficos`: `ExecutionChartCard`, gráficos do ciclo, dispersão e `BudgetChangeChart`; `ExecutionTablePanel` sem uso desde 2026-10-01 (seção 9, item 26) |
 | `src/components/domain/fiscal-secretariat-view.tsx` | visão por órgão |
 | `src/components/domain/payroll-panel.tsx` | painel da folha |
+| `src/lib/revenue.ts` | classificação da receita por tributo, agregação mensal e resumo (puro; usado pela rota e pelo job) |
+| `scripts/collect-revenue.mjs` | job semanal: portal → `RevenueMonth` |
+| `src/components/domain/revenue-panel.tsx` | aba Receitas |
 | `src/components/domain/overview-scheduled-actions-panel.tsx` | aba Ações (variant execution) |
 | `src/lib/payroll-scope.ts` | escopo QDD × portal, vínculos |
 | `src/lib/payroll-portal.ts` | coleta server-only |
