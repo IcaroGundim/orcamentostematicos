@@ -18,6 +18,7 @@ import {
   type RevenueGroup,
   type RevenueRow,
 } from '@/lib/revenue';
+import { summarizeDuodecimo, type DuodecimoBase, type DuodecimoSummary } from '@/lib/duodecimo';
 import { cn } from '@/lib/utils';
 import {
   MicroLabel,
@@ -517,6 +518,234 @@ const RevenueTable = memo(function RevenueTable({ data }: { data: RevenueDto }) 
   );
 });
 
+// ── Duodécimo dos Poderes ────────────────────────────────────────────────────
+
+/** Dotação de fonte 100 dos Poderes no QDD carregado (`treasuryAppropriationByOrganization`). */
+export interface BranchAppropriations {
+  year: number;
+  byOrganization: Record<string, { initialBudget: number; updatedBudget: number }>;
+}
+
+const BASE_LINES: Array<{ key: keyof DuodecimoBase; label: string; detail: string; sign: '' | '−' | '=' }> = [
+  {
+    key: 'revenue',
+    label: 'Receita da base',
+    detail: 'ICMS, IPVA, ITCMD, taxas administrativas (fonte do Tesouro), FPE, IRRF, IPI-exportação e ICMS-desoneração (LC 87/1996), brutos',
+    sign: '',
+  },
+  { key: 'municipalities', label: 'Municípios', detail: '25% do ICMS + 50% do IPVA + 25% do IPI-exportação', sign: '−' },
+  { key: 'pasep', label: 'PASEP', detail: '1% do FPE', sign: '−' },
+  { key: 'education', label: 'Educação (30%)', detail: '30% da receita da base menos a parte dos municípios', sign: '−' },
+  { key: 'health', label: 'Saúde (12%)', detail: '12% da receita da base menos a parte dos municípios', sign: '−' },
+  { key: 'netRevenue', label: 'Receita líquida', detail: 'Base dos percentuais da LDO', sign: '=' },
+];
+
+/** Percentual da LDO como a lei escreve: até duas casas (6,26%, 5%, 24,81%). */
+function ldoPercent(value: number) {
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+}
+
+/** Diferença com sinal: positivo = a arrecadação gerou mais que os duodécimos. */
+function signedCompact(value: number) {
+  if (Math.abs(value) < 0.005) return compactMoney(0);
+  return `${value > 0 ? '+' : '−'}${compactMoney(Math.abs(value))}`;
+}
+
+const DuodecimoTables = memo(function DuodecimoTables({
+  summary,
+  partialMonth,
+}: {
+  summary: DuodecimoSummary;
+  partialMonth: number | null;
+}) {
+  const { branches, baseByMonth, baseClosed, closedMonths, months, impliedNetForecast } = summary;
+  const lastClosed = closedMonths.at(-1);
+  const untilLabel = lastClosed ? `até ${MONTHS_SHORT[lastClosed - 1]}` : 'no ano';
+  const hasLoa = branches.some((branch) => branch.appropriation != null);
+  const cell = 'px-2.5 py-2 text-right tabular-nums whitespace-nowrap';
+  const money = (value: number | null, title?: string) => (
+    <td className={cell} title={value == null ? undefined : (title ?? formatMoney(value))}>
+      {value == null ? <span className="text-[#c3c6bf]">–</span> : compactMoney(value)}
+    </td>
+  );
+  const totals = branches.reduce(
+    (total, branch) => ({
+      appropriation: total.appropriation + (branch.appropriation ?? 0),
+      monthly: total.monthly + (branch.monthlyInstallment ?? 0),
+      installments: total.installments + (branch.installmentsClosed ?? 0),
+      due: total.due + branch.dueClosed,
+    }),
+    { appropriation: 0, monthly: 0, installments: 0, due: 0 },
+  );
+
+  return (
+    <>
+      <div className="max-w-full overflow-x-auto [scrollbar-color:#c3c6bf_transparent] [scrollbar-width:thin]">
+        <table className="w-full min-w-[860px] border-collapse text-[13.5px]">
+          <thead>
+            <tr className="border-b-2 border-[#141714] text-left">
+              <th className="py-2 pr-3 font-semibold">Poder ou Instituição</th>
+              <th className="px-2.5 py-2 text-right font-semibold">Participação</th>
+              <th className="px-2.5 py-2 text-right font-semibold">Dotação na LOA (fonte 100)</th>
+              <th className="px-2.5 py-2 text-right font-semibold">Duodécimo</th>
+              <th className="px-2.5 py-2 text-right font-semibold">Duodécimos {untilLabel}</th>
+              <th className="px-2.5 py-2 text-right font-semibold">Gerado pela arrecadação {untilLabel}</th>
+              <th className="py-2 pl-2.5 text-right font-semibold">Diferença</th>
+            </tr>
+          </thead>
+          <tbody>
+            {branches.map((branch) => (
+              <tr key={branch.key} className="border-b border-[#ecede8]">
+                <td className="py-2 pr-3">
+                  {branch.label} <span className="text-[#80857f]">({branch.key})</span>
+                </td>
+                <td className={cell}>{ldoPercent(branch.percent)}</td>
+                {money(branch.appropriation)}
+                {money(branch.monthlyInstallment)}
+                {money(branch.installmentsClosed)}
+                {money(branch.dueClosed)}
+                <td className={cn(cell, 'pr-0')} title={branch.installmentsClosed == null ? undefined : formatMoney(branch.dueClosed - branch.installmentsClosed)}>
+                  {branch.installmentsClosed == null ? (
+                    <span className="text-[#c3c6bf]">–</span>
+                  ) : (
+                    signedCompact(branch.dueClosed - branch.installmentsClosed)
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-[#141714] font-bold">
+              <td className="py-2 pr-3">Total</td>
+              <td className={cell}>{ldoPercent(summary.totalPercent)}</td>
+              {money(hasLoa ? totals.appropriation : null)}
+              {money(hasLoa ? totals.monthly : null)}
+              {money(hasLoa ? totals.installments : null)}
+              {money(totals.due)}
+              <td className={cn(cell, 'pr-0')} title={hasLoa ? formatMoney(totals.due - totals.installments) : undefined}>
+                {hasLoa ? signedCompact(totals.due - totals.installments) : <span className="text-[#c3c6bf]">–</span>}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <h4 className="mb-2 mt-8 text-sm font-semibold">Base de cálculo e valor gerado mês a mês (Anexo III)</h4>
+      <div className="max-w-full overflow-x-auto [scrollbar-color:#c3c6bf_transparent] [scrollbar-width:thin]">
+        <table className="w-full min-w-[1100px] border-collapse text-[13.5px]">
+          <thead>
+            <tr className="border-b-2 border-[#141714] text-left">
+              <th className="sticky left-0 bg-white py-2 pr-3 font-semibold">Item</th>
+              {months.map((month) => (
+                <th key={month} className="px-2.5 py-2 text-right font-semibold capitalize">
+                  {MONTHS_SHORT[month - 1]}
+                  {month === partialMonth ? '*' : ''}
+                </th>
+              ))}
+              <th className="px-2.5 py-2 text-right font-semibold">{lastClosed ? `Até ${MONTHS_SHORT[lastClosed - 1]}` : 'No ano'}</th>
+              <th className="py-2 pl-2.5 text-right font-semibold">Prevista na LOA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {BASE_LINES.map((line) => (
+              <tr
+                key={line.key}
+                className={cn('border-b border-[#ecede8]', line.sign === '=' && 'bg-[#f5f6f2] font-semibold')}
+              >
+                <td
+                  className={cn('sticky left-0 whitespace-nowrap py-2 pr-3', line.sign === '=' ? 'bg-[#f5f6f2]' : 'bg-white')}
+                  title={line.detail}
+                >
+                  <span className="inline-block w-3 text-[#80857f]">{line.sign}</span> {line.label}
+                </td>
+                {months.map((month) => (
+                  <Fragment key={month}>{money(baseByMonth[month - 1]![line.key])}</Fragment>
+                ))}
+                {money(baseClosed[line.key])}
+                {line.key === 'netRevenue' ? (
+                  money(impliedNetForecast, impliedNetForecast == null ? undefined : `${formatMoney(impliedNetForecast)}: dotações de fonte 100 dos Poderes ÷ ${ldoPercent(summary.totalPercent)}`)
+                ) : (
+                  <td className={cn(cell, 'pr-0')} />
+                )}
+              </tr>
+            ))}
+            {branches.map((branch) => (
+              <tr key={branch.key} className="border-b border-[#ecede8]">
+                <td className="sticky left-0 whitespace-nowrap bg-white py-2 pl-[18px] pr-3" title={branch.label}>
+                  {branch.key} ({ldoPercent(branch.percent)})
+                </td>
+                {months.map((month) => (
+                  <Fragment key={month}>{money(branch.dueByMonth[month - 1]!)}</Fragment>
+                ))}
+                {money(branch.dueClosed)}
+                {money(branch.appropriation)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+});
+
+/**
+ * Duodécimo dos Poderes e Instituições pela regra da LDO (contrato, seção 6.9): o
+ * que a receita arrecadada gera para cada um, ao lado do duodécimo da LOA.
+ */
+function DuodecimoBlock({
+  data,
+  branchAppropriations,
+}: {
+  data: RevenueDto;
+  branchAppropriations: BranchAppropriations | null;
+}) {
+  const appropriations =
+    branchAppropriations && branchAppropriations.year === data.year ? branchAppropriations.byOrganization : null;
+  const summary = summarizeDuodecimo(data.year, data.rows, data.months, data.partialMonth, appropriations);
+  if (!summary) return null;
+
+  const lastClosed = summary.closedMonths.at(-1);
+  const due = summary.branches.reduce((total, branch) => total + branch.dueClosed, 0);
+  const installments = summary.branches.reduce((total, branch) => total + (branch.installmentsClosed ?? 0), 0);
+  const period = lastClosed ? `até ${MONTHS_LONG[lastClosed - 1]}` : 'no ano';
+
+  return (
+    <VizBlock
+      title="Duodécimo dos Poderes e Instituições"
+      summary={
+        lastClosed ? (
+          <>
+            Pela {summary.rule.law}, a receita arrecadada {period} gera <b>{compactMoney(due)}</b> aos Poderes e
+            Instituições ({ldoPercent(summary.totalPercent)} da receita líquida de {compactMoney(summary.baseClosed.netRevenue)}).
+            {appropriations ? (
+              <>
+                {' '}
+                Os duodécimos da LOA somam <b>{compactMoney(installments)}</b> no mesmo período.
+              </>
+            ) : null}
+          </>
+        ) : (
+          'Nenhum mês fechado ainda no exercício.'
+        )
+      }
+    >
+      <DuodecimoTables summary={summary} partialMonth={data.partialMonth} />
+      <p className="mt-3 text-[12.5px] leading-normal text-[#80857f]">
+        Regra da {summary.rule.law} e Anexo III: os percentuais incidem sobre a receita líquida, que é a receita da base
+        menos a parte dos municípios, o PASEP e os 30% da educação e os 12% da saúde, calculados sobre a receita menos a
+        parte dos municípios. Essa leitura reproduz a receita líquida que a LOA 2026 usou para os Poderes (diferença de
+        0,002%). Valores brutos de cada mês, como arrecadados; o mês em curso (*) fica fora do acumulado. Duodécimo =
+        dotação inicial de fonte 100 do Poder no QDD ÷ 12.{' '}
+        {appropriations
+          ? null
+          : `Para comparar com a LOA, selecione o exercício ${data.year} no cabeçalho. `}
+        O Portal da Transparência não publica as transferências feitas aos Poderes: a tabela mostra o que a regra gera
+        com a receita arrecadada e o duodécimo previsto na LOA, não o que foi efetivamente repassado.
+      </p>
+    </VizBlock>
+  );
+}
+
 // ── Seletor de ano ───────────────────────────────────────────────────────────
 
 /**
@@ -577,6 +806,7 @@ export const RevenuePanel = memo(function RevenuePanel({
   error,
   pagePadding,
   defaultYear,
+  branchAppropriations,
 }: {
   /** Um resumo por ano coletado, do mais recente ao mais antigo; `undefined` enquanto carrega. */
   data: RevenueDto[] | undefined;
@@ -584,6 +814,8 @@ export const RevenuePanel = memo(function RevenuePanel({
   pagePadding: string;
   /** Ano mostrado de início: o exercício do painel, se tiver receita; senão o mais recente. */
   defaultYear: number | null;
+  /** Dotação de fonte 100 dos Poderes no QDD carregado (duodécimo); `null` sem QDD. */
+  branchAppropriations: BranchAppropriations | null;
 }) {
   // Escolha explícita do usuário; sem ela, segue `defaultYear` (que muda com o exercício).
   const [pickedYear, setPickedYear] = useState<number | null>(null);
@@ -642,6 +874,7 @@ export const RevenuePanel = memo(function RevenuePanel({
             portal.
           </p>
         </VizBlock>
+        <DuodecimoBlock data={data} branchAppropriations={branchAppropriations} />
       </div>
     </>
   );

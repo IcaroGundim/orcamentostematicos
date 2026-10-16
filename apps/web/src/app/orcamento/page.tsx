@@ -60,6 +60,7 @@ import {
 import { shareOf, topWithOther } from '@/lib/chart-geometry';
 import {
   aggregateBudgetChangesByOrganization,
+  treasuryAppropriationByOrganization,
   aggregateByAction,
   aggregateByElement,
   aggregateByOrganization,
@@ -71,6 +72,7 @@ import {
   type ExecutionRow,
   type ExecutionTotals,
 } from '@/lib/execution-monitor';
+import { DUODECIMO_ORGANIZATION_CODES } from '@/lib/duodecimo';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { getFonteLabel } from '@/lib/fontes-recursos';
 import { compactMoney, formatPercent, signedCompactMoney } from '@/lib/number-format';
@@ -851,6 +853,16 @@ function OrcamentoPageContent() {
     }
   }, [dimensionActions, exportFormat, loadedYear, year]);
 
+  // Dotação de fonte 100 dos Poderes no QDD carregado, para o duodécimo da aba
+  // Receitas: só vale para o ano do QDD (o painel compara com a receita do mesmo ano).
+  const branchAppropriations = useMemo(
+    () =>
+      loadedYear == null || !actions.length
+        ? null
+        : { year: loadedYear, byOrganization: treasuryAppropriationByOrganization(actions, DUODECIMO_ORGANIZATION_CODES) },
+    [actions, loadedYear],
+  );
+
   if (!session) return null;
 
   const isExecutiveView = contentView === 'fiscal' || contentView === 'payroll' || contentView === 'revenue';
@@ -1219,6 +1231,7 @@ function OrcamentoPageContent() {
                 error={revenueError}
                 pagePadding={pagePadding}
                 defaultYear={loadedYear}
+                branchAppropriations={branchAppropriations}
               />
             </TabsContent>
           </Tabs>

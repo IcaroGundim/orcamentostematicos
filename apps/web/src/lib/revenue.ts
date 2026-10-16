@@ -24,6 +24,8 @@
 export interface PortalRevenueRow {
   codigoreceita?: string | number | null;
   descricaoreceita?: string | null;
+  /** Fonte de recurso da linha (`15000100` = recursos do Tesouro não vinculados). */
+  fonte?: string | number | null;
   previsto?: string | number | null;
   previstoatualizado?: string | number | null;
   arrecadado?: string | number | null;
@@ -59,8 +61,13 @@ export const REVENUE_CATEGORIES: RevenueCategory[] = [
   { key: 'ITCMD', label: 'ITCMD', group: 'tributaria' },
   { key: 'IRRF', label: 'Imposto de renda retido (IRRF)', group: 'tributaria' },
   { key: 'TAXAS', label: 'Taxas', group: 'tributaria' },
+  // Taxas arrecadadas na fonte do Tesouro: as "taxas administrativas" da base do
+  // duodécimo (LDO; contrato, seção 6.9). As demais têm destino vinculado.
+  { key: 'TAXAS_TESOURO', label: 'Taxas administrativas (Tesouro)', group: 'tributaria' },
   { key: 'OUTROS_TRIBUTOS', label: 'Outros tributos', group: 'tributaria' },
   { key: 'FPE', label: 'Cota-parte do FPE', group: 'transferencias' },
+  { key: 'IPI_EXPORTACAO', label: 'Cota-parte do IPI-exportação', group: 'transferencias' },
+  { key: 'LC87', label: 'ICMS-desoneração (LC 87/1996)', group: 'transferencias' },
   { key: 'FUNDEB', label: 'FUNDEB', group: 'transferencias' },
   { key: 'SUS', label: 'Transferências do SUS', group: 'transferencias' },
   { key: 'ROYALTIES', label: 'Royalties e compensações', group: 'transferencias' },
@@ -123,6 +130,10 @@ export const REVENUE_NATURE_PREFIXES: Record<RevenueNatureEra, Array<[string, st
     ['111252', 'ITCMD'],
     ['11130', 'IRRF'],
     ['171150', 'FPE'],
+    // Entram na base do duodécimo (contrato, seção 6.9). Só na estrutura atual: o
+    // duodécimo só é calculado de 2025 em diante.
+    ['171153', 'IPI_EXPORTACAO'],
+    ['171951', 'LC87'],
     ['175', 'FUNDEB'],
     ['1713', 'SUS'],
     ['1712', 'ROYALTIES'],
@@ -167,20 +178,29 @@ export function revenueNature(code: PortalRevenueRow['codigoreceita']): string {
   return String(code ?? '').replace(/\D/g, '').slice(0, 8);
 }
 
+/** Fonte do Tesouro não vinculada (recursos ordinários). */
+const TREASURY_SOURCE = '15000100';
+
 /**
  * Categoria de uma natureza no exercício `year`, e se ela é dedução. A dedução
  * volta para o código de origem trocando o 9 inicial por 1 (as deduções do portal
- * são de receita corrente).
+ * são de receita corrente). A fonte só separa as taxas do Tesouro das vinculadas
+ * (DETRAN, fundos do Judiciário…); para o resto, a natureza basta.
  */
 export function classifyRevenue(
   code: PortalRevenueRow['codigoreceita'],
   year: number,
+  source?: PortalRevenueRow['fonte'],
 ): { key: string; deduction: boolean } {
   const nature = revenueNature(code);
   const deduction = nature.startsWith('9');
   const base = deduction ? `1${nature.slice(1)}` : nature;
   const match = REVENUE_NATURE_PREFIXES[revenueNatureEra(year)].find(([prefix]) => base.startsWith(prefix));
-  return { key: match?.[1] ?? 'OUTRAS_CAPITAL', deduction };
+  const key = match?.[1] ?? 'OUTRAS_CAPITAL';
+  if (key === 'TAXAS' && String(source ?? '').replace(/\D/g, '') === TREASURY_SOURCE) {
+    return { key: 'TAXAS_TESOURO', deduction };
+  }
+  return { key, deduction };
 }
 
 export interface RevenueRow {
@@ -261,7 +281,7 @@ export function bucketRevenue(year: number, monthRows: RevenueMonthRows[]): Reve
   for (const { month, rows } of monthRows) {
     if (month < 1 || month > 12) continue;
     for (const line of rows) {
-      const { key, deduction } = classifyRevenue(line.codigoreceita, year);
+      const { key, deduction } = classifyRevenue(line.codigoreceita, year, line.fonte);
       const id = `${month}|${key}`;
       let bucket = buckets.get(id);
       if (!bucket) {

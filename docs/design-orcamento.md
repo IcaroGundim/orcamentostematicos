@@ -32,7 +32,8 @@ deste documento):
   `src/lib/payroll-portal.ts`, `src/lib/expense-nature.ts`,
   `src/lib/fontes-recursos.ts`, `src/lib/expense-breakdown.ts`,
   `src/lib/organization-acronym.ts`, `src/lib/chart-palette.ts`,
-  `src/lib/chart-geometry.ts`, `src/lib/readable-name.ts` — lógica;
+  `src/lib/chart-geometry.ts`, `src/lib/readable-name.ts`, `src/lib/revenue.ts`,
+  `src/lib/duodecimo.ts` — lógica;
 - `scripts/collect-payroll.mjs` e `.github/workflows/folha.yml` — coleta da folha;
 - `prisma/schema.prisma` — apenas se a seção 2 (regra R12) for seguida.
 
@@ -761,8 +762,19 @@ não acumulado; `previsto` é a previsão anual da lei, repetida em todo mês;
     dívida ativa) cai no mesmo tributo.
   Os prefixos genéricos (taxas `112`, contribuições `12`, intra `7`/`8`…) são os
   mesmos nas três. Grupos: `tributaria`
-  (ICMS, IPVA, ITCMD, IRRF, Taxas, Outros tributos), `transferencias` (FPE,
-  FUNDEB, SUS, royalties, outras correntes, capital) e `demais`.
+  (ICMS, IPVA, ITCMD, IRRF, Taxas, Taxas administrativas do Tesouro, Outros
+  tributos), `transferencias` (FPE, IPI-exportação, ICMS-desoneração, FUNDEB,
+  SUS, royalties, outras correntes, capital) e `demais`.
+- **Categorias da base do duodécimo** (2026-10-16, seção 6.9): só na estrutura
+  `atual`, porque o duodécimo só é calculado de 2025 em diante.
+  - `IPI_EXPORTACAO` (`171153`) e `LC87` (`171951`, ICMS-desoneração da LC
+    87/1996) saíram de "Outras transferências correntes".
+  - `TAXAS_TESOURO`: taxa (`112`) arrecadada na **fonte 15000100**. É a única
+    regra que olha a fonte (`classifyRevenue(código, ano, fonte)`). Em 2026, só
+    R$ 290 mil previstos (taxas da SEFAZ); as demais taxas (DETRAN, fundos do
+    Judiciário e da segurança) têm destino vinculado e seguem em `TAXAS`.
+  - Ano coletado antes da mudança mantém essas receitas nas categorias antigas
+    até ser recoletado.
 - **Deduções**: código com 9 no lugar do primeiro dígito (`91145011` ↔ ICMS
   `11145011`). Entram no tributo de origem com o sinal do portal (negativo).
   Por tributo e mês: `net = gross + deductions`. A tabela mostra o **líquido**;
@@ -795,6 +807,60 @@ não acumulado; `previsto` é a previsão anual da lei, repetida em todo mês;
 - **Mês em curso** (`partialMonth`): no exercício corrente, se a última coleta
   já pegou o mês corrente, ele ainda está arrecadando; leva `*` e cor esmaecida, e fica fora da
   média mensal e do "último mês fechado" da régua.
+
+### 6.9 Duodécimo dos Poderes e Instituições (`src/lib/duodecimo.ts`)
+
+Pedido do dono do produto em 2026-10-16: ver, na aba Receitas, os repasses aos
+Poderes pela regra da LDO.
+
+**Regra.** A LDO de 2026 é a Lei nº 4.627/2025, art. 35, com o Anexo III. A de
+2025 é a Lei nº 4.380/2024, art. 27, com a mesma regra e os mesmos percentuais.
+
+```
+(a) receita = ICMS + IPVA + ITCMD + taxas administrativas + FPE + IRRF
+              + IPI-exportação + ICMS-desoneração (LC 87/1996)        — brutos
+(b) deduções = municípios (25% ICMS + 50% IPVA + 25% IPI-exportação)
+             + PASEP (1% do FPE)
+             + educação 30% e saúde 12% de (a − municípios)
+(c) receita líquida = (a) − (b);  cada Poder = (c) × percentual
+```
+
+Percentuais: Legislativo 6,26%, Judiciário 9,75%, TCE 2,3%, MPAC 5% e DPE 1,5%,
+que somam 24,81%.
+
+**O que não está escrito na lei e foi conferido.** O Anexo III é só o modelo da
+tabela, sem valores, e não diz sobre qual base incidem os 30% e os 12%, nem o que
+são "taxas administrativas". As duas coisas foram decididas reproduzindo a LOA
+2026:
+- a dotação inicial de fonte 100 de cada Poder no QDD, dividida pelo percentual
+  dele, dá a mesma receita líquida nos cinco: R$ 6.042.979.404,43. A ALEAC bate
+  no centavo com 6,26%;
+- com a previsão do portal, a leitura acima (educação e saúde sobre
+  `(a − municípios)`, taxas = só as da fonte do Tesouro) dá R$ 6.042,86 mi, uma
+  diferença de 0,002%;
+- as outras leituras erram por dezenas de milhões: educação e saúde sobre `(a)`,
+  −173 mi; com todas as taxas, +92 mi; educação e saúde sobre `(a − municípios
+  − PASEP)`, +33 mi.
+
+O teste `duodecimo.test.ts` guarda essa conferência.
+
+**Cálculo.** É feito mês a mês, sobre o **bruto** arrecadado. A dedução do
+FUNDEB do portal não entra, porque a regra já desconta educação e saúde. O
+acumulado só soma os meses fechados; o mês em curso aparece marcado e fica fora.
+
+**Duodécimo da LOA.** É a dotação inicial de fonte 100 do órgão
+(`treasuryAppropriationByOrganization`, `execution-monitor.ts`) dividida por 12,
+só quando o QDD carregado é do mesmo ano da receita. Órgãos: ALEAC `101`, TCE
+`102`, TJAC `203`, MPAC `304` e DPE `305`. As fontes próprias dos Poderes
+(fundos, taxas judiciais) não entram.
+
+**Limite.** O Portal da Transparência não publica as transferências feitas aos
+Poderes, nem a SEFAZ na página da LRF. A tela mostra o que a regra gera com a
+receita arrecadada, ao lado do duodécimo da LOA, e diz isso. Não chamar esses
+valores de "repassado".
+
+Fora da base, até decisão contrária: a transferência da LC 176/2020 (`171958`),
+porque a LDO cita só a LC 87.
 
 ## 7. Componentes do módulo
 
@@ -1091,6 +1157,23 @@ estado vazio com o texto da falha), `pagePadding` e `defaultYear`.
   `ExecutionTablePanel` (10.13): aquele é de `ExecutionRow` por recorte, e esta
   é uma matriz tributo × mês.
 
+- **Duodécimo dos Poderes e Instituições** (`DuodecimoBlock`, 2026-10-16;
+  cálculo na seção 6.9): aparece só em ano com regra em `DUODECIMO_RULES`.
+  - Frase de leitura: quanto a receita gerou até o último mês fechado, e quanto
+    somam os duodécimos da LOA no período.
+  - Primeira tabela, uma linha por Poder: participação, dotação de fonte 100 na
+    LOA, duodécimo (÷ 12), duodécimos até o mês, gerado pela arrecadação até o
+    mês e a diferença com sinal.
+  - Segunda tabela, "Base de cálculo e valor gerado mês a mês (Anexo III)":
+    receita da base, municípios, PASEP, educação, saúde, receita líquida e o
+    gerado para cada Poder, por mês, mais o acumulado e a receita líquida
+    implícita na LOA. A composição de cada linha fica no `title`.
+  - Sem QDD do mesmo ano, as colunas da LOA mostram "–" e a nota pede para
+    trocar o exercício no cabeçalho.
+  - A nota de rodapé diz que os valores **não** são as transferências feitas.
+  - Recebe `branchAppropriations` da página: um `useMemo` antes do guard de
+    sessão (R11).
+
 ## 8. Coleta da folha — job
 
 `.github/workflows/folha.yml`:
@@ -1361,6 +1444,7 @@ destes, nunca lógica nova de adivinhação:
 | Catálogo de fontes **por exercício** (SEPLAN/DIRPLA/DEPOP) | `CATALOGOS_POR_EXERCICIO` (`src/lib/fontes-recursos.ts`) | exercício novo exige registro explícito. Quando o anexo não muda de um ano para o outro, os dois anos apontam para o mesmo objeto — é o caso de 2025 e 2026. `getFonteLabel(code, year)` exige o ano e **não** cai no catálogo de outro exercício por conta própria: rótulo errado é pior que ausente. Ano não registrado mostra "Fonte não catalogada" |
 | Catálogos da natureza (STN/SOF) | `src/lib/expense-nature.ts` | atualização da tabela oficial |
 | Códigos de controle da dívida | `AMENDMENT_DEBT_CONTROL_CODES` (`functional-classification.ts:240-243`) | novos códigos de dívida iniciados em 8 |
+| Regra do duodécimo por exercício (lei, órgãos, percentuais) | `DUODECIMO_RULES` (`src/lib/duodecimo.ts`) | LDO nova: conferir os percentuais e o Anexo III e refazer a conferência contra a LOA (seção 6.9) |
 | Siglas de órgão | `ACRONYM_OVERRIDES` (`organization-acronym.ts:10-23`) | órgão sem sigla extraível do nome |
 | Categorias de receita por natureza (tributos, transferências) | `REVENUE_NATURE_PREFIXES` e `revenueNatureEra` (`src/lib/revenue.ts`) | natureza nova relevante que hoje cai em "Outras…", ou nova reorganização da STN (nova estrutura = nova era, com o ano de corte); o primeiro prefixo que casa vence, então o específico vai antes do genérico. Depois de mudar, recolete os anos afetados (`--ano=`) |
 | Renomeações de família de carreira | ramo `else` de `careerFamilyLabel` (`payroll-panel.tsx`) | denominação nova do portal que precisa de nome legível no ranking |

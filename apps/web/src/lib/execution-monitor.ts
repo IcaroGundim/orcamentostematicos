@@ -349,6 +349,35 @@ export function personnelTotalsOf(actions: BudgetAction[]): ExecutionTotals {
   return totals;
 }
 
+// ── Dotação do Tesouro por órgão (duodécimo dos Poderes) ─────────────────────
+
+/** Fonte do Tesouro não vinculada: é dela que sai o duodécimo dos Poderes. */
+export const TREASURY_SOURCE = '15000100';
+
+/**
+ * Dotação inicial e atualizada na fonte do Tesouro (`15000100`), por órgão, só dos
+ * `organizationCodes` pedidos. É a parte da LOA que o duodécimo repassa (contrato,
+ * seção 6.9); as fontes próprias dos Poderes (fundos, taxas judiciais) ficam de fora.
+ * Órgão pedido sem nenhuma linha volta com zeros, para a tela dizer que faltou.
+ */
+export function treasuryAppropriationByOrganization(
+  actions: BudgetAction[],
+  organizationCodes: readonly string[],
+): Record<string, { initialBudget: number; updatedBudget: number }> {
+  const result: Record<string, { initialBudget: number; updatedBudget: number }> = {};
+  for (const code of organizationCodes) result[code] = { initialBudget: 0, updatedBudget: 0 };
+  for (const action of actions) {
+    const totals = result[action.organizationCode];
+    if (!totals) continue;
+    for (const line of action.expenseLines ?? []) {
+      if ((line.source ?? '').replace(/\D/g, '') !== TREASURY_SOURCE) continue;
+      totals.initialBudget += line.initialBudget;
+      totals.updatedBudget += line.updatedBudget;
+    }
+  }
+  return result;
+}
+
 // ── Folha de pagamento (visão Órgão) ─────────────────────────────────────────
 
 /**
