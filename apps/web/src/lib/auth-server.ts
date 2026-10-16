@@ -2,6 +2,7 @@ import 'server-only';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from './prisma';
+import { isSessionExpired } from './session-lifetime';
 
 export type AuthUser = {
   id: string;
@@ -21,9 +22,14 @@ export async function getAuthUser(req: NextRequest): Promise<AuthUser | null> {
 
   const session = await prisma.session.findUnique({
     where: { token },
-    include: { user: true },
+    // A senha do usuário não precisa viajar do banco a cada requisição.
+    include: { user: { omit: { password: true } } },
   });
   if (!session) return null;
+  // Sessão expirada vale tanto quanto sessão inexistente. A linha continua no
+  // banco: apagá-la aqui colocaria uma escrita no caminho de LEITURA de toda
+  // requisição. A limpeza acontece no login, que já escreve de qualquer forma.
+  if (isSessionExpired(session.createdAt, new Date())) return null;
   if (session.user.active === false) return null;
   return session.user;
 }

@@ -23,14 +23,14 @@ function formatUpdatedThrough(vigente: BudgetImport) {
 export function DataReferenceBadge({ vigenteImport }: { vigenteImport?: BudgetImport | null }) {
   if (!vigenteImport) return null;
   return (
-    <div className="flex items-center gap-3 rounded-md border border-green-900/20 bg-white px-3 py-1.5 text-green-900">
+    <div className="flex items-center gap-3 rounded-md border border-marca-escura/20 bg-white px-3 py-1.5 text-marca-escura">
       <div className="flex flex-col leading-tight">
-        <span className="text-[0.65rem] font-bold uppercase tracking-wide text-green-900">Exercício</span>
+        <span className="text-[0.65rem] font-bold uppercase tracking-wide text-marca-escura">Exercício</span>
         <span className="text-sm font-semibold tabular-nums">{vigenteImport.year}</span>
       </div>
-      <div className="h-7 w-px bg-green-900/20" />
+      <div className="h-7 w-px bg-marca/20" />
       <div className="flex flex-col leading-tight">
-        <span className="text-[0.65rem] font-bold uppercase tracking-wide text-green-900">Atualizado até</span>
+        <span className="text-[0.65rem] font-bold uppercase tracking-wide text-marca-escura">Atualizado até</span>
         <span className="text-sm font-semibold tabular-nums">{formatUpdatedThrough(vigenteImport)}</span>
       </div>
     </div>

@@ -41,7 +41,7 @@ export function SummaryCountBadge({ count, label }: { count: number; label: stri
       className="h-7 gap-2 rounded-[min(var(--radius-md),12px)] border-transparent px-3.5 text-[0.8rem] font-normal shadow-sm"
     >
       <span className="tabular-nums font-semibold leading-none">{count}</span>
-      <span className="text-white uppercase tracking-wide">{label}</span>
+      <span className="text-marca-contraste uppercase tracking-wide">{label}</span>
     </Badge>
   );
 }
@@ -56,7 +56,7 @@ export function StatusBadge({ status }: { status: ValidationStatus }) {
   return (
     <Badge
       variant={variant}
-      className={display === 'RASCUNHO' ? 'bg-green-900 text-white hover:bg-green-900' : undefined}
+      className={display === 'RASCUNHO' ? 'bg-marca text-marca-contraste hover:bg-marca' : undefined}
     >
       {statusLabels[display]}
     </Badge>

@@ -28,13 +28,11 @@ import {
   Trash2Icon,
   UploadIcon,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Cell, Pie, PieChart } from 'recharts';
-import { ThemeLiquidatedSummaryChart } from '@/components/charts/ThemeLiquidatedSummaryChart';
-import { ClassificationLiquidatedSummaryChart } from '@/components/charts/ClassificationLiquidatedSummaryChart';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -44,7 +42,6 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AxisExecutionByThemePanel } from '@/components/domain/axis-execution-by-theme-panel';
 import { AcreDeliveriesMap } from '@/components/domain/acre-deliveries-map';
 import { DeliveryReviewList } from '@/components/domain/delivery-review-list';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -314,7 +311,7 @@ function AdminSidebarNavigation({
       <span
         aria-hidden
         className={cn(
-          'pointer-events-none absolute z-10 rounded-md bg-green-900 shadow-md',
+          'pointer-events-none absolute z-10 rounded-md bg-marca shadow-md',
           'transition-[top,left,width,height] duration-300 ease-out',
           highlight.ready ? 'opacity-100' : 'opacity-0',
         )}
@@ -348,7 +345,7 @@ function AdminSidebarNavigation({
                         'relative z-20 bg-transparent shadow-none transition-none',
                         'hover:bg-transparent hover:shadow-none focus:bg-transparent focus-visible:bg-transparent focus-visible:shadow-none data-active:bg-transparent data-active:shadow-none',
                         isHighlighted
-                          ? 'text-white hover:text-white data-active:text-white [&_svg]:text-white data-active:[&_svg]:text-white'
+                          ? 'text-marca-contraste hover:text-marca-contraste data-active:text-marca-contraste [&_svg]:text-marca-contraste data-active:[&_svg]:text-marca-contraste'
                           : 'text-sidebar-foreground hover:text-sidebar-foreground data-active:text-sidebar-foreground [&_svg]:text-sidebar-foreground data-active:[&_svg]:text-sidebar-foreground',
                       )}
                     >
@@ -360,7 +357,7 @@ function AdminSidebarNavigation({
                         className={cn(
                           'z-30',
                           isHighlighted
-                            ? 'text-white peer-data-active/menu-button:text-white'
+                            ? 'text-marca-contraste peer-data-active/menu-button:text-marca-contraste'
                             : 'text-sidebar-foreground peer-data-active/menu-button:text-sidebar-foreground'
                         )}
                       >
@@ -401,6 +398,38 @@ const initialAssignment = {
   weightingFactor: '',
   justification: '',
 };
+
+// Os gráficos só aparecem em "Relatórios". Carregá-los sob demanda tira o `recharts`
+// (~120 KB gzip) do bundle de entrada; `preloadReportCharts` os busca em segundo plano
+// assim que o navegador fica ocioso, para o primeiro clique em Relatórios não esperar.
+// Os `import()` precisam ser literais em cada chamada — por isso a repetição.
+const ThemeExecutionGauge = dynamic(
+  () => import('@/components/charts/theme-execution-gauge').then((m) => m.ThemeExecutionGauge),
+  { loading: () => <div className="h-[120px] w-[220px]" aria-hidden /> },
+);
+const ThemeLiquidatedSummaryChart = dynamic(
+  () => import('@/components/charts/ThemeLiquidatedSummaryChart').then((m) => m.ThemeLiquidatedSummaryChart),
+  { loading: () => <div className="min-h-[200px] w-full flex-1" aria-hidden /> },
+);
+const ClassificationLiquidatedSummaryChart = dynamic(
+  () =>
+    import('@/components/charts/ClassificationLiquidatedSummaryChart').then(
+      (m) => m.ClassificationLiquidatedSummaryChart,
+    ),
+  { loading: () => <div className="min-h-[200px] w-full flex-1" aria-hidden /> },
+);
+const AxisExecutionByThemePanel = dynamic(
+  () =>
+    import('@/components/domain/axis-execution-by-theme-panel').then((m) => m.AxisExecutionByThemePanel),
+  { loading: () => <div className="min-h-64 w-full" aria-hidden /> },
+);
+
+function preloadReportCharts() {
+  void import('@/components/charts/theme-execution-gauge');
+  void import('@/components/charts/ThemeLiquidatedSummaryChart');
+  void import('@/components/charts/ClassificationLiquidatedSummaryChart');
+  void import('@/components/domain/axis-execution-by-theme-panel');
+}
 
 /**
  * Cor do arco do velocimetro de execucao, em 6 faixas.
@@ -481,6 +510,15 @@ function SeplanPageContent() {
   const [reportsThemeTab, setReportsThemeTab] = useState<ThemeBudget>('OCAD');
   const [resultsThemeTab, setResultsThemeTab] = useState<ThemeBudget>('OSG');
   const [resultsCategoryFilter, setResultsCategoryFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preloadReportCharts);
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preloadReportCharts, 2000);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // Setas ← → alternam as subabas de "Informações Gerais". Fica no window (fase de
   // bubble) para funcionar sem depender de qual elemento está com foco; ignora campos
@@ -593,6 +631,14 @@ function SeplanPageContent() {
   async function load() {
     // `requestedYear` (e não `year`) para não recarregar quando o metadata chega.
     const q = exerciseQuery(requestedYear);
+    // A conferência do QDD vigente não depende das demais respostas, mas era pedida só
+    // depois de todas — uma ida ao servidor a mais no fim da carga. Sai agora junto com
+    // elas; se não houver QDD para conferir, o resultado é descartado (abaixo).
+    const diffParams = new URLSearchParams({ source: 'vigente' });
+    if (requestedYear != null) diffParams.set('year', String(requestedYear));
+    const vigenteDiffRequest = api<StructureDiff>(`/government-structure/diff?${diffParams.toString()}`).catch(
+      () => null,
+    );
     const [
       meta,
       summaryData,
@@ -631,7 +677,7 @@ function SeplanPageContent() {
 
     const loaded = meta.year ?? null;
     if (importsData.some((i) => i.status === 'VIGENTE' && (loaded == null || i.year === loaded)) || actionData.length > 0) {
-      await loadStructureDiff('vigente');
+      setStructureDiff(await vigenteDiffRequest);
     } else {
       setStructureDiff(null);
     }
@@ -1616,7 +1662,7 @@ function SeplanPageContent() {
       </Sidebar>
 
       <SidebarInset className="flex h-svh min-h-0 flex-col overflow-hidden">
-        <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-black bg-marca text-marca-contraste shadow-sm">
           <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger size="icon-lg" className="size-10 shrink-0 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground [&_svg]:size-8" />
@@ -2435,7 +2481,7 @@ function SeplanPageContent() {
                                         <CardAction className="flex flex-wrap gap-2">
                                           <Button
                                             variant="outline"
-                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
+                                            className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura disabled:!border-white/75 disabled:!bg-white disabled:!text-marca-escura/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'ENVIADO'}
                                             onClick={() => void reviewValidation(validation.id, 'approve')}
                                           >
@@ -2453,7 +2499,7 @@ function SeplanPageContent() {
                                           </Button>
                                           <Button
                                             variant="outline"
-                                            className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950 disabled:!border-white/75 disabled:!bg-white disabled:!text-green-950/45 disabled:!opacity-100"
+                                            className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura disabled:!border-white/75 disabled:!bg-white disabled:!text-marca-escura/45 disabled:!opacity-100"
                                             disabled={validation.status !== 'APROVADO'}
                                             onClick={() => void revertApproval(validation.id)}
                                           >
@@ -2610,7 +2656,7 @@ function SeplanPageContent() {
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
-                                className="!border-white/75 !bg-white !text-green-950 hover:!bg-white/90 hover:!text-green-950"
+                                className="!border-white/75 !bg-white !text-marca-escura hover:!bg-white/90 hover:!text-marca-escura"
                               >
                                 <FileDownIcon data-icon="inline-start" />
                                 Exportar
@@ -2826,22 +2872,7 @@ function SeplanPageContent() {
                         {themeGaugeData.map(({ key, label, liquidated, planned, pct }) => (
                           <div key={key} className="flex flex-col items-center gap-2">
                             <div className="relative mx-auto w-[220px]">
-                              <PieChart width={220} height={120}>
-                                <Pie
-                                  data={[{ value: pct }, { value: 100 - pct }]}
-                                  cx={110}
-                                  cy={110}
-                                  startAngle={180}
-                                  endAngle={0}
-                                  innerRadius={68}
-                                  outerRadius={100}
-                                  dataKey="value"
-                                  strokeWidth={0}
-                                >
-                                  <Cell fill={gaugeColor(pct)} />
-                                  <Cell fill="var(--color-muted)" />
-                                </Pie>
-                              </PieChart>
+                              <ThemeExecutionGauge pct={pct} color={gaugeColor(pct)} />
                               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
                                 <p className="text-2xl font-bold tabular-nums">{pct.toFixed(1)}%</p>
                               </div>

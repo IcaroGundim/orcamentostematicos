@@ -22,10 +22,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!existing) return notFound('Validação não encontrada.');
   if (!existing.action.presentInCurrentQdd) return notFound('Validação ativa não encontrada.');
   // Entregas só existem no exercício corrente.
-  if (existing.action.year !== (await getCurrentYear())) return forbidden();
-  if (!(await userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year))) {
-    return forbidden();
-  }
+  const [currentYear, controlsUnit] = await Promise.all([
+    getCurrentYear(),
+    userControlsUnit(user, existing.organizationCode, existing.unitCode, existing.action.year),
+  ]);
+  if (existing.action.year !== currentYear) return forbidden();
+  if (!controlsUnit) return forbidden();
 
   const deliveries = body.deliveries !== undefined ? body.deliveries : existing.deliveries;
   const classification = existing.assignment?.classification ?? '';

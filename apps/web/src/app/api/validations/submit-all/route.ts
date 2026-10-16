@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       },
       status: { in: targetStatuses as any },
     },
-    include: { assignment: true },
+    include: { assignment: { select: { classification: true } } },
   });
 
   const completeIds: string[] = [];

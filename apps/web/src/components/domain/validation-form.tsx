@@ -246,12 +246,12 @@ function DeliveryItem({
 
   return (
     <li className="overflow-hidden rounded-lg border border-black bg-card shadow-sm">
-      <header className="flex items-center justify-between gap-2 border-b border-black bg-green-900 px-3 py-1.5">
+      <header className="flex items-center justify-between gap-2 border-b border-black bg-marca px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-black bg-background px-1.5 text-xs font-bold tabular-nums text-foreground">
             {index + 1}
           </span>
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-marca-contraste">
             Entrega
           </span>
         </div>
@@ -260,7 +260,7 @@ function DeliveryItem({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 px-2 text-white hover:bg-white/15 hover:text-white"
+            className="h-8 px-2 text-marca-contraste hover:bg-black/10 hover:text-marca-contraste"
             disabled={!editable}
             onClick={onClear}
             title="Limpar os campos preenchidos desta entrega"

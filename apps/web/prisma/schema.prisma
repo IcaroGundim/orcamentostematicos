@@ -344,6 +344,32 @@ model PayrollGroup {
   @@index([snapshotId, dimension])
 }
 
+/// Receita do Estado por categoria (tributo, transferência…) e mês, coletada do
+/// Portal da Transparência pelo job semanal `scripts/collect-revenue.mjs`. Só
+/// agregados: a categoria vem de `REVENUE_CATEGORIES` (`src/lib/revenue.ts`).
+/// Recoletar um exercício substitui todas as linhas dele.
+model RevenueMonth {
+  id       String @id @default(cuid())
+  year     Int
+  month    Int
+  /// Chave de `REVENUE_CATEGORIES` (ICMS, FPE, …).
+  category String
+
+  /// Arrecadado bruto no mês, sem as deduções.
+  gross           Float @default(0)
+  /// Deduções no mês (negativas), sobretudo a formação do FUNDEB.
+  deductions      Float @default(0)
+  /// Previsão anual da lei, líquida, como o portal informava naquele mês.
+  forecast        Float @default(0)
+  /// Previsão anual atualizada, líquida, como o portal informava naquele mês.
+  updatedForecast Float @default(0)
+
+  collectedAt DateTime @default(now())
+
+  @@unique([year, month, category])
+  @@index([year])
+}
+
 model ActionValidation {
   id                    String           @id @default(cuid())
   cycleId               String

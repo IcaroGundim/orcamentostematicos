@@ -1,0 +1,595 @@
+--- a/apps/web/src/app/api/auth/login/route.ts
++++ b/apps/web/src/app/api/auth/login/route.ts
+@@ -10,6 +10,12 @@
+   retryAfterSeconds,
+ } from '@/lib/login-rate-limit';
+ import { sessionExpiryCutoff } from '@/lib/session-lifetime';
++import {
++  hashPassword,
++  MAX_PASSWORD_LENGTH,
++  spendVerificationTime,
++  verifyPassword,
++} from '@/lib/password';
+ 
+ function databaseUnavailable() {
+   return NextResponse.json(
+@@ -31,6 +37,8 @@
+   }
+   const identifier = String(rawIdentifier).toLowerCase().trim();
+   if (!identifier || identifier.length > 254) return badRequest('Identificador inválido.');
++  // O custo do hash cresce com o tamanho da senha; nenhuma senha legítima chega perto.
++  if (body.password.length > MAX_PASSWORD_LENGTH) return unauthorized();
+ 
+   let result;
+   try {
+@@ -68,7 +76,16 @@
+         return { kind: 'blocked', retryAfter: retryAfterSeconds(current.blockedUntil, now) } as const;
+       }
+ 
+-      if (!user || user.active === false || user.password !== body.password) {
++      // Sem conta (ou conta inativa) gasta o mesmo tempo de uma conferência real:
++      // o tempo de resposta não pode revelar quais identificadores existem.
++      let check = { ok: false, needsUpgrade: false };
++      if (user && user.active !== false) {
++        check = await verifyPassword(body.password, user.password);
++      } else {
++        await spendVerificationTime(body.password);
++      }
++
++      if (!user || user.active === false || !check.ok) {
+         const next = nextLoginFailure(current, now);
+         await tx.loginRateLimit.upsert({
+           where: { key },
+@@ -81,6 +98,15 @@
+       }
+ 
+       await tx.loginRateLimit.deleteMany({ where: { key } });
++      // Senha ainda em texto puro (ou com custo antigo): regrava em hash agora que
++      // ela conferiu. `updateMany` com a senha lida no filtro é um compare-and-swap:
++      // se uma redefinição trocou a senha no meio do caminho, não a sobrescrevemos.
++      if (check.needsUpgrade) {
++        await tx.user.updateMany({
++          where: { id: user.id, password: user.password },
++          data: { password: await hashPassword(body.password) },
++        });
++      }
+       // Descarta as sessões já expiradas DESTE usuário. É aqui que a limpeza sai
+       // de graça: o login já escreve, e o recorte por usuário mantém a operação
+       // pequena — sem varredura global e sem tocar em sessão de terceiro.
+--- a/apps/web/src/app/api/auth/reset-password/route.ts
++++ b/apps/web/src/app/api/auth/reset-password/route.ts
+@@ -2,6 +2,7 @@
+ import { NextRequest, NextResponse } from 'next/server';
+ import { prisma } from '@/lib/prisma';
+ import { badRequest, ok } from '@/lib/auth-server';
++import { hashPassword, MAX_PASSWORD_LENGTH } from '@/lib/password';
+ 
+ function databaseUnavailable() {
+   return NextResponse.json(
+@@ -51,6 +52,9 @@
+   if (password.length < 3) {
+     return badRequest('A senha deve ter pelo menos 3 caracteres.');
+   }
++  if (password.length > MAX_PASSWORD_LENGTH) {
++    return badRequest(`A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`);
++  }
+ 
+   let record;
+   try {
+@@ -69,12 +73,14 @@
+     return badRequest('Link inválido ou expirado. Solicite uma nova redefinição.');
+   }
+ 
+-  // Atualiza a senha (mantido em texto puro, como o restante do sistema hoje),
+-  // marca o token como usado e encerra as sessões ativas do usuário.
++  // Atualiza a senha (em hash), marca o token como usado e encerra as sessões
++  // ativas do usuário. O hash é calculado antes da transação: ela não fica aberta
++  // durante os ~100 ms do scrypt.
++  const passwordHash = await hashPassword(password);
+   await prisma.$transaction([
+     prisma.user.update({
+       where: { id: record!.userId },
+-      data: { password },
++      data: { password: passwordHash },
+     }),
+     prisma.passwordResetToken.update({
+       where: { token },
+--- a/apps/web/src/app/api/users/route.ts
++++ b/apps/web/src/app/api/users/route.ts
+@@ -1,6 +1,7 @@
+ import { NextRequest } from 'next/server';
+ import { badRequest, conflict, forbidden, getAuthUser, ok, unauthorized } from '@/lib/auth-server';
+ import { prisma } from '@/lib/prisma';
++import { hashPassword, MAX_PASSWORD_LENGTH } from '@/lib/password';
+ import { logUserActivity } from '@/lib/user-activity';
+ import type { UserRole } from '@/types/domain';
+ 
+@@ -132,6 +133,9 @@
+     return badRequest('name, email, password e role são obrigatórios.');
+   }
+   if (!VALID_ROLES.includes(body.role)) return badRequest('role inválido.');
++  if (String(body.password).length > MAX_PASSWORD_LENGTH) {
++    return badRequest(`A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`);
++  }
+ 
+   const email = String(body.email).toLowerCase().trim();
+   const existing = await prisma.user.findUnique({ where: { email } });
+@@ -148,7 +152,7 @@
+       name: String(body.name).trim(),
+       email,
+       username,
+-      password: String(body.password),
++      password: await hashPassword(String(body.password)),
+       role: body.role,
+       organizationCode: body.organizationCode || null,
+       unitCode: body.unitCode || null,
+--- a/apps/web/src/app/api/users/[id]/route.ts
++++ b/apps/web/src/app/api/users/[id]/route.ts
+@@ -1,6 +1,7 @@
+ import { NextRequest } from 'next/server';
+ import { badRequest, conflict, forbidden, getAuthUser, notFound, ok, unauthorized } from '@/lib/auth-server';
+ import { prisma } from '@/lib/prisma';
++import { hashPassword, MAX_PASSWORD_LENGTH } from '@/lib/password';
+ import { logUserActivity } from '@/lib/user-activity';
+ import type { UserRole } from '@/types/domain';
+ 
+@@ -31,7 +32,12 @@
+     }
+     data.username = username;
+   }
+-  if (body.password) data.password = String(body.password);
++  if (body.password) {
++    if (String(body.password).length > MAX_PASSWORD_LENGTH) {
++      return badRequest(`A senha deve ter no máximo ${MAX_PASSWORD_LENGTH} caracteres.`);
++    }
++    data.password = await hashPassword(String(body.password));
++  }
+   if (body.role !== undefined) data.role = body.role;
+   if (body.organizationCode !== undefined) data.organizationCode = body.organizationCode || null;
+   if (body.unitCode !== undefined) data.unitCode = body.unitCode || null;
+--- a/apps/web/prisma/seed.ts
++++ b/apps/web/prisma/seed.ts
+@@ -5,6 +5,7 @@
+ config({ path: resolve(__dirname, '../.env') });
+ import { PrismaClient } from '@prisma/client';
+ import { PrismaPg } from '@prisma/adapter-pg';
++import { hashPassword } from '../src/lib/password';
+ 
+ const adapter = new PrismaPg({ connectionString: process.env['DATABASE_URL']! });
+ const prisma = new PrismaClient({ adapter });
+@@ -18,7 +19,7 @@
+       name: 'Administrador SEPLAN',
+       email: 'admin@seplan.ac.gov.br',
+       username: 'admin',
+-      password: 'admin123',
++      password: await hashPassword('admin123'),
+       role: 'SEPLAN_ADMIN',
+     },
+   });
+@@ -31,7 +32,7 @@
+       name: 'Representante SEMULHER',
+       email: 'semulher@ac.gov.br',
+       username: 'semulher',
+-      password: 'secretaria123',
++      password: await hashPassword('secretaria123'),
+       role: 'SECRETARIA_REPRESENTANTE',
+       organizationCode: '762',
+     },
+@@ -45,7 +46,7 @@
+       name: 'Representante SESACRE',
+       email: 'sesacre@ac.gov.br',
+       username: 'sesacre',
+-      password: 'secretaria123',
++      password: await hashPassword('secretaria123'),
+       role: 'SECRETARIA_REPRESENTANTE',
+       organizationCode: '721',
+     },
+--- /dev/null
++++ b/apps/web/src/lib/password.ts
+@@ -0,0 +1,117 @@
++/**
++ * Hash de senhas (scrypt, `node:crypto`) — sem dependência nova.
++ *
++ * Formato armazenado em `User.password`:
++ *
++ *     scrypt$<N>$<r>$<p>$<salt base64url>$<hash base64url>
++ *
++ * Os parâmetros vão dentro da própria string: subir o custo no futuro não invalida
++ * ninguém — `verifyPassword` lê o custo antigo e devolve `needsUpgrade`, e o login
++ * regrava no custo novo.
++ *
++ * MIGRAÇÃO SEM SCHEMA NOVO. A coluna continua `String`; um valor que não começa com
++ * `scrypt$` é uma senha antiga, ainda em texto puro. `verifyPassword` aceita os dois
++ * formatos, e `needsUpgrade` diz ao chamador que vale regravar em hash depois de um
++ * login bem-sucedido. Enquanto o script `hash-passwords.mjs` não rodar, contas
++ * dormentes seguem no formato antigo.
++ *
++ * Sem `server-only` de propósito: o seed e o script de migração rodam fora do Next.
++ */
++import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
++
++const PREFIX = 'scrypt';
++
++/** Custo atual. N = 2^15 e r = 8 pedem ~32 MiB e levam ~80–150 ms por hash. */
++const COST = { N: 2 ** 15, r: 8, p: 1 } as const;
++const KEY_BYTES = 32;
++const SALT_BYTES = 16;
++
++/**
++ * Teto do comprimento aceito. O custo do scrypt cresce com a senha (via PBKDF2
++ * interno); sem teto, um corpo gigante vira negação de serviço num endpoint público.
++ */
++export const MAX_PASSWORD_LENGTH = 1024;
++
++type Cost = { N: number; r: number; p: number };
++
++function derive(password: string, salt: Buffer, cost: Cost, keyBytes: number): Promise<Buffer> {
++  return new Promise((resolve, reject) => {
++    scrypt(
++      // NFKC: o mesmo "ã" digitado composto ou decomposto gera o mesmo hash.
++      password.normalize('NFKC'),
++      salt,
++      keyBytes,
++      // `maxmem` padrão (32 MiB) é justo para N = 2^15; 128·N·r·2 dá folga.
++      { N: cost.N, r: cost.r, p: cost.p, maxmem: 128 * cost.N * cost.r * 2 },
++      (error, key) => (error ? reject(error) : resolve(key)),
++    );
++  });
++}
++
++export function isHashed(stored: string): boolean {
++  return stored.startsWith(`${PREFIX}$`);
++}
++
++export async function hashPassword(password: string): Promise<string> {
++  const salt = randomBytes(SALT_BYTES);
++  const key = await derive(password, salt, COST, KEY_BYTES);
++  return [PREFIX, COST.N, COST.r, COST.p, salt.toString('base64url'), key.toString('base64url')].join('$');
++}
++
++function parseHash(stored: string): { cost: Cost; salt: Buffer; key: Buffer } | null {
++  const [prefix, n, r, p, salt, key] = stored.split('$');
++  if (prefix !== PREFIX || !n || !r || !p || !salt || !key) return null;
++  const cost = { N: Number(n), r: Number(r), p: Number(p) };
++  if (![cost.N, cost.r, cost.p].every((value) => Number.isInteger(value) && value > 0)) return null;
++  // Um valor adulterado no banco não pode pedir gigabytes de memória.
++  if (cost.N > 2 ** 20 || cost.r > 32 || cost.p > 16) return null;
++  const saltBuffer = Buffer.from(salt, 'base64url');
++  const keyBuffer = Buffer.from(key, 'base64url');
++  if (saltBuffer.length === 0 || keyBuffer.length === 0) return null;
++  return { cost, salt: saltBuffer, key: keyBuffer };
++}
++
++/** Comparação em tempo constante que também não revela o comprimento. */
++function constantTimeEqual(a: string, b: string): boolean {
++  const digestA = createHash('sha256').update(a).digest();
++  const digestB = createHash('sha256').update(b).digest();
++  return timingSafeEqual(digestA, digestB);
++}
++
++export type PasswordCheck = {
++  ok: boolean;
++  /** Login válido, mas o valor guardado é texto puro ou tem custo antigo: regravar. */
++  needsUpgrade: boolean;
++};
++
++/** Confere `password` contra o valor de `User.password`, em hash ou em texto puro. */
++export async function verifyPassword(password: string, stored: string): Promise<PasswordCheck> {
++  if (!isHashed(stored)) {
++    // Formato antigo: texto puro. Só vale regravar se a senha conferir.
++    const ok = constantTimeEqual(password, stored);
++    return { ok, needsUpgrade: ok };
++  }
++  const parsed = parseHash(stored);
++  if (!parsed) return { ok: false, needsUpgrade: false };
++
++  const key = await derive(password, parsed.salt, parsed.cost, parsed.key.length);
++  const ok = key.length === parsed.key.length && timingSafeEqual(key, parsed.key);
++  const outdated =
++    parsed.cost.N !== COST.N ||
++    parsed.cost.r !== COST.r ||
++    parsed.cost.p !== COST.p ||
++    parsed.key.length !== KEY_BYTES;
++  return { ok, needsUpgrade: ok && outdated };
++}
++
++let dummyHash: Promise<string> | null = null;
++
++/**
++ * Gasta o mesmo tempo de uma verificação real. Sem isso, "usuário inexistente"
++ * responderia em microssegundos e "senha errada" em ~100 ms — e o tempo de
++ * resposta passaria a revelar quais e-mails têm conta.
++ */
++export async function spendVerificationTime(password: string): Promise<void> {
++  dummyHash ??= hashPassword('senha-descartavel-para-igualar-o-tempo');
++  await verifyPassword(password, await dummyHash);
++}
+--- /dev/null
++++ b/apps/web/src/lib/password.test.ts
+@@ -0,0 +1,54 @@
++import { describe, expect, it } from 'vitest';
++import { hashPassword, isHashed, verifyPassword } from './password';
++
++describe('hash de senhas', () => {
++  it('grava em hash e confere a senha certa', async () => {
++    const stored = await hashPassword('abc12345');
++    expect(isHashed(stored)).toBe(true);
++    expect(stored).not.toContain('abc12345');
++    expect(await verifyPassword('abc12345', stored)).toEqual({ ok: true, needsUpgrade: false });
++  });
++
++  it('recusa a senha errada', async () => {
++    const stored = await hashPassword('abc12345');
++    expect(await verifyPassword('abc12346', stored)).toEqual({ ok: false, needsUpgrade: false });
++  });
++
++  it('usa sal: a mesma senha gera hashes diferentes', async () => {
++    expect(await hashPassword('igual')).not.toBe(await hashPassword('igual'));
++  });
++
++  it('aceita o formato antigo (texto puro) e pede a regravação só se conferir', async () => {
++    expect(await verifyPassword('admin123', 'admin123')).toEqual({ ok: true, needsUpgrade: true });
++    expect(await verifyPassword('outra', 'admin123')).toEqual({ ok: false, needsUpgrade: false });
++  });
++
++  it('não trata uma senha antiga com $ como hash malformado que passa', async () => {
++    // Texto puro que apenas contém "$" continua sendo texto puro.
++    expect(await verifyPassword('a$b$c', 'a$b$c')).toEqual({ ok: true, needsUpgrade: true });
++  });
++
++  it('recusa hash adulterado ou com custo absurdo, sem estourar memória', async () => {
++    expect(await verifyPassword('x', 'scrypt$32768$8$1$')).toEqual({ ok: false, needsUpgrade: false });
++    expect(await verifyPassword('x', 'scrypt$1073741824$8$1$c2Fs$aGFzaA')).toEqual({
++      ok: false,
++      needsUpgrade: false,
++    });
++  });
++
++  it('pede regravação quando o custo guardado é menor que o atual', async () => {
++    // Hash válido de "abc" com N = 2^14 (custo antigo), gerado pelo próprio scrypt.
++    const { scryptSync, randomBytes } = await import('node:crypto');
++    const salt = randomBytes(16);
++    const key = scryptSync('abc', salt, 32, { N: 2 ** 14, r: 8, p: 1 });
++    const stored = ['scrypt', 2 ** 14, 8, 1, salt.toString('base64url'), key.toString('base64url')].join('$');
++    expect(await verifyPassword('abc', stored)).toEqual({ ok: true, needsUpgrade: true });
++    expect(await verifyPassword('abd', stored)).toEqual({ ok: false, needsUpgrade: false });
++  });
++
++  it('normaliza Unicode: "ã" composto e decomposto são a mesma senha', async () => {
++    const stored = await hashPassword('coração');
++    expect((await verifyPassword('coração', stored)).ok).toBe(true);
++    expect((await verifyPassword('coração', stored)).ok).toBe(true);
++  });
++});
+--- /dev/null
++++ b/apps/web/scripts/hash-passwords.mjs
+@@ -0,0 +1,94 @@
++// Migra as senhas que ainda estão em TEXTO PURO para hash (scrypt).
++//
++// Uso (em apps/web):  node scripts/hash-passwords.mjs            # só relata (dry-run)
++//                     node scripts/hash-passwords.mjs --apply    # grava, pedindo confirmação
++//                     node scripts/hash-passwords.mjs --apply --yes
++//
++// Não muda o schema (a coluna `User.password` continua `String`): o app já aceita
++// os dois formatos (`src/lib/password.ts`) e regrava no primeiro login de cada
++// conta. Este script só antecipa isso para as contas dormentes.
++//
++// Por que NÃO há backup obrigatório aqui, ao contrário de `db:push`: `db:backup`
++// não inclui a tabela `User` (e não deve — um backup dela seria um arquivo de senhas
++// em texto puro dentro do git). A operação é idempotente e só toca linhas que ainda
++// não começam com `scrypt$`; o pior caso (hash gravado errado) se resolve com
++// "Esqueci minha senha" ou pela tela Usuários, e são poucas contas.
++//
++// Segurança do próprio script:
++//   - nunca imprime uma senha, nem em hash; só ids, e-mails e contagens;
++//   - cada UPDATE é um compare-and-swap (`WHERE password = <valor lido>`): se a senha
++//     mudou no meio do caminho (redefinição, edição pelo admin), a linha é pulada.
++
++import readline from 'node:readline';
++import path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import pg from 'pg';
++import { config } from 'dotenv';
++// Node 22.18+ executa .ts direto (type stripping); o módulo só usa sintaxe apagável.
++import { hashPassword, isHashed } from '../src/lib/password.ts';
++
++const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
++config({ path: path.resolve(webDir, '.env.local'), quiet: true });
++config({ path: path.resolve(webDir, '.env'), quiet: true });
++
++const args = process.argv.slice(2);
++const APPLY = args.includes('--apply');
++const SKIP_CONFIRM = args.includes('--yes');
++
++// Senhas do seed (README e prisma/seed.ts): públicas no repositório.
++const SEED_DEFAULTS = new Set(['admin123', 'secretaria123']);
++
++if (!process.env.DATABASE_URL) {
++  console.error('Defina DATABASE_URL.');
++  process.exit(1);
++}
++
++function ask(question) {
++  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
++  return new Promise((resolve) => rl.question(question, (answer) => { rl.close(); resolve(answer); }));
++}
++
++const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
++await client.connect();
++
++try {
++  const { rows } = await client.query('SELECT id, email, active, password FROM "User" ORDER BY email');
++  const legacy = rows.filter((row) => !isHashed(row.password));
++  const hashed = rows.length - legacy.length;
++  const withSeedPassword = legacy.filter((row) => SEED_DEFAULTS.has(row.password));
++
++  console.log(`Usuários: ${rows.length}  |  já em hash: ${hashed}  |  em texto puro: ${legacy.length}`);
++  if (withSeedPassword.length > 0) {
++    console.log(`\n⚠ ${withSeedPassword.length} conta(s) ainda usam a senha padrão do seed (pública no repositório):`);
++    for (const row of withSeedPassword) console.log(`   - ${row.email}${row.active ? '' : ' (inativa)'}`);
++    console.log('  Troque essas senhas pela tela Usuários; hashear não as torna secretas.');
++  }
++
++  if (legacy.length === 0) {
++    console.log('\nNada a migrar.');
++  } else if (!APPLY) {
++    console.log('\nDry-run: nada foi gravado. Rode com --apply para migrar.');
++  } else {
++    if (!SKIP_CONFIRM) {
++      const answer = await ask(`\nGravar hash em ${legacy.length} conta(s)? Digite "sim" para confirmar: `);
++      if (answer.trim().toLowerCase() !== 'sim') {
++        console.log('Cancelado.');
++        process.exit(0);
++      }
++    }
++    let migrated = 0;
++    let skipped = 0;
++    for (const row of legacy) {
++      const result = await client.query(
++        'UPDATE "User" SET password = $1 WHERE id = $2 AND password = $3',
++        [await hashPassword(row.password), row.id, row.password],
++      );
++      if (result.rowCount === 1) migrated += 1;
++      else skipped += 1; // a senha mudou depois da leitura
++    }
++    console.log(`\nMigradas: ${migrated}  |  puladas (senha mudou no meio): ${skipped}`);
++    if (skipped > 0) console.log('Rode de novo para pegar as puladas.');
++  }
++} finally {
++  await client.end();
++}
+--- /dev/null
++++ b/apps/web/vitest.config.ts
+@@ -0,0 +1,9 @@
++import path from 'node:path';
++import { defineConfig } from 'vitest/config';
++
++export default defineConfig({
++  resolve: {
++    // Mesmo alias do tsconfig (`@/*` → `src/*`), para testar rotas que importam por ele.
++    alias: { '@': path.resolve(__dirname, 'src') },
++  },
++});
+--- /dev/null
++++ b/apps/web/src/app/api/auth/login/route.test.ts
+@@ -0,0 +1,120 @@
++import { NextRequest } from 'next/server';
++import { beforeEach, describe, expect, it, vi } from 'vitest';
++import { hashPassword, isHashed, verifyPassword } from '@/lib/password';
++
++// O banco é simulado: a rota só fala com `prisma.$transaction(tx => …)`.
++const db = vi.hoisted(() => ({
++  user: null as null | { id: string; email: string; password: string; active: boolean; name: string },
++  updates: [] as Array<{ where: { id: string; password: string }; data: { password: string } }>,
++  failures: 0,
++  sessions: 0,
++}));
++
++vi.mock('server-only', () => ({}));
++vi.mock('@/lib/prisma-client', () => ({ Prisma: { PrismaClientKnownRequestError: class extends Error {} } }));
++vi.mock('@/lib/prisma', () => {
++  const tx = {
++    user: {
++      findFirst: async () => db.user,
++      updateMany: async (args: { where: { id: string; password: string }; data: { password: string } }) => {
++        db.updates.push(args);
++        return { count: 1 };
++      },
++    },
++    $queryRawUnsafe: async () => [],
++    loginRateLimit: {
++      findUnique: async () => null,
++      upsert: async () => {
++        db.failures += 1;
++      },
++      deleteMany: async () => ({ count: 0 }),
++    },
++    session: {
++      deleteMany: async () => ({ count: 0 }),
++      create: async () => {
++        db.sessions += 1;
++      },
++    },
++  };
++  return { prisma: { $executeRaw: async () => 0, $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } };
++});
++
++const { POST } = await import('./route');
++
++function login(body: Record<string, unknown>) {
++  return POST(
++    new NextRequest('http://localhost/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
++  );
++}
++
++const base = { id: 'u1', email: 'a@b.c', name: 'Ana', active: true };
++
++beforeEach(() => {
++  db.user = null;
++  db.updates = [];
++  db.failures = 0;
++  db.sessions = 0;
++});
++
++describe('POST /api/auth/login com senhas em hash', () => {
++  it('entra com senha antiga em texto puro e a regrava em hash (compare-and-swap)', async () => {
++    db.user = { ...base, password: 'admin123' };
++    const res = await login({ identifier: 'a@b.c', password: 'admin123' });
++    expect(res.status).toBe(200);
++    const json = await res.json();
++    expect(json.user.password).toBeUndefined();
++    expect(db.sessions).toBe(1);
++
++    expect(db.updates).toHaveLength(1);
++    expect(db.updates[0].where).toEqual({ id: 'u1', password: 'admin123' });
++    expect(isHashed(db.updates[0].data.password)).toBe(true);
++    expect((await verifyPassword('admin123', db.updates[0].data.password)).ok).toBe(true);
++  });
++
++  it('entra com senha já em hash sem regravar nada', async () => {
++    db.user = { ...base, password: await hashPassword('segredo!') };
++    const res = await login({ identifier: 'a@b.c', password: 'segredo!' });
++    expect(res.status).toBe(200);
++    expect(db.updates).toHaveLength(0);
++    expect(db.sessions).toBe(1);
++  });
++
++  it('recusa senha errada, conta a falha e não abre sessão', async () => {
++    db.user = { ...base, password: await hashPassword('segredo!') };
++    const res = await login({ identifier: 'a@b.c', password: 'errada' });
++    expect(res.status).toBe(401);
++    expect(db.failures).toBe(1);
++    expect(db.sessions).toBe(0);
++    expect(db.updates).toHaveLength(0);
++  });
++
++  it('senha antiga errada não é regravada', async () => {
++    db.user = { ...base, password: 'admin123' };
++    const res = await login({ identifier: 'a@b.c', password: 'admin124' });
++    expect(res.status).toBe(401);
++    expect(db.updates).toHaveLength(0);
++  });
++
++  it('recusa conta inativa mesmo com a senha certa', async () => {
++    db.user = { ...base, active: false, password: await hashPassword('segredo!') };
++    const res = await login({ identifier: 'a@b.c', password: 'segredo!' });
++    expect(res.status).toBe(401);
++    expect(db.sessions).toBe(0);
++  });
++
++  it('usuário inexistente gasta o tempo de uma conferência real (sem revelar a conta)', async () => {
++    await login({ identifier: 'x@y.z', password: 'aquecimento' }); // monta o hash descartável
++    const started = performance.now();
++    const res = await login({ identifier: 'x@y.z', password: 'qualquer' });
++    expect(res.status).toBe(401);
++    expect(performance.now() - started).toBeGreaterThan(20);
++    expect(db.failures).toBe(2);
++  });
++
++  it('recusa senha gigante sem tocar no banco', async () => {
++    db.user = { ...base, password: 'admin123' };
++    const res = await login({ identifier: 'a@b.c', password: 'x'.repeat(5000) });
++    expect(res.status).toBe(401);
++    expect(db.failures).toBe(0);
++  });
++});

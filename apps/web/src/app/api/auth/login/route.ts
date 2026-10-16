@@ -9,6 +9,7 @@ import {
   nextLoginFailure,
   retryAfterSeconds,
 } from '@/lib/login-rate-limit';
+import { sessionExpiryCutoff } from '@/lib/session-lifetime';
 
 function databaseUnavailable() {
   return NextResponse.json(
@@ -80,10 +81,28 @@ export async function POST(req: NextRequest) {
       }
 
       await tx.loginRateLimit.deleteMany({ where: { key } });
+      // Descarta as sessões já expiradas DESTE usuário. É aqui que a limpeza sai
+      // de graça: o login já escreve, e o recorte por usuário mantém a operação
+      // pequena — sem varredura global e sem tocar em sessão de terceiro.
+      await tx.session.deleteMany({
+        where: { userId: user.id, createdAt: { lt: sessionExpiryCutoff(now) } },
+      });
       const token = randomBytes(32).toString('hex');
       await tx.session.create({ data: { token, userId: user.id } });
       const { password: _pw, ...safeUser } = user;
       return { kind: 'success', token, user: safeUser } as const;
+    }, {
+      // `maxWait` é o tempo para CONSEGUIR uma conexão e abrir a transação, e o
+      // padrão do Prisma (2s) não cabe aqui: o compute do Neon suspende quando
+      // ocioso e a primeira conexão depois disso leva de 1,3s a 2,0s — medido.
+      // Estourar esse limite derruba o login inteiro com
+      // "P2028: Unable to start a transaction in the given time", que chega ao
+      // usuário como "Erro ao acessar a API" e não diz nada sobre a causa.
+      // 10s é o mesmo valor já usado nas transações pesadas (`store.ts`).
+      maxWait: 10000,
+      // O corpo tem seis idas ao banco em sequência, uma delas um
+      // `pg_advisory_xact_lock`. Em rede lenta isso encosta no padrão de 5s.
+      timeout: 15000,
     });
   } catch (error) {
     if (
@@ -91,6 +110,20 @@ export async function POST(req: NextRequest) {
       error.code === 'ECONNREFUSED'
     ) {
       return databaseUnavailable();
+    }
+    // P2028 é a transação que não conseguiu abrir a tempo — tipicamente o banco
+    // despertando do modo ocioso. Sem este ramo o erro sobe como 500 sem corpo, e
+    // o `api.ts` mostra "Erro ao acessar a API", que não diz o que houve nem o que
+    // fazer. Aqui o usuário lê que é lentidão momentânea e que basta repetir.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028') {
+      return NextResponse.json(
+        {
+          message: 'O banco de dados demorou a responder. Tente entrar novamente em alguns segundos.',
+          error: 'Service Unavailable',
+          statusCode: 503,
+        },
+        { status: 503, headers: { 'Retry-After': '5' } },
+      );
     }
     throw error;
   }

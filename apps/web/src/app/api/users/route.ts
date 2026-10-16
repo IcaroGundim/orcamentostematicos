@@ -31,47 +31,50 @@ export async function GET(req: NextRequest) {
 
   const userIds = users.map((u) => u.id);
 
-  // Sessões ativas — última sessão por usuário, considerada ativa se criada na janela.
-  const recentSessions = await prisma.session.findMany({
-    where: { userId: { in: userIds } },
-    select: { userId: true, createdAt: true },
-    orderBy: { createdAt: 'desc' },
-  });
-  const latestSession = new Map<string, Date>();
-  for (const s of recentSessions) {
-    if (!latestSession.has(s.userId)) latestSession.set(s.userId, s.createdAt);
-  }
-
-  // Contagens de pendências por usuário.
-  // pendingCuration: ThematicAssignment com status RASCUNHO criados pelo usuário.
-  const curationGroups = await prisma.thematicAssignment.groupBy({
-    by: ['createdBy'],
-    where: {
-      createdBy: { in: userIds },
-      status: 'RASCUNHO',
-      action: { presentInCurrentQdd: true },
-    },
-    _count: { _all: true },
-  });
-  const pendingCuration = new Map<string, number>(
-    curationGroups.map((g) => [g.createdBy, g._count._all]),
-  );
-
   // pendingValidation / pendingDrafts: por (organizationCode, role).
   // - REPRESENTANTE: itens RASCUNHO/DEVOLVIDO no escopo.
   const orgsInPlay = Array.from(
     new Set(users.map((u) => u.organizationCode).filter((c): c is string => Boolean(c))),
   );
-  const orgCounts = orgsInPlay.length
-    ? await prisma.actionValidation.groupBy({
-        by: ['organizationCode', 'status'],
-        where: {
-          organizationCode: { in: orgsInPlay },
-          action: { presentInCurrentQdd: true },
-        },
-        _count: { _all: true },
-      })
-    : [];
+
+  // As três consultas dependem só da lista de usuários; rodam juntas.
+  const [sessionGroups, curationGroups, orgCounts] = await Promise.all([
+    // Sessões ativas — última sessão por usuário, considerada ativa se criada na
+    // janela. O banco devolve uma linha por usuário em vez de todas as sessões.
+    prisma.session.groupBy({
+      by: ['userId'],
+      where: { userId: { in: userIds } },
+      _max: { createdAt: true },
+    }),
+    // Contagens de pendências por usuário.
+    // pendingCuration: ThematicAssignment com status RASCUNHO criados pelo usuário.
+    prisma.thematicAssignment.groupBy({
+      by: ['createdBy'],
+      where: {
+        createdBy: { in: userIds },
+        status: 'RASCUNHO',
+        action: { presentInCurrentQdd: true },
+      },
+      _count: { _all: true },
+    }),
+    orgsInPlay.length
+      ? prisma.actionValidation.groupBy({
+          by: ['organizationCode', 'status'],
+          where: {
+            organizationCode: { in: orgsInPlay },
+            action: { presentInCurrentQdd: true },
+          },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const latestSession = new Map<string, Date>();
+  for (const g of sessionGroups) {
+    if (g._max.createdAt) latestSession.set(g.userId, g._max.createdAt);
+  }
+  const pendingCuration = new Map<string, number>(
+    curationGroups.map((g) => [g.createdBy, g._count._all]),
+  );
   const countByOrgStatus = new Map<string, number>();
   for (const g of orgCounts) {
     countByOrgStatus.set(`${g.organizationCode}::${g.status}`, g._count._all);

@@ -78,7 +78,7 @@ const EDITABLE_STATUSES: ValidationStatus[] = ['RASCUNHO', 'DEVOLVIDO'];
 
 function ProfileBadge() {
   return (
-    <Badge variant="outline" className="not-prose border-emerald-600/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+    <Badge variant="outline" className="not-prose border-marca-escura/40 bg-marca/10 text-marca-escura dark:text-marca">
       <UserCheckIcon className="size-3.5" data-icon="inline-start" />
       Representante
     </Badge>
@@ -163,8 +163,8 @@ function SectionContent({ id }: { id: (typeof SECTIONS)[number]['id'] }) {
             <strong className="text-foreground">não importa QDD</strong> nem administra usuários.
           </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="rounded-lg border border-emerald-600/30 bg-emerald-500/5 p-3">
-              <p className="mb-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">Representante</p>
+            <div className="rounded-lg border border-marca-escura/30 bg-marca/5 p-3">
+              <p className="mb-1 text-sm font-semibold text-marca-escura dark:text-marca">Representante</p>
               <p className="text-xs">
                 Classifica ações, preenche validações e envia as respostas diretamente à SEPLAN.
               </p>
@@ -679,7 +679,7 @@ function HelpAside({ className }: { className?: string }) {
           <CardTitle className="text-sm">Perfis de acesso</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-0 text-xs text-muted-foreground">
-          <div className="rounded-lg border border-emerald-600/25 bg-emerald-500/5 p-3">
+          <div className="rounded-lg border border-marca-escura/25 bg-marca/5 p-3">
             <ProfileBadge />
             <p className="mt-2 leading-relaxed">
               Curadoria temática, validação de entregas e envios em lote.

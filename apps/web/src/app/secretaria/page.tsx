@@ -409,10 +409,13 @@ export default function SecretariaPage() {
       setSummary((prev) => incrementSummaryAssignments(prev, 1));
       toast.success('Ação classificada no orçamento temático.');
       try {
-        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A validação RASCUNHO é gerada automaticamente no backend; recarrega
-        // para que apareça imediatamente na aba Validações.
-        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        // para que apareça imediatamente na aba Validações. As duas leituras são
+        // independentes, então correm juntas: a aba não espera o download das ações.
+        const [, freshValidations] = await Promise.all([
+          reconcileCurationSnapshot(optimistic, setActions, setSummary),
+          api<ValidationItem[]>('/validations/my'),
+        ]);
         setValidations(freshValidations);
       } catch {
         /* mantém estado otimista */
@@ -448,9 +451,11 @@ export default function SecretariaPage() {
       setActions(optimistic);
       toast.success('Classificação atualizada.');
       try {
-        await reconcileCurationSnapshot(optimistic, setActions, setSummary);
         // A classificação alterada reflete na aba Validações.
-        const freshValidations = await api<ValidationItem[]>('/validations/my');
+        const [, freshValidations] = await Promise.all([
+          reconcileCurationSnapshot(optimistic, setActions, setSummary),
+          api<ValidationItem[]>('/validations/my'),
+        ]);
         setValidations(freshValidations);
       } catch {
         /* mantém estado otimista */
@@ -571,7 +576,7 @@ export default function SecretariaPage() {
 
   return (
     <main className={cn('bg-background', activeTab === 'overview' ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen')}>
-      <header className="shrink-0 border-b border-black bg-green-900 text-white shadow-sm">
+      <header className="shrink-0 border-b border-black bg-marca text-marca-contraste shadow-sm">
         <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-6 2xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <img src="/logo.svg" alt="Logo" className="h-8 w-auto" />

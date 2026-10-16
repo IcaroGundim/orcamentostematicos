@@ -57,13 +57,17 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return response.json() as Promise<T>;
 }
 
+// Construir um `Intl.NumberFormat` custa ~30µs; tabelas com milhares de células o
+// chamam a cada renderização. O formatador é imutável, então uma instância serve a todos.
+const moneyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function formatMoney(value: number) {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value || 0);
+  return moneyFormatter.format(value || 0);
 }
 
 export const themeLabels = {

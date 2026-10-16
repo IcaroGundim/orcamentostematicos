@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized } from '@/lib/auth-server';
 import { resolveRequestYear } from '@/lib/exercise-request';
 import { prisma } from '@/lib/prisma';
-import { getCurrentYear, listExercises } from '@/lib/store';
+import { loadExercises } from '@/lib/store';
 
 const THEME_AXES = {
   OCAD: [
@@ -52,20 +52,21 @@ export async function GET(req: NextRequest) {
   const exercise = await resolveRequestYear(req, user);
   if (exercise.response) return exercise.response;
 
-  const [allExercises, currentYear] = await Promise.all([listExercises(), getCurrentYear()]);
+  const selectedYear = exercise.year;
+  // `vigenteImport` continua sendo o do exercício selecionado: o campo é o mesmo de
+  // antes, então nenhum consumidor precisou mudar. Independe da lista de exercícios,
+  // por isso as duas consultas seguem juntas.
+  const [{ exercises: allExercises, currentYear }, vigenteImport] = await Promise.all([
+    loadExercises(),
+    selectedYear == null
+      ? Promise.resolve(null)
+      : prisma.budgetImport.findUnique({ where: { year: selectedYear } }),
+  ]);
 
   // Exercícios apenas comparativos são exclusivos da SEPLAN — as secretarias nem
   // chegam a vê-los no seletor.
   const exercises =
     user.role === 'SEPLAN_ADMIN' ? allExercises : allExercises.filter((e) => !e.comparisonOnly);
-
-  const selectedYear = exercise.year;
-  // `vigenteImport` continua sendo o do exercício selecionado: o campo é o mesmo de
-  // antes, então nenhum consumidor precisou mudar.
-  const vigenteImport =
-    selectedYear == null
-      ? null
-      : await prisma.budgetImport.findUnique({ where: { year: selectedYear } });
 
   return ok({
     themes: ['OCAD', 'OSG', 'CLIMATICO'],

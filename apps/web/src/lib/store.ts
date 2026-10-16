@@ -34,19 +34,28 @@ export async function getCurrentYear(): Promise<number | null> {
     orderBy: { year: 'desc' },
     select: { year: true },
   });
-  if (flagged.length > 1) {
-    console.warn(
-      `[getCurrentYear] Invariante violada: ${flagged.length} exercícios marcados como ` +
-        `corrente (${flagged.map((r) => r.year).join(', ')}). Usando o mais recente.`,
-    );
-  }
-  if (flagged[0]) return flagged[0].year;
+  if (flagged[0]) return pickCurrentYear(flagged.map((r) => r.year), null);
 
   const row = await prisma.budgetImport.findFirst({
     orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
     select: { year: true },
   });
   return row?.year ?? null;
+}
+
+/**
+ * Regra única de escolha do exercício corrente, compartilhada por `getCurrentYear`
+ * e por `loadExercises` (que já tem os dois insumos em mãos e dispensa a consulta).
+ * `flaggedYears` vem ordenado do mais recente ao mais antigo.
+ */
+function pickCurrentYear(flaggedYears: number[], latestImportYear: number | null): number | null {
+  if (flaggedYears.length > 1) {
+    console.warn(
+      `[getCurrentYear] Invariante violada: ${flaggedYears.length} exercícios marcados como ` +
+        `corrente (${flaggedYears.join(', ')}). Usando o mais recente.`,
+    );
+  }
+  return flaggedYears[0] ?? latestImportYear;
 }
 
 /**
@@ -62,7 +71,9 @@ export async function setCurrentYear(year: number): Promise<void> {
       create: { year, isCurrent: true },
       update: { isCurrent: true },
     });
-  });
+    // Mesma razão do login: o padrão de 2s do `maxWait` não cobre o despertar do
+    // compute suspenso do Neon, e a troca de exercício falharia com P2028.
+  }, { maxWait: 10000, timeout: 15000 });
 }
 
 /**
@@ -86,16 +97,27 @@ export type ExerciseInfo = {
   vigenteImportId: string;
 };
 
-/** Exercícios disponíveis: todo ano com uma base QDD, do mais recente ao mais antigo. */
-export async function listExercises(): Promise<ExerciseInfo[]> {
-  const [imports, policies, currentYear] = await Promise.all([
+/**
+ * Exercícios disponíveis (todo ano com uma base QDD, do mais recente ao mais antigo)
+ * e o exercício corrente, numa única rodada de consultas. O corrente sai dos mesmos
+ * dados — `FiscalYear.isCurrent`, com o ano do QDD mais recente como reserva —, pelo
+ * mesmo critério de `getCurrentYear`, sem uma terceira ida ao banco.
+ */
+export async function loadExercises(): Promise<{ exercises: ExerciseInfo[]; currentYear: number | null }> {
+  const [imports, policies] = await Promise.all([
     prisma.budgetImport.findMany({
       orderBy: [{ year: 'desc' }, { importedAt: 'desc' }],
       select: { id: true, year: true },
     }),
-    prisma.fiscalYear.findMany({ select: { year: true, comparisonOnly: true } }),
-    getCurrentYear(),
+    prisma.fiscalYear.findMany({
+      orderBy: { year: 'desc' },
+      select: { year: true, comparisonOnly: true, isCurrent: true },
+    }),
   ]);
+  const currentYear = pickCurrentYear(
+    policies.filter((p) => p.isCurrent).map((p) => p.year),
+    imports[0]?.year ?? null,
+  );
   const comparisonByYear = new Map(policies.map((p) => [p.year, p.comparisonOnly]));
   const byYear = new Map<number, ExerciseInfo>();
   for (const imp of imports) {
@@ -107,7 +129,11 @@ export async function listExercises(): Promise<ExerciseInfo[]> {
       vigenteImportId: imp.id,
     });
   }
-  return [...byYear.values()];
+  return { exercises: [...byYear.values()], currentYear };
+}
+
+export async function listExercises(): Promise<ExerciseInfo[]> {
+  return (await loadExercises()).exercises;
 }
 
 /**
@@ -251,16 +277,28 @@ const expenseLineSelect = {
   paid: true, payable: true, available: true,
 } as const;
 
+/** Colunas escalares de `BudgetAction` lidas por `mapAction`, sem nenhuma relação. */
+const actionColumnsSelect = {
+  id: true, year: true, organizationCode: true, organizationName: true,
+  unitCode: true, unitName: true, application: true,
+  functionalProgram: true, projectActivity: true,
+  initialBudget: true, supplemented: true, updatedBudget: true,
+  committed: true, liquidated: true, paid: true, available: true,
+  presentInCurrentQdd: true, inactiveAt: true,
+} as const;
+
 export async function listActions(user: ScopedUser, filters: {
   year?: number;
   organizationCode?: string;
   unitCode?: string;
 }) {
   // `year` SELECIONA o import do exercício — não é um filtro aplicado dentro dele.
-  const vigenteId = await getVigenteImportId(filters.year);
+  const [vigenteId, scope] = await Promise.all([
+    getVigenteImportId(filters.year),
+    scopeWhere(user, filters.year),
+  ]);
   if (!vigenteId) return [];
 
-  const scope = await scopeWhere(user, filters.year);
   const where: Record<string, unknown> = {
     importId: vigenteId,
     presentInCurrentQdd: true,
@@ -326,8 +364,11 @@ export async function getSummary(user: ScopedUser, year?: number | null) {
           select: { id: true, liquidated: true },
         })
       : Promise.resolve([] as Array<{ id: string; liquidated: number }>),
+    // O escopo da secretaria entra na consulta para não ler as marcações do
+    // exercício inteiro só para descartá-las abaixo (o filtro por `actionIds`
+    // continua valendo e dá o mesmo resultado).
     prisma.thematicAssignment.findMany({
-      where: yearScope,
+      where: { action: { ...yearScope.action, ...scope } },
       select: { id: true, actionId: true, theme: true, classification: true, weightingFactor: true, createdAt: true },
     }),
     prisma.validationCycle.count({ where: targetYear == null ? {} : { year: targetYear } }),
@@ -433,26 +474,32 @@ export async function getSummary(user: ScopedUser, year?: number | null) {
  */
 async function ensureMissingAssignmentValidations(year: number | null) {
   if (year == null) return;
-  if (await isComparisonOnlyYear(year)) return;
 
-  const missingAssignments = await prisma.thematicAssignment.findMany({
-    where: {
-      validations: { none: {} },
-      action: { year, presentInCurrentQdd: true },
-    },
-    select: {
-      id: true,
-      actionId: true,
-      theme: true,
-      action: {
-        select: {
-          year: true,
-          organizationCode: true,
-          unitCode: true,
+  // A consulta das pendências não depende do gate e roda junto com ele para poupar
+  // uma ida ao banco. O gate continua valendo: em exercício comparativo o resultado
+  // é descartado aqui, antes de qualquer escrita.
+  const [comparisonOnly, missingAssignments] = await Promise.all([
+    isComparisonOnlyYear(year),
+    prisma.thematicAssignment.findMany({
+      where: {
+        validations: { none: {} },
+        action: { year, presentInCurrentQdd: true },
+      },
+      select: {
+        id: true,
+        actionId: true,
+        theme: true,
+        action: {
+          select: {
+            year: true,
+            organizationCode: true,
+            unitCode: true,
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
+  if (comparisonOnly) return;
   if (missingAssignments.length === 0) return;
 
   const cycleIds = new Map<string, string>();
@@ -499,7 +546,12 @@ export async function listValidations(user: ScopedUser, year?: number | null) {
   const rows = await prisma.actionValidation.findMany({
     where,
     include: {
-      action: { include: { expenseLines: { select: expenseLineSelect }, assignments: true } },
+      // Nenhuma tela lê `expenseLines`/`assignments` de `validation.action` (o
+      // detalhamento por fonte vem de `/budget-actions`, e as marcações já vão em
+      // `validation.assignment`). Aninhar o grafo inteiro duplicava as linhas de
+      // despesa a cada validação da mesma ação; aqui vão só as colunas da ação e a
+      // contagem de linhas, que `mapAction` preserva em `expenseLinesCount`.
+      action: { select: { ...actionColumnsSelect, _count: { select: { expenseLines: true } } } },
       assignment: true,
       cycle: true,
     },
@@ -594,7 +646,7 @@ export function mapAction(row: any) {
       liquidated: l.liquidated, payableToLiquidate: l.payableToLiquidate,
       paid: l.paid, payable: l.payable, available: l.available,
     })),
-    expenseLinesCount: row.expenseLines?.length ?? 0,
+    expenseLinesCount: row._count?.expenseLines ?? row.expenseLines?.length ?? 0,
     assignments: assignments.map(mapAssignment),
     assignmentIds: assignments.map((a: any) => a.id),
   };

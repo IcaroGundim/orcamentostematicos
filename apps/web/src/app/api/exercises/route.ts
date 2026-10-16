@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getAuthUser, ok, unauthorized } from '@/lib/auth-server';
-import { getCurrentYear, listExercises } from '@/lib/store';
+import { loadExercises } from '@/lib/store';
 
 /**
  * GET /api/exercises — exercícios disponíveis (todo ano com QDD vigente).
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const user = await getAuthUser(req);
   if (!user) return unauthorized();
 
-  const [exercises, currentYear] = await Promise.all([listExercises(), getCurrentYear()]);
+  const { exercises, currentYear } = await loadExercises();
   const visible =
     user.role === 'SEPLAN_ADMIN' ? exercises : exercises.filter((e) => !e.comparisonOnly);
 

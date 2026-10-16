@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { prisma } from './prisma';
-import { actionLogicalKey } from './qdd-parser';
+import { actionLogicalKey } from './action-logical-key';
 import { getCurrentYear, getVigenteImportId } from './store';
 import type {
   GovernmentEntityType,
@@ -307,27 +307,56 @@ export async function syncStructureFromImport(actions: ActionLike[], year: numbe
     orgNames.set(pair.organizationCode, pair.organizationName);
   }
 
+  // Um upsert por órgão e por unidade custava centenas de idas ao banco a cada
+  // publicação. Lê-se o cadastro do exercício uma vez, cria-se o que falta em lote e
+  // só se atualiza o que de fato mudou — o mesmo resultado do upsert: o órgão só tem
+  // o nome atualizado (nunca é reativado) e a unidade recebe nome e `active: true`.
+  const [existingOrgs, existingUnits] = await Promise.all([
+    prisma.exerciseOrganization.findMany({ where: { year }, select: { code: true, name: true } }),
+    prisma.exerciseUnit.findMany({
+      where: { year },
+      select: { organizationCode: true, code: true, name: true, active: true },
+    }),
+  ]);
+  const orgNameByCode = new Map(existingOrgs.map((org) => [org.code, org.name]));
+  const unitByKey = new Map(
+    existingUnits.map((unit) => [`${unit.organizationCode}|${unit.code}`, unit]),
+  );
+
+  const orgsToCreate = [...orgNames]
+    .filter(([code]) => !orgNameByCode.has(code))
+    .map(([code, name]) => ({ year, code, name, type: 'SECRETARIA' as const, active: true }));
+  // `skipDuplicates` cobre uma publicação concorrente que crie o mesmo órgão.
+  if (orgsToCreate.length > 0) {
+    await prisma.exerciseOrganization.createMany({ data: orgsToCreate, skipDuplicates: true });
+  }
   for (const [code, name] of orgNames) {
-    await prisma.exerciseOrganization.upsert({
-      where: { year_code: { year, code } },
-      update: { name },
-      create: { year, code, name, type: 'SECRETARIA', active: true },
-    });
+    const current = orgNameByCode.get(code);
+    if (current === undefined || current === name) continue;
+    await prisma.exerciseOrganization.update({ where: { year_code: { year, code } }, data: { name } });
   }
 
+  // As unidades dependem dos órgãos (FK), já garantidos acima.
+  const unitsToCreate = pairs
+    .filter((pair) => !unitByKey.has(`${pair.organizationCode}|${pair.unitCode}`))
+    .map((pair) => ({
+      year,
+      organizationCode: pair.organizationCode,
+      code: pair.unitCode,
+      name: pair.unitName,
+      active: true,
+    }));
+  if (unitsToCreate.length > 0) {
+    await prisma.exerciseUnit.createMany({ data: unitsToCreate, skipDuplicates: true });
+  }
   for (const pair of pairs) {
-    await prisma.exerciseUnit.upsert({
+    const current = unitByKey.get(`${pair.organizationCode}|${pair.unitCode}`);
+    if (!current || (current.name === pair.unitName && current.active)) continue;
+    await prisma.exerciseUnit.update({
       where: {
         year_organizationCode_code: { year, organizationCode: pair.organizationCode, code: pair.unitCode },
       },
-      update: { name: pair.unitName, active: true },
-      create: {
-        year,
-        organizationCode: pair.organizationCode,
-        code: pair.unitCode,
-        name: pair.unitName,
-        active: true,
-      },
+      data: { name: pair.unitName, active: true },
     });
   }
 }

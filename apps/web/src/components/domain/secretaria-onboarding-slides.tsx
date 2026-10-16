@@ -367,7 +367,7 @@ export function SecretariaOnboardingSlides({ onFinish }: { onFinish: () => void 
         {/* Painel da marca — sumário das etapas */}
         <div className="relative flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#0d4a2b] via-primary to-primary/80 p-6 text-primary-foreground lg:p-7">
           <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-primary-foreground/10 blur-3xl" />
-          <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-16 size-60 rounded-full bg-emerald-300/10 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-28 -left-16 size-60 rounded-full bg-marca/10 blur-3xl" />
           <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:18px_18px]" />
 
           <span className="relative text-[0.7rem] font-semibold uppercase tracking-[0.22em] text-primary-foreground/60">

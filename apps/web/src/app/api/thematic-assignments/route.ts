@@ -60,31 +60,38 @@ export async function POST(req: NextRequest) {
   if (!action) return badRequest('Ação orçamentária não encontrada.');
   if (!action.presentInCurrentQdd) return badRequest('A ação não está presente no QDD atual.');
 
+  // As consultas abaixo são independentes entre si; rodam juntas e os resultados são
+  // avaliados na mesma ordem de antes, então cada recusa continua sendo a mesma.
+  const isSecretaria = user.role === 'SECRETARIA_REPRESENTANTE';
+  const [vigenteImportId, comparisonOnly, currentYear, controlsUnit, existing] = await Promise.all([
+    getVigenteImportId(action.year),
+    isComparisonOnlyYear(action.year),
+    isSecretaria ? getCurrentYear() : Promise.resolve(null),
+    isSecretaria
+      ? userControlsUnit(user, action.organizationCode, action.unitCode, action.year)
+      : Promise.resolve(true),
+    prisma.thematicAssignment.findFirst({
+      where: {
+        actionId: body.actionId,
+        theme: body.theme,
+      },
+    }),
+  ]);
+
   // A ação precisa pertencer ao QDD vigente do seu exercício. Sem esta amarração,
   // um id de ação de importação histórica seria aceito e a marcação nasceria presa
   // a dados aposentados.
-  const vigenteImportId = await getVigenteImportId(action.year);
   if (!vigenteImportId || action.importId !== vigenteImportId) {
     return badRequest('Esta ação não pertence ao QDD vigente do exercício.');
   }
 
-  const comparisonOnly = await isComparisonOnlyYear(action.year);
-
-  if (user.role === 'SECRETARIA_REPRESENTANTE') {
+  if (isSecretaria) {
     // Secretaria só atua no exercício corrente: exercícios comparativos são
     // exclusivos da SEPLAN e não têm entregas a preencher.
-    const currentYear = await getCurrentYear();
     if (comparisonOnly || action.year !== currentYear) return forbidden();
-    const allowed = await userControlsUnit(user, action.organizationCode, action.unitCode, action.year);
-    if (!allowed) return forbidden();
+    if (!controlsUnit) return forbidden();
   }
 
-  const existing = await prisma.thematicAssignment.findFirst({
-    where: {
-      actionId: body.actionId,
-      theme: body.theme,
-    },
-  });
   if (existing) {
     return badRequest('Esta ação já foi classificada para este orçamento temático.');
   }
@@ -114,13 +121,7 @@ export async function POST(req: NextRequest) {
 
     // A validação é gerada automaticamente: a secretaria já a vê na aba
     // Validações sem depender de a SEPLAN abrir um ciclo.
-    const alreadyExists = cycle
-      ? await tx.actionValidation.findFirst({
-          where: { assignmentId: assignment.id },
-          select: { id: true },
-        })
-      : null;
-    if (cycle && !alreadyExists) {
+    if (cycle) {
       await tx.actionValidation.create({
         data: {
           cycleId: cycle.id,
@@ -137,7 +138,9 @@ export async function POST(req: NextRequest) {
     }
 
     return assignment;
-  });
+    // Mesma razão do login: o padrão de 2s do `maxWait` não cobre o despertar do
+    // compute suspenso do Neon, e classificar uma ação falharia com P2028.
+  }, { maxWait: 10000, timeout: 15000 });
 
   await logUserActivity({
     userId: user.id,
