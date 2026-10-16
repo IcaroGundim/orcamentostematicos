@@ -318,6 +318,7 @@ const OverviewActionRow = memo(function OverviewActionRow({
             selectedLineKeys={selectedLineKeys}
             onToggleLine={(lineKey) => onToggleLine(action.id, lineKey)}
             onToggleAll={() => onToggle(action.id)}
+            allStages={institutional}
           />
         </div>
       ) : null}

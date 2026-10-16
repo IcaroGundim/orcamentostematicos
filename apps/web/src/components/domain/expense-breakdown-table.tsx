@@ -3,11 +3,23 @@
 import { useMemo } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatMoney } from '@/lib/api';
-import { buildExpenseRows } from '@/lib/expense-breakdown';
+import { buildExpenseRows, type ExpenseRow } from '@/lib/expense-breakdown';
 import { getFonteLabel } from '@/lib/fontes-recursos';
 import type { BudgetAction } from '@/types/domain';
 
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
+
+type StageKey = 'initialBudget' | 'updatedBudget' | 'committed' | 'liquidated' | 'paid';
+
+/** Estágios na ordem do ciclo da despesa. Sem `allStages`, só os três de sempre. */
+const ALL_STAGES: { key: StageKey; label: string }[] = [
+  { key: 'initialBudget', label: 'Inicial' },
+  { key: 'updatedBudget', label: 'Atualizado' },
+  { key: 'committed', label: 'Empenhado' },
+  { key: 'liquidated', label: 'Liquidado' },
+  { key: 'paid', label: 'Pago' },
+];
+const BASIC_STAGES = ALL_STAGES.filter((stage) => stage.key !== 'committed' && stage.key !== 'paid');
 
 export type ExpenseBreakdownTableProps = {
   action: BudgetAction | null;
@@ -19,6 +31,11 @@ export type ExpenseBreakdownTableProps = {
   selectedLineKeys?: ReadonlySet<string>;
   onToggleLine?: (lineKey: string) => void;
   onToggleAll?: () => void;
+  /**
+   * Todos os estágios (com empenhado e pago): o monitor de execução liga; os
+   * orçamentos temáticos seguem com inicial, atualizado e liquidado.
+   */
+  allStages?: boolean;
 };
 
 export function ExpenseBreakdownTable({
@@ -28,18 +45,22 @@ export function ExpenseBreakdownTable({
   selectedLineKeys = EMPTY_KEYS,
   onToggleLine,
   onToggleAll,
+  allStages = false,
 }: ExpenseBreakdownTableProps) {
   const rows = useMemo(() => buildExpenseRows(action), [action]);
+  const stages = allStages ? ALL_STAGES : BASIC_STAGES;
 
   const totals = useMemo(
     () =>
-      rows.reduce(
-        (acc, row) => ({
+      rows.reduce<Record<StageKey, number>>(
+        (acc, row: ExpenseRow) => ({
           initialBudget: acc.initialBudget + row.initialBudget,
           updatedBudget: acc.updatedBudget + row.updatedBudget,
+          committed: acc.committed + row.committed,
           liquidated: acc.liquidated + row.liquidated,
+          paid: acc.paid + row.paid,
         }),
-        { initialBudget: 0, updatedBudget: 0, liquidated: 0 },
+        { initialBudget: 0, updatedBudget: 0, committed: 0, liquidated: 0, paid: 0 },
       ),
     [rows],
   );
@@ -72,9 +93,11 @@ export function ExpenseBreakdownTable({
             <th className="px-3 py-2 text-left font-semibold">Conta</th>
             <th className="px-3 py-2 text-left font-semibold">Descrição</th>
             <th className="px-3 py-2 text-left font-semibold">Fonte</th>
-            <th className="px-3 py-2 text-right font-semibold">Inicial</th>
-            <th className="px-3 py-2 text-right font-semibold">Atualizado</th>
-            <th className="px-3 py-2 text-right font-semibold">Liquidado</th>
+            {stages.map((stage) => (
+              <th key={stage.key} className="px-3 py-2 text-right font-semibold">
+                {stage.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -113,9 +136,11 @@ export function ExpenseBreakdownTable({
                     <span className="ml-2 text-neutral-600 dark:text-neutral-400">{fonteLabel}</span>
                   ) : null}
                 </td>
-                <td className="px-3 py-1.5 text-right align-top tabular-nums">{formatMoney(row.initialBudget)}</td>
-                <td className="px-3 py-1.5 text-right align-top tabular-nums">{formatMoney(row.updatedBudget)}</td>
-                <td className="px-3 py-1.5 text-right align-top tabular-nums">{formatMoney(row.liquidated)}</td>
+                {stages.map((stage) => (
+                  <td key={stage.key} className="whitespace-nowrap px-3 py-1.5 text-right align-top tabular-nums">
+                    {formatMoney(row[stage.key])}
+                  </td>
+                ))}
               </tr>
             );
           })}
@@ -123,9 +148,11 @@ export function ExpenseBreakdownTable({
         <tfoot>
           <tr className="border-t border-neutral-200 bg-neutral-100 font-semibold dark:border-neutral-700 dark:bg-neutral-800">
             <td className="px-3 py-2" colSpan={selectable ? 4 : 3}>Total</td>
-            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(totals.initialBudget)}</td>
-            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(totals.updatedBudget)}</td>
-            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(totals.liquidated)}</td>
+            {stages.map((stage) => (
+              <td key={stage.key} className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                {formatMoney(totals[stage.key])}
+              </td>
+            ))}
           </tr>
         </tfoot>
       </table>

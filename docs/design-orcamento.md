@@ -981,7 +981,9 @@ No variant de execução (desde 2026-10-14):
   espaços; o `title` traz o texto original do QDD) e uma linha de apoio com `{projeto/atividade} · {sigla do órgão} ·
   {unidade}` em `text-xs text-muted-foreground`. As colunas Órgão e Unidade
   saíram para essa linha. O chevron continua abrindo o detalhamento por
-  natureza e fonte (`ExpenseBreakdownTable`).
+  natureza e fonte (`ExpenseBreakdownTable`), com os cinco estágios (inicial,
+  atualizado, empenhado, liquidado e pago) desde 2026-10-16: `allStages`, ligado
+  só aqui; os orçamentos temáticos seguem com inicial, atualizado e liquidado.
 - **Sempre todos os estágios**: Dotação inicial, Dotação atualizada
   (`font-semibold`), Empenhado, Liquidado, Pago e Execução, na ordem do ciclo.
   O modo "essencial" (só atualizada, liquidado e execução, com o botão que

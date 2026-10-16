@@ -7,7 +7,9 @@ export type ExpenseRow = {
   source: string;
   initialBudget: number;
   updatedBudget: number;
+  committed: number;
   liquidated: number;
+  paid: number;
 };
 
 /**
@@ -24,8 +26,8 @@ export function cleanExpenseDescription(description: string): string {
 }
 
 /**
- * Agrega as linhas de despesa de uma ação por (conta + fonte), somando
- * Inicial/Atualizado/Liquidado. A chave `${conta}||${fonte}` é estável e usada
+ * Agrega as linhas de despesa de uma ação por (conta + fonte), somando os estágios
+ * (inicial, atualizado, empenhado, liquidado, pago). A chave `${conta}||${fonte}` é estável e usada
  * tanto na exibição quanto na seleção do modo Somar.
  */
 export function buildExpenseRows(action: BudgetAction | null): ExpenseRow[] {
@@ -42,11 +44,15 @@ export function buildExpenseRows(action: BudgetAction | null): ExpenseRow[] {
       source,
       initialBudget: 0,
       updatedBudget: 0,
+      committed: 0,
       liquidated: 0,
+      paid: 0,
     };
     current.initialBudget += line.initialBudget ?? 0;
     current.updatedBudget += line.updatedBudget ?? 0;
+    current.committed += line.committed ?? 0;
     current.liquidated += line.liquidated ?? 0;
+    current.paid += line.paid ?? 0;
     map.set(key, current);
   }
   return [...map.values()].sort((a, b) => {
