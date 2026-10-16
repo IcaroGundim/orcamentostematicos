@@ -325,11 +325,17 @@ export const KpiStrip = memo(function KpiStrip({
   totals,
   isLoading,
   amendments,
+  orientation = 'horizontal',
   className,
 }: {
   totals: ExecutionTotals;
   isLoading?: boolean;
   amendments?: boolean;
+  /**
+   * `horizontal`: a faixa sob a navegação (Gráficos). `vertical`: uma coluna, um
+   * indicador sob o outro, ao lado da tabela da aba Ações (2026-10-16, em teste).
+   */
+  orientation?: 'horizontal' | 'vertical';
   className?: string;
 }) {
   const executed = shareOf(totals.liquidated, totals.updatedBudget);
@@ -338,9 +344,12 @@ export const KpiStrip = memo(function KpiStrip({
     <section
       aria-label="Indicadores do recorte"
       className={cn(
-        // Colunas e filetes em `.orcamento-kpis` (globals.css): o Tailwind ordenava
-        // `min-[1360px]:` antes de `sm:` e a régua nunca chegava às seis colunas.
-        'orcamento-kpis grid gap-y-6 border-b border-[#e1e3dd] bg-[#f5f6f2] px-6 py-6 xl:px-10',
+        orientation === 'vertical'
+          ? // Sem `.orcamento-kpis`: aquelas regras montam colunas e filetes laterais.
+            'grid divide-y divide-[#e1e3dd] [&>*]:py-5 [&>*:first-child]:pt-0'
+          : // Colunas e filetes em `.orcamento-kpis` (globals.css): o Tailwind ordenava
+            // `min-[1360px]:` antes de `sm:` e a régua nunca chegava às seis colunas.
+            'orcamento-kpis grid gap-y-6 border-b border-[#e1e3dd] bg-[#f5f6f2] px-6 py-6 xl:px-10',
         className,
       )}
     >

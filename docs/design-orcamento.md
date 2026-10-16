@@ -263,6 +263,23 @@ busca tem `aria-label`.
 `Ações` e `Gráficos`; a visão `Órgão` usa a mesma régua com os totais do órgão.
 Seis células, valores **por extenso** (`formatMoney`, nunca compactos):
 
+**Na aba `Ações`, a régua é vertical** (em teste desde 2026-10-16, pedido do dono
+do produto):
+- **Layout:** a partir de `2xl` (1536px), os seis indicadores ficam numa coluna
+  de 15,5rem à esquerda (`KpiStrip orientation="vertical"`), fixa ao rolar
+  (`sticky top-[58px]`, sob a faixa de navegação). À direita ficam a linha de
+  filtros e a tabela, que sobem para o topo.
+- **Telas menores:** abaixo de 1536px a coluna tiraria espaço da tabela e
+  esconderia Pago e Execução atrás da rolagem horizontal, então volta a régua
+  horizontal sobre filtros e tabela.
+- **Filtros:** são uma variável (`filterRow`) montada num lugar só por vez — sob
+  a régua em Gráficos e na coluna da direita em Ações.
+- **Tabela:** a largura mínima caiu de 82rem para 76rem para caber ao lado da
+  coluna.
+
+A régua horizontal (abaixo) segue valendo em Gráficos e nas telas estreitas de
+Ações.
+
 1. **Execução** (célula principal): anel de 70px com liquidado ÷ dotação
    atualizada, o percentual em `text-[40px]` e a linha "liquidado ÷ dotação";
    em Emendas, o rótulo vira "Execução · emendas".

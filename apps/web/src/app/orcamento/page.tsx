@@ -870,6 +870,135 @@ function OrcamentoPageContent() {
   // Régua segue o recorte: em Emendas parlamentares, os totais das ações de emenda.
   const dimensionTotals = isAmendmentsDimension ? amendmentTotals : totals;
 
+  // Linha de filtros: sob a régua em Gráficos e sobre a tabela em Ações. Uma só por
+  // vez é montada (cada aba decide onde), então os controles não se duplicam.
+  const filterRow = (
+    <div
+      className={cn(
+        'orcamento-filters flex flex-wrap items-center gap-2.5 border-b border-[#e1e3dd] py-3.5',
+        pagePadding,
+      )}
+    >
+      {/* Abaixo de `sm` o recorte sai da faixa e vem para cá. */}
+      <div className="flex w-full gap-4 pb-1 sm:hidden">
+        {VIEWS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={view === item.id}
+            onClick={() => setView(item.id)}
+            className={cn(
+              'border-b-2 pb-0.5 text-sm',
+              view === item.id ? 'border-[#141714] font-semibold' : 'border-transparent text-[#80857f]',
+            )}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="relative w-60 max-w-full">
+        <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Buscar ação, programa…"
+          aria-label="Buscar ação ou programa"
+          className="pl-8"
+        />
+      </div>
+      <SearchableCombobox
+        className="relative w-40 min-w-0"
+        value={organizationCode}
+        onChange={changeOrganization}
+        placeholder="Órgão: todos"
+        items={organizationOptions}
+      />
+      <SearchableCombobox
+        className="relative w-40 min-w-0"
+        value={unitFilter}
+        onChange={changeUnit}
+        placeholder="Unidade: todas"
+        items={unitOptions}
+      />
+      <SearchableCombobox
+        className="relative w-40 min-w-0"
+        value={sourceFilter}
+        onChange={setSourceFilter}
+        placeholder="Fonte: todas"
+        items={sourceOptions}
+      />
+      <FunctionalClassificationFilters
+        actions={actions}
+        functionFilter={functionFilter}
+        subfunctionFilter={subfunctionFilter}
+        onFunctionChange={setFunctionFilter}
+        onSubfunctionChange={setSubfunctionFilter}
+        allValue={allValue}
+        showLabels={false}
+        className="contents *:w-40"
+      />
+      {/* Sempre presente, para a linha não mudar de forma ao filtrar. */}
+      <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="text-[13.5px]">
+        Limpar
+      </Button>
+      {/*
+        O resumo ocupa só o que sobra entre os filtros e o Exportar e encolhe com
+        reticências (texto inteiro no `title`): um nome de órgão longo jogava
+        o botão para uma segunda linha.
+      */}
+      <span
+        className="min-w-0 flex-1 basis-0 truncate text-right text-[13px] text-[#80857f]"
+        title={hasFilters ? (headingTitle ?? undefined) : undefined}
+      >
+        {hasFilters ? (headingTitle ?? 'Filtros aplicados') : 'Nenhum filtro aplicado'}
+      </span>
+      {contentView === 'actions' ? (
+        <div className="flex shrink-0 gap-2">
+          {/*
+            Exporta o recorte ativo: em Geral, as ações do QDD sob os filtros; em
+            Emendas parlamentares, só as ações de emenda. A folha de pagamento
+            fica de fora por construção: o arquivo nunca contém dado da folha.
+          */}
+          <Popover open={exportOpen} onOpenChange={setExportOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="border-[#c3c6bf] bg-white text-[#4a504b] shadow-none hover:bg-stone-100">
+                <DownloadIcon data-icon="inline-start" />
+                Exportar
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 space-y-4">
+              <div className="space-y-1.5">
+                <Label className={filterFieldLabelClass}>Formato</Label>
+                <Select
+                  value={exportFormat}
+                  onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+                    <SelectItem value="csv">CSV (.csv)</SelectItem>
+                    <SelectItem value="json">JSON (.json)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => void handleExport()}
+                disabled={dimensionActions.length === 0}
+              >
+                <DownloadIcon />
+                Exportar recorte filtrado
+              </Button>
+            </PopoverContent>
+          </Popover>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="orcamento-page-root min-h-svh w-full bg-white text-[#141714]">
       <header className="orcamento-app-header flex h-14 items-center gap-5 bg-marca text-marca-contraste">
@@ -995,7 +1124,12 @@ function OrcamentoPageContent() {
       </nav>
 
       <main className="orcamento-main min-w-0">
-        {!isExecutiveView ? (
+        {/*
+          Gráficos: régua horizontal e filtros sob a navegação. Na aba Ações, os dois
+          vão para dentro da aba (coluna de indicadores à esquerda, filtros sobre a
+          tabela à direita).
+        */}
+        {!isExecutiveView && contentView !== 'actions' ? (
           <>
             <KpiStrip
               totals={dimensionTotals}
@@ -1003,131 +1137,7 @@ function OrcamentoPageContent() {
               amendments={isAmendmentsDimension}
               className="orcamento-global-kpis"
             />
-
-            <div
-              className={cn(
-                'orcamento-filters flex flex-wrap items-center gap-2.5 border-b border-[#e1e3dd] py-3.5',
-                pagePadding,
-              )}
-            >
-              {/* Abaixo de `sm` o recorte sai da faixa e vem para cá. */}
-              <div className="flex w-full gap-4 pb-1 sm:hidden">
-                {VIEWS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-pressed={view === item.id}
-                    onClick={() => setView(item.id)}
-                    className={cn(
-                      'border-b-2 pb-0.5 text-sm',
-                      view === item.id ? 'border-[#141714] font-semibold' : 'border-transparent text-[#80857f]',
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-              <div className="relative w-60 max-w-full">
-                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Buscar ação, programa…"
-                  aria-label="Buscar ação ou programa"
-                  className="pl-8"
-                />
-              </div>
-              <SearchableCombobox
-                className="relative w-40 min-w-0"
-                value={organizationCode}
-                onChange={changeOrganization}
-                placeholder="Órgão: todos"
-                items={organizationOptions}
-              />
-              <SearchableCombobox
-                className="relative w-40 min-w-0"
-                value={unitFilter}
-                onChange={changeUnit}
-                placeholder="Unidade: todas"
-                items={unitOptions}
-              />
-              <SearchableCombobox
-                className="relative w-40 min-w-0"
-                value={sourceFilter}
-                onChange={setSourceFilter}
-                placeholder="Fonte: todas"
-                items={sourceOptions}
-              />
-              <FunctionalClassificationFilters
-                actions={actions}
-                functionFilter={functionFilter}
-                subfunctionFilter={subfunctionFilter}
-                onFunctionChange={setFunctionFilter}
-                onSubfunctionChange={setSubfunctionFilter}
-                allValue={allValue}
-                showLabels={false}
-                className="contents *:w-40"
-              />
-              {/* Sempre presente, para a linha não mudar de forma ao filtrar. */}
-              <Button variant="ghost" onClick={clearFilters} disabled={!hasFilters} className="text-[13.5px]">
-                Limpar
-              </Button>
-              {/*
-                O resumo ocupa só o que sobra entre os filtros e o Exportar e encolhe com
-                reticências (texto inteiro no `title`): um nome de órgão longo jogava
-                o botão para uma segunda linha.
-              */}
-              <span
-                className="min-w-0 flex-1 basis-0 truncate text-right text-[13px] text-[#80857f]"
-                title={hasFilters ? (headingTitle ?? undefined) : undefined}
-              >
-                {hasFilters ? (headingTitle ?? 'Filtros aplicados') : 'Nenhum filtro aplicado'}
-              </span>
-              {contentView === 'actions' ? (
-                <div className="flex shrink-0 gap-2">
-                  {/*
-                    Exporta o recorte ativo: em Geral, as ações do QDD sob os filtros; em
-                    Emendas parlamentares, só as ações de emenda. A folha de pagamento
-                    fica de fora por construção: o arquivo nunca contém dado da folha.
-                  */}
-                  <Popover open={exportOpen} onOpenChange={setExportOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="border-[#c3c6bf] bg-white text-[#4a504b] shadow-none hover:bg-stone-100">
-                        <DownloadIcon data-icon="inline-start" />
-                        Exportar
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-72 space-y-4">
-                      <div className="space-y-1.5">
-                        <Label className={filterFieldLabelClass}>Formato</Label>
-                        <Select
-                          value={exportFormat}
-                          onValueChange={(value) => setExportFormat(value as 'xlsx' | 'csv' | 'json')}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
-                            <SelectItem value="csv">CSV (.csv)</SelectItem>
-                            <SelectItem value="json">JSON (.json)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => void handleExport()}
-                        disabled={dimensionActions.length === 0}
-                      >
-                        <DownloadIcon />
-                        Exportar recorte filtrado
-                      </Button>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              ) : null}
-            </div>
+            {filterRow}
           </>
         ) : null}
 
@@ -1152,13 +1162,45 @@ function OrcamentoPageContent() {
                 Sem cabeçalho próprio desde 2026-10-15: a linha de filtros (com o
                 Exportar) fica logo acima, no lugar dele. Sempre todos os estágios.
               */}
-              <section className={cn('pb-10 pt-6', pagePadding)}>
-                <OverviewScheduledActionsPanel
-                  actions={dimensionActions}
-                  organizations={organizations}
-                  variant="execution"
+              {/*
+                Em teste desde 2026-10-16 (pedido do dono do produto): os indicadores
+                numa coluna à esquerda, presa ao rolar, e a tabela subindo para o lado
+                deles. Abaixo de `2xl` (1536px) a tabela perderia colunas para a rolagem: volta a
+                régua horizontal no topo.
+              */}
+              <div className="2xl:hidden">
+                <KpiStrip
+                  totals={dimensionTotals}
+                  isLoading={isLoading}
+                  amendments={isAmendmentsDimension}
+                  className="orcamento-global-kpis"
                 />
-              </section>
+              </div>
+              <div className="2xl:grid 2xl:grid-cols-[15.5rem_minmax(0,1fr)]">
+                <aside className="orcamento-global-kpis hidden border-r border-[#e1e3dd] bg-[#f5f6f2] 2xl:block">
+                  <div className="sticky top-[58px] px-6 py-6">
+                    <KpiStrip
+                      totals={dimensionTotals}
+                      isLoading={isLoading}
+                      amendments={isAmendmentsDimension}
+                      orientation="vertical"
+                    />
+                  </div>
+                </aside>
+                <div className="min-w-0">
+                  {/* Na coluna da direita, o recuo dos filtros acompanha o da tabela. */}
+                  <div className="2xl:[&>.orcamento-filters]:px-6">
+                    {contentView === 'actions' ? filterRow : null}
+                  </div>
+                  <section className={cn('pb-10 pt-6 2xl:px-6', pagePadding)}>
+                    <OverviewScheduledActionsPanel
+                      actions={dimensionActions}
+                      organizations={organizations}
+                      variant="execution"
+                    />
+                  </section>
+                </div>
+              </div>
             </TabsContent>
 
             {/*

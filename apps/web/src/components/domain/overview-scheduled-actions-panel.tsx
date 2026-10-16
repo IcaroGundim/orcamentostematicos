@@ -54,7 +54,9 @@ const ALL = 'ALL';
 const NO_WEIGHTING = 'NONE';
 const ROW_GAP = 2;
 const ROW_ESTIMATE = 74;
-const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[82rem]';
+// Cinco estágios de 10,5rem + execução de 8,5rem = 61rem fixos; a Ação fica com o
+// resto (15rem no mínimo). Cabe ao lado da coluna de indicadores a partir de 1536px.
+const EXECUTION_TABLE_MIN_WIDTH = 'min-w-[76rem]';
 const SELECTABLE_TABLE_MIN_WIDTH = 'min-w-[50rem]';
 const DEFAULT_TABLE_MIN_WIDTH = 'min-w-[48rem]';
 
