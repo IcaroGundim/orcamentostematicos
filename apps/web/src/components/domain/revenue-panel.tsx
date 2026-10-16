@@ -807,9 +807,9 @@ function DuodecimoBlock({
           : `Para comparar com a LOA, selecione o exercício ${data.year} no cabeçalho. `}
         % efetivo = duodécimos no período ÷ receita líquida realizada no mesmo período: o quanto da receita o orçamento
         disponibilizado aos Poderes representa, para comparar com o % da LDO (em vermelho, abaixo dela; em azul,
-        acima). O Portal da Transparência não publica as transferências feitas aos Poderes, e a execução
-        no QDD não serve de substituto (o TJAC não executa na fonte 100 do SICAF): os valores mostram a regra e o
-        duodécimo previsto, não o que foi efetivamente repassado.
+        acima). Para os Poderes a liberação financeira acompanha o orçamento de fonte 100, então a dotação
+        atualizada mede, na prática, o que eles recebem do Tesouro; a execução no QDD não serve para isso (o TJAC
+        não executa pelo SICAF).
       </p>
     </VizBlock>
   );

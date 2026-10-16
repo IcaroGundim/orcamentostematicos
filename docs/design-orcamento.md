@@ -875,14 +875,15 @@ com o que está sendo destinado).
 - **Por mês:** os Poderes juntos, com o mês em curso em branco, porque o
   duodécimo inteiro sobre meio mês de receita daria um número sem sentido.
 
-**Limite.** O Portal da Transparência não publica as transferências feitas aos
-Poderes, nem a SEFAZ na página da LRF. A tela mostra o que a regra gera com a
-receita arrecadada, ao lado do duodécimo da LOA, e diz isso. Não chamar esses
-valores de "repassado". A execução dos Poderes no QDD **não** serve de
+**Por que a dotação basta** (dono do produto, 2026-10-16): para os Poderes sempre
+há liberação financeira, então o orçamento de fonte 100 é, na prática, igual ao
+financeiro. A dotação atualizada mede o que eles recebem do Tesouro. As
+transferências em si não são publicadas (nem no Portal da Transparência, nem na
+página da LRF da SEFAZ) e não fazem falta para este bloco. A execução dos Poderes no QDD **não** serve de
 substituto, e isso foi conferido em 2026-10-16 no QDD de maio: o TJAC tem zero
 empenhado na fonte 100, contra R$ 589 mi de dotação, e a ALEAC tinha R$ 67 mi
-pagos contra R$ 165 mi devidos. Com os repasses efetivos da SEFAZ, o % efetivo
-passa a ser repassado ÷ receita líquida, sem mudar a tela.
+pagos contra R$ 165 mi devidos. Para medir o que os Poderes recebem, vale a
+dotação, não a execução.
 
 Fora da base, até decisão contrária: a transferência da LC 176/2020 (`171958`),
 porque a LDO cita só a LC 87.
