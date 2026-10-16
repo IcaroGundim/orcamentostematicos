@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatMoney } from '@/lib/api';
-import { CHART_CATEGORICAL } from '@/lib/chart-palette';
+import { CHANGE_TEXT_COLORS, CHART_CATEGORICAL } from '@/lib/chart-palette';
 import { shareOf } from '@/lib/chart-geometry';
 import { compactAxis, compactMoney, formatPercent } from '@/lib/number-format';
 import {
@@ -568,6 +568,31 @@ const DuodecimoTables = memo(function DuodecimoTables({
       {value == null ? <span className="text-[#c3c6bf]">–</span> : compactMoney(value)}
     </td>
   );
+  // Percentual efetivo ao lado do legal: abaixo da LDO em vermelho, acima em azul
+  // (o par de alterações da dotação); o `title` diz a diferença em pontos.
+  const effectiveCell = (effective: number | null, legal: number) => {
+    if (effective == null) {
+      return (
+        <td className={cell}>
+          <span className="text-[#c3c6bf]">–</span>
+        </td>
+      );
+    }
+    const gap = effective - legal;
+    const flat = Math.abs(gap) < 0.005;
+    const points = Math.abs(gap).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    return (
+      <td
+        className={cell}
+        title={`${ldoPercent(effective)} efetivo contra ${ldoPercent(legal)} na LDO: ${
+          flat ? 'igual' : `${gap > 0 ? '+' : '−'}${points} ponto(s) percentual(is)`
+        }`}
+        style={{ color: flat ? undefined : gap < 0 ? CHANGE_TEXT_COLORS.reduction : CHANGE_TEXT_COLORS.increase }}
+      >
+        {ldoPercent(effective)}
+      </td>
+    );
+  };
   const totals = branches.reduce(
     (total, branch) => ({
       appropriation: total.appropriation + (branch.appropriation ?? 0),
@@ -585,10 +610,18 @@ const DuodecimoTables = memo(function DuodecimoTables({
           <thead>
             <tr className="border-b-2 border-[#141714] text-left">
               <th className="py-2 pr-3 font-semibold">Poder ou Instituição</th>
-              <th className="px-2.5 py-2 text-right font-semibold">Participação</th>
+              <th className="px-2.5 py-2 text-right font-semibold" title="Percentual da receita líquida fixado na LDO">
+                % na LDO
+              </th>
               <th className="px-2.5 py-2 text-right font-semibold">Dotação na LOA (fonte 100)</th>
               <th className="px-2.5 py-2 text-right font-semibold">Duodécimo</th>
               <th className="px-2.5 py-2 text-right font-semibold">Duodécimos {untilLabel}</th>
+              <th
+                className="px-2.5 py-2 text-right font-semibold"
+                title="Duodécimos da LOA no período ÷ receita líquida realizada no mesmo período"
+              >
+                % efetivo
+              </th>
               <th className="px-2.5 py-2 text-right font-semibold">Gerado pela arrecadação {untilLabel}</th>
               <th className="py-2 pl-2.5 text-right font-semibold">Diferença</th>
             </tr>
@@ -603,6 +636,7 @@ const DuodecimoTables = memo(function DuodecimoTables({
                 {money(branch.appropriation)}
                 {money(branch.monthlyInstallment)}
                 {money(branch.installmentsClosed)}
+                {effectiveCell(branch.effectivePercent, branch.percent)}
                 {money(branch.dueClosed)}
                 <td className={cn(cell, 'pr-0')} title={branch.installmentsClosed == null ? undefined : formatMoney(branch.dueClosed - branch.installmentsClosed)}>
                   {branch.installmentsClosed == null ? (
@@ -621,6 +655,7 @@ const DuodecimoTables = memo(function DuodecimoTables({
               {money(hasLoa ? totals.appropriation : null)}
               {money(hasLoa ? totals.monthly : null)}
               {money(hasLoa ? totals.installments : null)}
+              {effectiveCell(summary.totalEffectivePercent, summary.totalPercent)}
               {money(totals.due)}
               <td className={cn(cell, 'pr-0')} title={hasLoa ? formatMoney(totals.due - totals.installments) : undefined}>
                 {hasLoa ? signedCompact(totals.due - totals.installments) : <span className="text-[#c3c6bf]">–</span>}
@@ -669,6 +704,23 @@ const DuodecimoTables = memo(function DuodecimoTables({
                 )}
               </tr>
             ))}
+            {hasLoa ? (
+              <tr className="border-b border-[#ecede8]">
+                <td
+                  className="sticky left-0 whitespace-nowrap bg-white py-2 pr-3"
+                  title="Soma dos duodécimos da LOA no mês ÷ receita líquida realizada no mês"
+                >
+                  % efetivo dos duodécimos (LDO: {ldoPercent(summary.totalPercent)})
+                </td>
+                {months.map((month) => (
+                  <Fragment key={month}>
+                    {effectiveCell(summary.effectivePercentByMonth[month - 1] ?? null, summary.totalPercent)}
+                  </Fragment>
+                ))}
+                {effectiveCell(summary.totalEffectivePercent, summary.totalPercent)}
+                <td className={cn(cell, 'pr-0')} />
+              </tr>
+            ) : null}
             {branches.map((branch) => (
               <tr key={branch.key} className="border-b border-[#ecede8]">
                 <td className="sticky left-0 whitespace-nowrap bg-white py-2 pl-[18px] pr-3" title={branch.label}>
@@ -717,10 +769,12 @@ function DuodecimoBlock({
           <>
             Pela {summary.rule.law}, a receita arrecadada {period} gera <b>{compactMoney(due)}</b> aos Poderes e
             Instituições ({ldoPercent(summary.totalPercent)} da receita líquida de {compactMoney(summary.baseClosed.netRevenue)}).
-            {appropriations ? (
+            {appropriations && summary.totalEffectivePercent != null ? (
               <>
                 {' '}
-                Os duodécimos da LOA somam <b>{compactMoney(installments)}</b> no mesmo período.
+                Os duodécimos da LOA somam <b>{compactMoney(installments)}</b> no mesmo período, ou{' '}
+                <b>{ldoPercent(summary.totalEffectivePercent)}</b> da receita líquida realizada, contra{' '}
+                {ldoPercent(summary.totalPercent)} na LDO.
               </>
             ) : null}
           </>
@@ -739,8 +793,11 @@ function DuodecimoBlock({
         {appropriations
           ? null
           : `Para comparar com a LOA, selecione o exercício ${data.year} no cabeçalho. `}
-        O Portal da Transparência não publica as transferências feitas aos Poderes: a tabela mostra o que a regra gera
-        com a receita arrecadada e o duodécimo previsto na LOA, não o que foi efetivamente repassado.
+        % efetivo = duodécimos da LOA no período ÷ receita líquida realizada no mesmo período: o quanto da receita os
+        Poderes recebem se o Tesouro repassar o duodécimo da LOA, para comparar com o % da LDO (em vermelho, abaixo
+        dela; em azul, acima). O Portal da Transparência não publica as transferências feitas aos Poderes, e a execução
+        no QDD não serve de substituto (o TJAC não executa na fonte 100 do SICAF): os valores mostram a regra e o
+        duodécimo previsto, não o que foi efetivamente repassado.
       </p>
     </VizBlock>
   );

@@ -854,10 +854,31 @@ só quando o QDD carregado é do mesmo ano da receita. Órgãos: ALEAC `101`, TC
 `102`, TJAC `203`, MPAC `304` e DPE `305`. As fontes próprias dos Poderes
 (fundos, taxas judiciais) não entram.
 
+A dotação **inicial** é usada mesmo sabendo que o art. 168 da Constituição manda
+incluir os créditos suplementares no duodécimo. Até maio/2026 a diferença para a
+atualizada era de até R$ 1 mi (MPAC). Trocar para a atualizada é decisão desta
+seção.
+
+**% efetivo** (2026-10-16, pedido do dono do produto: comparar a obrigação legal
+com o que está sendo destinado).
+- **Fórmula:** duodécimos da LOA nos meses fechados ÷ receita líquida realizada
+  nos mesmos meses. É a fatia da receita que o Poder recebe se o Tesouro repassar
+  o duodécimo, lado a lado com o % da LDO.
+- **Exemplo:** até setembro de 2026, os cinco Poderes somam 23,99% contra
+  24,81% na LDO. A receita veio acima da prevista, e o duodécimo é fixo.
+- **Cor:** abaixo da LDO fica em `CHANGE_TEXT_COLORS.reduction`; acima, em
+  `increase`.
+- **Por mês:** os Poderes juntos, com o mês em curso em branco, porque o
+  duodécimo inteiro sobre meio mês de receita daria um número sem sentido.
+
 **Limite.** O Portal da Transparência não publica as transferências feitas aos
 Poderes, nem a SEFAZ na página da LRF. A tela mostra o que a regra gera com a
 receita arrecadada, ao lado do duodécimo da LOA, e diz isso. Não chamar esses
-valores de "repassado".
+valores de "repassado". A execução dos Poderes no QDD **não** serve de
+substituto, e isso foi conferido em 2026-10-16 no QDD de maio: o TJAC tem zero
+empenhado na fonte 100, contra R$ 589 mi de dotação, e a ALEAC tinha R$ 67 mi
+pagos contra R$ 165 mi devidos. Com os repasses efetivos da SEFAZ, o % efetivo
+passa a ser repassado ÷ receita líquida, sem mudar a tela.
 
 Fora da base, até decisão contrária: a transferência da LC 176/2020 (`171958`),
 porque a LDO cita só a LC 87.
@@ -1161,12 +1182,12 @@ estado vazio com o texto da falha), `pagePadding` e `defaultYear`.
   cálculo na seção 6.9): aparece só em ano com regra em `DUODECIMO_RULES`.
   - Frase de leitura: quanto a receita gerou até o último mês fechado, e quanto
     somam os duodécimos da LOA no período.
-  - Primeira tabela, uma linha por Poder: participação, dotação de fonte 100 na
-    LOA, duodécimo (÷ 12), duodécimos até o mês, gerado pela arrecadação até o
-    mês e a diferença com sinal.
+  - Primeira tabela, uma linha por Poder: % na LDO, dotação de fonte 100 na LOA,
+    duodécimo (÷ 12), duodécimos até o mês, % efetivo (seção 6.9), gerado pela
+    arrecadação até o mês e a diferença com sinal.
   - Segunda tabela, "Base de cálculo e valor gerado mês a mês (Anexo III)":
-    receita da base, municípios, PASEP, educação, saúde, receita líquida e o
-    gerado para cada Poder, por mês, mais o acumulado e a receita líquida
+    receita da base, municípios, PASEP, educação, saúde, receita líquida, o %
+    efetivo dos duodécimos de todos os Poderes e o gerado para cada Poder, por mês, mais o acumulado e a receita líquida
     implícita na LOA. A composição de cada linha fica no `title`.
   - Sem QDD do mesmo ano, as colunas da LOA mostram "–" e a nota pede para
     trocar o exercício no cabeçalho.

@@ -75,6 +75,30 @@ describe('summarizeDuodecimo', () => {
     expect(summary.impliedNetForecast).toBeCloseTo(6_042_979_404.4, 0);
   });
 
+  it('% efetivo: duodécimos dos meses fechados ÷ receita líquida dos mesmos meses', () => {
+    const appropriations = { '101': { initialBudget: 1_200 }, '203': { initialBudget: 2_400 } };
+    const summary = summarizeDuodecimo(2026, rows, [1, 2, 3], 3, appropriations)!;
+    const monthNet = duodecimoBaseOf({ ICMS: 400, FPE: 600 }).netRevenue;
+    const aleac = summary.branches.find((branch) => branch.key === 'ALEAC')!;
+    // Dois meses fechados × R$ 100 de duodécimo, sobre dois meses de receita líquida.
+    expect(aleac.effectivePercent).toBeCloseTo((200 / (2 * monthNet)) * 100, 9);
+    expect(summary.totalEffectivePercent).toBeCloseTo((600 / (2 * monthNet)) * 100, 9);
+    expect(summary.effectivePercentByMonth[0]).toBeCloseTo((300 / monthNet) * 100, 9);
+    // Mês em curso (3) fica sem percentual: duodécimo inteiro sobre meio mês de receita.
+    expect(summary.effectivePercentByMonth[2]).toBeNull();
+    // Mês sem arrecadação não vira divisão por zero.
+    expect(summary.effectivePercentByMonth[5]).toBeNull();
+    // Órgão sem dotação no QDD: 0%, não "–" — a falta é do dado, e aparece.
+    expect(summary.branches.find((branch) => branch.key === 'DPE')!.effectivePercent).toBe(0);
+  });
+
+  it('sem LOA, sem % efetivo', () => {
+    const summary = summarizeDuodecimo(2026, rows, [1, 2], null, null)!;
+    expect(summary.totalEffectivePercent).toBeNull();
+    expect(summary.branches.every((branch) => branch.effectivePercent == null)).toBe(true);
+    expect(summary.effectivePercentByMonth.every((value) => value == null)).toBe(true);
+  });
+
   it('exercício sem LDO no catálogo não tem duodécimo', () => {
     expect(summarizeDuodecimo(2024, rows, [1], null, null)).toBeNull();
   });

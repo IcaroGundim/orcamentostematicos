@@ -125,6 +125,13 @@ export interface DuodecimoBranchSummary extends DuodecimoBranch {
   monthlyInstallment: number | null;
   /** Duodécimos dos meses fechados. */
   installmentsClosed: number | null;
+  /**
+   * Percentual efetivo: duodécimos dos meses fechados ÷ receita líquida realizada
+   * nos mesmos meses, em %. É o quanto da receita o Poder recebe se o Tesouro
+   * repassar o duodécimo da LOA — comparável ao `percent` da LDO. `null` sem LOA
+   * ou sem receita líquida no período.
+   */
+  effectivePercent: number | null;
 }
 
 export interface DuodecimoSummary {
@@ -139,11 +146,20 @@ export interface DuodecimoSummary {
   branches: DuodecimoBranchSummary[];
   /** Soma dos percentuais (24,81% em 2026). */
   totalPercent: number;
+  /** Percentual efetivo de todos os Poderes juntos (mesma conta de `effectivePercent`). */
+  totalEffectivePercent: number | null;
+  /** Percentual efetivo de cada mês, somando os Poderes (índice 0 = janeiro); mês em curso, `null`. */
+  effectivePercentByMonth: Array<number | null>;
   /**
    * Receita líquida que a LOA usou, deduzida das dotações: Σ dotações ÷ Σ
    * percentuais. `null` sem QDD do mesmo exercício.
    */
   impliedNetForecast: number | null;
+}
+
+/** `value ÷ base` em %; `null` sem valor ou com base não positiva (mês sem arrecadação). */
+function shareOrNull(value: number | null, base: number): number | null {
+  return value == null || !(base > 0) ? null : (value / base) * 100;
 }
 
 /**
@@ -188,18 +204,21 @@ export function summarizeDuodecimo(
     const dueByMonth = baseByMonth.map((base) => (base.netRevenue * branch.percent) / 100);
     const appropriation = appropriations ? (appropriations[branch.organizationCode]?.initialBudget ?? 0) : null;
     const monthlyInstallment = appropriation == null ? null : appropriation / 12;
+    const installmentsClosed = monthlyInstallment == null ? null : monthlyInstallment * closedMonths.length;
     return {
       ...branch,
       dueByMonth,
       dueClosed: closedMonths.reduce((total, month) => total + dueByMonth[month - 1]!, 0),
       appropriation,
       monthlyInstallment,
-      installmentsClosed: monthlyInstallment == null ? null : monthlyInstallment * closedMonths.length,
+      installmentsClosed,
+      effectivePercent: shareOrNull(installmentsClosed, baseClosed.netRevenue),
     };
   });
 
   const totalPercent = rule.branches.reduce((total, branch) => total + branch.percent, 0);
   const appropriationTotal = branches.reduce((total, branch) => total + (branch.appropriation ?? 0), 0);
+  const monthlyTotal = appropriations ? appropriationTotal / 12 : null;
   return {
     rule,
     months,
@@ -208,6 +227,15 @@ export function summarizeDuodecimo(
     baseClosed,
     branches,
     totalPercent,
+    totalEffectivePercent: shareOrNull(
+      monthlyTotal == null ? null : monthlyTotal * closedMonths.length,
+      baseClosed.netRevenue,
+    ),
+    // O mês em curso ainda arrecada: comparar o duodécimo inteiro com meio mês de receita
+    // daria um percentual sem sentido.
+    effectivePercentByMonth: baseByMonth.map((base, index) =>
+      index + 1 === partialMonth ? null : shareOrNull(monthlyTotal, base.netRevenue),
+    ),
     impliedNetForecast:
       appropriations && appropriationTotal > 0 ? appropriationTotal / (totalPercent / 100) : null,
   };
