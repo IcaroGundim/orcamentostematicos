@@ -121,15 +121,24 @@ export interface DuodecimoBranchSummary extends DuodecimoBranch {
   dueClosed: number;
   /** Dotação inicial na fonte 100 (LOA); `null` sem QDD do mesmo exercício. */
   appropriation: number | null;
-  /** Duodécimo: dotação ÷ 12. */
+  /**
+   * Dotação atualizada na fonte 100: o orçamento disponibilizado ao Poder, com os
+   * créditos suplementares. `null` sem QDD do mesmo exercício.
+   */
+  updatedAppropriation: number | null;
+  /**
+   * Duodécimo: dotação **atualizada** ÷ 12 — o art. 168 da Constituição manda
+   * entregar em duodécimos as dotações "compreendidos os créditos suplementares e
+   * especiais".
+   */
   monthlyInstallment: number | null;
   /** Duodécimos dos meses fechados. */
   installmentsClosed: number | null;
   /**
    * Percentual efetivo: duodécimos dos meses fechados ÷ receita líquida realizada
-   * nos mesmos meses, em %. É o quanto da receita o Poder recebe se o Tesouro
-   * repassar o duodécimo da LOA — comparável ao `percent` da LDO. `null` sem LOA
-   * ou sem receita líquida no período.
+   * nos mesmos meses, em %. É o quanto da receita o orçamento disponibilizado ao
+   * Poder representa, se o Tesouro repassar o duodécimo — comparável ao `percent`
+   * da LDO. `null` sem QDD ou sem receita líquida no período.
    */
   effectivePercent: number | null;
 }
@@ -173,7 +182,7 @@ export function summarizeDuodecimo(
   rows: Pick<RevenueRow, 'key' | 'gross'>[],
   months: number[],
   partialMonth: number | null,
-  appropriations: Record<string, { initialBudget: number }> | null,
+  appropriations: Record<string, { initialBudget: number; updatedBudget?: number }> | null,
 ): DuodecimoSummary | null {
   const rule = DUODECIMO_RULES[year];
   if (!rule) return null;
@@ -202,14 +211,20 @@ export function summarizeDuodecimo(
 
   const branches = rule.branches.map((branch) => {
     const dueByMonth = baseByMonth.map((base) => (base.netRevenue * branch.percent) / 100);
-    const appropriation = appropriations ? (appropriations[branch.organizationCode]?.initialBudget ?? 0) : null;
-    const monthlyInstallment = appropriation == null ? null : appropriation / 12;
+    const entry = appropriations?.[branch.organizationCode];
+    const appropriation = appropriations ? (entry?.initialBudget ?? 0) : null;
+    // Sem a atualizada (chamador antigo), vale a inicial.
+    const updatedAppropriation = appropriations ? (entry?.updatedBudget ?? entry?.initialBudget ?? 0) : null;
+    // Aproximação: o ano inteiro da atualizada, rateado em 12. Um crédito aberto em
+    // setembro entra também nos meses anteriores; é o orçamento do ano que se compara.
+    const monthlyInstallment = updatedAppropriation == null ? null : updatedAppropriation / 12;
     const installmentsClosed = monthlyInstallment == null ? null : monthlyInstallment * closedMonths.length;
     return {
       ...branch,
       dueByMonth,
       dueClosed: closedMonths.reduce((total, month) => total + dueByMonth[month - 1]!, 0),
       appropriation,
+      updatedAppropriation,
       monthlyInstallment,
       installmentsClosed,
       effectivePercent: shareOrNull(installmentsClosed, baseClosed.netRevenue),
@@ -218,7 +233,8 @@ export function summarizeDuodecimo(
 
   const totalPercent = rule.branches.reduce((total, branch) => total + branch.percent, 0);
   const appropriationTotal = branches.reduce((total, branch) => total + (branch.appropriation ?? 0), 0);
-  const monthlyTotal = appropriations ? appropriationTotal / 12 : null;
+  const updatedTotal = branches.reduce((total, branch) => total + (branch.updatedAppropriation ?? 0), 0);
+  const monthlyTotal = appropriations ? updatedTotal / 12 : null;
   return {
     rule,
     months,
@@ -236,6 +252,7 @@ export function summarizeDuodecimo(
     effectivePercentByMonth: baseByMonth.map((base, index) =>
       index + 1 === partialMonth ? null : shareOrNull(monthlyTotal, base.netRevenue),
     ),
+    // A conferência contra a LOA usa a inicial: é ela que a lei fixou pelos percentuais.
     impliedNetForecast:
       appropriations && appropriationTotal > 0 ? appropriationTotal / (totalPercent / 100) : null,
   };

@@ -596,24 +596,33 @@ const DuodecimoTables = memo(function DuodecimoTables({
   const totals = branches.reduce(
     (total, branch) => ({
       appropriation: total.appropriation + (branch.appropriation ?? 0),
+      updated: total.updated + (branch.updatedAppropriation ?? 0),
       monthly: total.monthly + (branch.monthlyInstallment ?? 0),
       installments: total.installments + (branch.installmentsClosed ?? 0),
       due: total.due + branch.dueClosed,
     }),
-    { appropriation: 0, monthly: 0, installments: 0, due: 0 },
+    { appropriation: 0, updated: 0, monthly: 0, installments: 0, due: 0 },
   );
 
   return (
     <>
       <div className="max-w-full overflow-x-auto [scrollbar-color:#c3c6bf_transparent] [scrollbar-width:thin]">
-        <table className="w-full min-w-[860px] border-collapse text-[13.5px]">
+        <table className="w-full min-w-[980px] border-collapse text-[13.5px]">
           <thead>
             <tr className="border-b-2 border-[#141714] text-left">
               <th className="py-2 pr-3 font-semibold">Poder ou Instituição</th>
               <th className="px-2.5 py-2 text-right font-semibold" title="Percentual da receita líquida fixado na LDO">
                 % na LDO
               </th>
-              <th className="px-2.5 py-2 text-right font-semibold">Dotação na LOA (fonte 100)</th>
+              <th className="px-2.5 py-2 text-right font-semibold" title="Dotação inicial na fonte 100, como a LOA fixou">
+                Dotação inicial (LOA)
+              </th>
+              <th
+                className="px-2.5 py-2 text-right font-semibold"
+                title="Dotação atualizada na fonte 100 no QDD: o orçamento disponibilizado, com os créditos suplementares"
+              >
+                Dotação atualizada
+              </th>
               <th className="px-2.5 py-2 text-right font-semibold">Duodécimo</th>
               <th className="px-2.5 py-2 text-right font-semibold">Duodécimos {untilLabel}</th>
               <th
@@ -634,6 +643,7 @@ const DuodecimoTables = memo(function DuodecimoTables({
                 </td>
                 <td className={cell}>{ldoPercent(branch.percent)}</td>
                 {money(branch.appropriation)}
+                {money(branch.updatedAppropriation)}
                 {money(branch.monthlyInstallment)}
                 {money(branch.installmentsClosed)}
                 {effectiveCell(branch.effectivePercent, branch.percent)}
@@ -653,6 +663,7 @@ const DuodecimoTables = memo(function DuodecimoTables({
               <td className="py-2 pr-3">Total</td>
               <td className={cell}>{ldoPercent(summary.totalPercent)}</td>
               {money(hasLoa ? totals.appropriation : null)}
+              {money(hasLoa ? totals.updated : null)}
               {money(hasLoa ? totals.monthly : null)}
               {money(hasLoa ? totals.installments : null)}
               {effectiveCell(summary.totalEffectivePercent, summary.totalPercent)}
@@ -772,7 +783,7 @@ function DuodecimoBlock({
             {appropriations && summary.totalEffectivePercent != null ? (
               <>
                 {' '}
-                Os duodécimos da LOA somam <b>{compactMoney(installments)}</b> no mesmo período, ou{' '}
+                Os duodécimos do orçamento disponibilizado somam <b>{compactMoney(installments)}</b> no mesmo período, ou{' '}
                 <b>{ldoPercent(summary.totalEffectivePercent)}</b> da receita líquida realizada, contra{' '}
                 {ldoPercent(summary.totalPercent)} na LDO.
               </>
@@ -789,13 +800,14 @@ function DuodecimoBlock({
         menos a parte dos municípios, o PASEP e os 30% da educação e os 12% da saúde, calculados sobre a receita menos a
         parte dos municípios. Essa leitura reproduz a receita líquida que a LOA 2026 usou para os Poderes (diferença de
         0,002%). Valores brutos de cada mês, como arrecadados; o mês em curso (*) fica fora do acumulado. Duodécimo =
-        dotação inicial de fonte 100 do Poder no QDD ÷ 12.{' '}
+        dotação atualizada de fonte 100 do Poder no QDD ÷ 12 (art. 168 da Constituição: as dotações com os créditos
+        suplementares); a inicial fica ao lado para mostrar o que a LOA fixou.{' '}
         {appropriations
           ? null
           : `Para comparar com a LOA, selecione o exercício ${data.year} no cabeçalho. `}
-        % efetivo = duodécimos da LOA no período ÷ receita líquida realizada no mesmo período: o quanto da receita os
-        Poderes recebem se o Tesouro repassar o duodécimo da LOA, para comparar com o % da LDO (em vermelho, abaixo
-        dela; em azul, acima). O Portal da Transparência não publica as transferências feitas aos Poderes, e a execução
+        % efetivo = duodécimos no período ÷ receita líquida realizada no mesmo período: o quanto da receita o orçamento
+        disponibilizado aos Poderes representa, para comparar com o % da LDO (em vermelho, abaixo dela; em azul,
+        acima). O Portal da Transparência não publica as transferências feitas aos Poderes, e a execução
         no QDD não serve de substituto (o TJAC não executa na fonte 100 do SICAF): os valores mostram a regra e o
         duodécimo previsto, não o que foi efetivamente repassado.
       </p>

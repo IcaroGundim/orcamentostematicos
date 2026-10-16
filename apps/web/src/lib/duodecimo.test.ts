@@ -92,6 +92,17 @@ describe('summarizeDuodecimo', () => {
     expect(summary.branches.find((branch) => branch.key === 'DPE')!.effectivePercent).toBe(0);
   });
 
+  it('duodécimo sobre a dotação atualizada (créditos suplementares); LOA implícita pela inicial', () => {
+    const appropriations = { '101': { initialBudget: 1_200, updatedBudget: 2_400 } };
+    const summary = summarizeDuodecimo(2026, rows, [1, 2], null, appropriations)!;
+    const aleac = summary.branches.find((branch) => branch.key === 'ALEAC')!;
+    expect(aleac.appropriation).toBe(1_200);
+    expect(aleac.updatedAppropriation).toBe(2_400);
+    expect(aleac.monthlyInstallment).toBe(200);
+    expect(aleac.installmentsClosed).toBe(400);
+    expect(summary.impliedNetForecast).toBeCloseTo(1_200 / 0.2481, 6);
+  });
+
   it('sem LOA, sem % efetivo', () => {
     const summary = summarizeDuodecimo(2026, rows, [1, 2], null, null)!;
     expect(summary.totalEffectivePercent).toBeNull();

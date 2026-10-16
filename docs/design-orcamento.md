@@ -848,22 +848,26 @@ O teste `duodecimo.test.ts` guarda essa conferência.
 FUNDEB do portal não entra, porque a regra já desconta educação e saúde. O
 acumulado só soma os meses fechados; o mês em curso aparece marcado e fica fora.
 
-**Duodécimo da LOA.** É a dotação inicial de fonte 100 do órgão
+**Duodécimo.** É a dotação **atualizada** de fonte 100 do órgão
 (`treasuryAppropriationByOrganization`, `execution-monitor.ts`) dividida por 12,
-só quando o QDD carregado é do mesmo ano da receita. Órgãos: ALEAC `101`, TCE
+só quando o QDD carregado é do mesmo ano da receita. É o orçamento
+disponibilizado ao Poder, com os créditos suplementares, como manda o art. 168
+da Constituição. A dotação inicial aparece ao lado, para mostrar o que a LOA
+fixou, e é ela que serve à conferência contra a LOA (`impliedNetForecast`).
+Aproximação: a atualizada do ano inteiro é rateada em 12, então um crédito
+aberto em setembro pesa também nos meses anteriores. Órgãos: ALEAC `101`, TCE
 `102`, TJAC `203`, MPAC `304` e DPE `305`. As fontes próprias dos Poderes
 (fundos, taxas judiciais) não entram.
 
-A dotação **inicial** é usada mesmo sabendo que o art. 168 da Constituição manda
-incluir os créditos suplementares no duodécimo. Até maio/2026 a diferença para a
-atualizada era de até R$ 1 mi (MPAC). Trocar para a atualizada é decisão desta
-seção.
+Até 2026-10-16 (commit `1d286b6`), o duodécimo usava a dotação inicial. Passou
+para a atualizada a pedido do dono do produto, para medir o orçamento de fato
+disponibilizado. No QDD de maio/2026, a diferença era de até R$ 1 mi (MPAC).
 
 **% efetivo** (2026-10-16, pedido do dono do produto: comparar a obrigação legal
 com o que está sendo destinado).
-- **Fórmula:** duodécimos da LOA nos meses fechados ÷ receita líquida realizada
-  nos mesmos meses. É a fatia da receita que o Poder recebe se o Tesouro repassar
-  o duodécimo, lado a lado com o % da LDO.
+- **Fórmula:** duodécimos (dotação atualizada ÷ 12) nos meses fechados ÷ receita
+  líquida realizada nos mesmos meses. É a fatia da receita que o orçamento
+  disponibilizado ao Poder representa, lado a lado com o % da LDO.
 - **Exemplo:** até setembro de 2026, os cinco Poderes somam 23,99% contra
   24,81% na LDO. A receita veio acima da prevista, e o duodécimo é fixo.
 - **Cor:** abaixo da LDO fica em `CHANGE_TEXT_COLORS.reduction`; acima, em
@@ -1182,9 +1186,10 @@ estado vazio com o texto da falha), `pagePadding` e `defaultYear`.
   cálculo na seção 6.9): aparece só em ano com regra em `DUODECIMO_RULES`.
   - Frase de leitura: quanto a receita gerou até o último mês fechado, e quanto
     somam os duodécimos da LOA no período.
-  - Primeira tabela, uma linha por Poder: % na LDO, dotação de fonte 100 na LOA,
-    duodécimo (÷ 12), duodécimos até o mês, % efetivo (seção 6.9), gerado pela
-    arrecadação até o mês e a diferença com sinal.
+  - Primeira tabela, uma linha por Poder: % na LDO, dotação inicial (LOA) e
+    atualizada na fonte 100, duodécimo (atualizada ÷ 12), duodécimos até o mês,
+    % efetivo (seção 6.9), gerado pela arrecadação até o mês e a diferença com
+    sinal.
   - Segunda tabela, "Base de cálculo e valor gerado mês a mês (Anexo III)":
     receita da base, municípios, PASEP, educação, saúde, receita líquida, o %
     efetivo dos duodécimos de todos os Poderes e o gerado para cada Poder, por mês, mais o acumulado e a receita líquida
