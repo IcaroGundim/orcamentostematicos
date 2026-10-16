@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { donutArcs, shareOf, squarify, topWithOther, waffleCells } from './chart-geometry';
+import { donutArcs, niceScale, shareOf, squarify, topWithOther, waffleCells } from './chart-geometry';
 
 const items = [
   { key: 'a', label: 'A', value: 50 },
@@ -68,5 +68,25 @@ describe('donutArcs e shareOf', () => {
   it('base zero não vira NaN', () => {
     expect(donutArcs([{ value: 0 }])).toEqual([]);
     expect(shareOf(10, 0)).toBe(0);
+  });
+});
+
+describe('niceScale', () => {
+  it('passos redondos que cobrem o máximo', () => {
+    expect(niceScale(1_333_000_000).ticks).toEqual([0, 500_000_000, 1_000_000_000, 1_500_000_000]);
+    expect(niceScale(1_727_749_789).ticks).toEqual([0, 500_000_000, 1_000_000_000, 1_500_000_000, 2_000_000_000]);
+    expect(niceScale(100).ticks).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it('nunca passa de `intervals` intervalos e o topo cobre o máximo', () => {
+    for (const max of [1, 7, 99, 1_234, 98_765, 3.2e9]) {
+      const { ticks, top } = niceScale(max);
+      expect(ticks.length - 1).toBeLessThanOrEqual(4);
+      expect(top).toBeGreaterThanOrEqual(max);
+    }
+  });
+
+  it('máximo zero não quebra o eixo', () => {
+    expect(niceScale(0)).toEqual({ step: 1, top: 1, ticks: [0, 1] });
   });
 });

@@ -1154,7 +1154,10 @@ estado vazio com o texto da falha), `pagePadding` e `defaultYear`.
   fechado (com a média mensal) · Deduções (com o bruto).
 - **Arrecadação mês a mês** (`MonthlyColumns`): 12 colunas, empilhadas pelo
   líquido de cada grupo (`CHART_CATEGORICAL` 0–2, ordem fixa); largura medida
-  com `useMeasuredWidth` (o mesmo hook do halteres).
+  com `useMeasuredWidth` (o mesmo hook do halteres). Eixo com marcas redondas
+  (`niceScale`, `chart-geometry.ts`: passo de 1, 2, 2,5 ou 5 × 10ⁿ, até quatro
+  intervalos); até 2026-10-16 as marcas eram quartos do maior mês e saíam em
+  valores quebrados (333,4 mi, 666,7 mi).
   - **Filtro de tributos** (`CategoryFilter`, 2026-10-15): caixa reta de borda
     fina, fundo branco, sem cantos nem sombra, com "TRIBUTOS" em caixa alta e o
     valor ("Todos", em negrito) dentro, mais a seta. Com filtro ativo, a borda e o valor

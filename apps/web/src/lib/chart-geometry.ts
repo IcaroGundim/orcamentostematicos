@@ -163,3 +163,18 @@ export function waffleCells(values: number[], total?: number): number[] {
 export function shareOf(value: number, base: number): number {
   return base ? (value / base) * 100 : 0;
 }
+
+/**
+ * Escala "redonda" para um eixo de 0 a `max`: passo de 1, 2, 2,5 ou 5 × 10ⁿ, com no
+ * máximo `intervals` intervalos, e o topo do eixo no primeiro múltiplo do passo que
+ * cobre `max`. Sem isso, as marcas saem em frações do máximo (333,4 mi, 666,7 mi).
+ */
+export function niceScale(max: number, intervals = 4): { step: number; top: number; ticks: number[] } {
+  if (!(max > 0)) return { step: 1, top: 1, ticks: [0, 1] };
+  const rough = max / intervals;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rough)!;
+  const count = Math.ceil(max / step - 1e-9);
+  const ticks = Array.from({ length: count + 1 }, (_, index) => index * step);
+  return { step, top: count * step, ticks };
+}

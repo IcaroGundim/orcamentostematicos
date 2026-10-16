@@ -7,8 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatMoney } from '@/lib/api';
 import { CHANGE_TEXT_COLORS, CHART_CATEGORICAL } from '@/lib/chart-palette';
-import { shareOf } from '@/lib/chart-geometry';
-import { compactAxis, compactMoney, formatPercent } from '@/lib/number-format';
+import { niceScale, shareOf } from '@/lib/chart-geometry';
+import { compactAxis, compactMoney, formatPercent, signedMoney } from '@/lib/number-format';
 import {
   REVENUE_GROUP_LABELS,
   REVENUE_GROUPS,
@@ -64,7 +64,7 @@ function RevenueKpi({ label, value, detail }: { label: string; value: number; de
     <div className="min-w-0">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-1.5 whitespace-nowrap text-[14px] font-semibold tracking-tight tabular-nums sm:text-[17px]">
-        {formatMoney(value)}
+        {value < 0 ? signedMoney(value) : formatMoney(value)}
       </div>
       <div className="mt-1.5 truncate text-[13px] text-[#4a504b] tabular-nums" title={detail}>
         {detail}
@@ -293,7 +293,9 @@ const MonthlyColumns = memo(function MonthlyColumns({ data }: { data: RevenueDto
   const stacks = data.monthlyNet.map((_, index) =>
     groups.map((group) => ({ group: group.group, value: Math.max(0, group.net[index]) })),
   );
-  const max = Math.max(1, ...stacks.map((stack) => stack.reduce((total, part) => total + part.value, 0)));
+  // Topo do eixo no primeiro passo redondo acima do maior mês (0, 500 mi, 1 bi…).
+  const scale = niceScale(Math.max(0, ...stacks.map((stack) => stack.reduce((total, part) => total + part.value, 0))));
+  const max = scale.top;
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const slot = plotWidth / 12;
@@ -330,11 +332,11 @@ const MonthlyColumns = memo(function MonthlyColumns({ data }: { data: RevenueDto
             }
             className="block h-auto w-full"
           >
-            {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-              <g key={fraction}>
-                <line x1={pad.left} x2={width - pad.right} y1={y(max * fraction)} y2={y(max * fraction)} stroke={GRID} />
-                <text x={pad.left - 8} y={y(max * fraction) + 4} textAnchor="end" fontSize={12} fill={INK_3}>
-                  {compactAxis(max * fraction)}
+            {scale.ticks.map((tick) => (
+              <g key={tick}>
+                <line x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} stroke={GRID} />
+                <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize={12} fill={INK_3}>
+                  {compactAxis(tick)}
                 </text>
               </g>
             ))}
@@ -448,7 +450,7 @@ const RevenueTable = memo(function RevenueTable({ data }: { data: RevenueDto }) 
   };
   const breakdown = (row: RevenueRow, index: number) =>
     row.deductions[index]
-      ? `${formatMoney(row.net[index])} = bruto ${formatMoney(row.gross[index])} ${formatMoney(row.deductions[index])} de deduções`
+      ? `${formatMoney(row.net[index])} = bruto ${formatMoney(row.gross[index])} ${signedMoney(row.deductions[index])} de deduções`
       : formatMoney(row.net[index]);
 
   return (
@@ -798,8 +800,8 @@ function DuodecimoBlock({
       <p className="mt-3 text-[12.5px] leading-normal text-[#80857f]">
         Regra da {summary.rule.law} e Anexo III: os percentuais incidem sobre a receita líquida, que é a receita da base
         menos a parte dos municípios, o PASEP e os 30% da educação e os 12% da saúde, calculados sobre a receita menos a
-        parte dos municípios. Essa leitura reproduz a receita líquida que a LOA 2026 usou para os Poderes (diferença de
-        0,002%). Valores brutos de cada mês, como arrecadados; o mês em curso (*) fica fora do acumulado. Duodécimo =
+        parte dos municípios. Essa leitura foi conferida contra a LOA 2026: reproduz a receita líquida que ela usou para
+        os Poderes, com diferença de 0,002%. Valores brutos de cada mês, como arrecadados; o mês em curso (*) fica fora do acumulado. Duodécimo =
         dotação atualizada de fonte 100 do Poder no QDD ÷ 12 (art. 168 da Constituição: as dotações com os créditos
         suplementares); a inicial fica ao lado para mostrar o que a LOA fixou.{' '}
         {appropriations
