@@ -42,7 +42,12 @@ import { actionIsAmendment, actionMatchesFunctionalFilters } from '@/lib/functio
 import { buildExpenseRows } from '@/lib/expense-breakdown';
 import { Ring } from '@/components/domain/execution-visuals';
 import { STAGE_COLORS } from '@/lib/chart-palette';
-import { executionRate, type ExecutionMetric } from '@/lib/execution-monitor';
+import {
+  executionRate,
+  restrictToSource,
+  sourceOptionsOf,
+  type ExecutionMetric,
+} from '@/lib/execution-monitor';
 import { formatPercent } from '@/lib/number-format';
 import { organizationAcronym } from '@/lib/organization-acronym';
 import { readableName } from '@/lib/readable-name';
@@ -337,6 +342,8 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
 }: Props) {
   const [organizationCode, setOrganizationCode] = useState(ALL);
   const [unitCode, setUnitCode] = useState(ALL);
+  // Fonte de recurso (só no variant temático; no de execução vem recortado de fora).
+  const [sourceCode, setSourceCode] = useState(ALL);
   const [functionFilter, setFunctionFilter] = useState(ALL);
   const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [theme, setTheme] = useState(ALL);
@@ -464,8 +471,34 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
     return [...byValue.values()];
   }, [units]);
 
+  // Opções de fonte das ações do órgão/unidade escolhidos (antes do recorte, para a
+  // lista não encolher), com o rótulo do catálogo do exercício.
+  const sourceComboboxItems = useMemo<SearchableComboboxItem[]>(
+    () => [
+      { value: ALL, label: 'Todas as fontes' },
+      ...sourceOptionsOf(
+        actions.filter(
+          (action) =>
+            (organizationCode === ALL || action.organizationCode === organizationCode) &&
+            (unitCode === ALL || action.unitCode === unitCode),
+        ),
+        vigenteImport?.year ?? actions[0]?.year ?? null,
+      ),
+    ],
+    [actions, organizationCode, unitCode, vigenteImport?.year],
+  );
+
+  /**
+   * Ações recortadas à fonte: só as linhas dela, totais recalculados (contrato da
+   * execução, seção 6.9). Somar, exportar e ponderar passam a valer só para a fonte.
+   */
+  const sourcedActions = useMemo(
+    () => restrictToSource(actions, sourceCode === ALL ? null : sourceCode),
+    [actions, sourceCode],
+  );
+
   const filteredActions = useMemo(() => {
-    return actions.filter((action) => {
+    return sourcedActions.filter((action) => {
       if (organizationCode !== ALL && action.organizationCode !== organizationCode) return false;
       if (unitCode !== ALL && action.unitCode !== unitCode) return false;
       if (theme !== ALL && !action.assignments.some((item) => item.theme === theme)) return false;
@@ -475,7 +508,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       }
       return true;
     });
-  }, [actions, organizationCode, unitCode, theme, onlyEmendas, functionFilter, subfunctionFilter]);
+  }, [sourcedActions, organizationCode, unitCode, theme, onlyEmendas, functionFilter, subfunctionFilter]);
 
   const displayedActions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -684,12 +717,20 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const handleOrganizationChange = useCallback((value: string) => {
     setOrganizationCode(value);
     setUnitCode(ALL);
+    setSourceCode(ALL);
     setSearch('');
+  }, []);
+
+  // Cascata como em /orcamento: trocar a unidade limpa a fonte.
+  const handleUnitChange = useCallback((value: string) => {
+    setUnitCode(value);
+    setSourceCode(ALL);
   }, []);
 
   const hasActiveFilters =
     (!hasLockedScope && organizationCode !== ALL) ||
     unitCode !== ALL ||
+    sourceCode !== ALL ||
     functionFilter !== ALL ||
     subfunctionFilter !== ALL ||
     theme !== ALL ||
@@ -699,6 +740,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
   const clearFilters = useCallback(() => {
     if (!hasLockedScope) setOrganizationCode(ALL);
     setUnitCode(ALL);
+    setSourceCode(ALL);
     setFunctionFilter(ALL);
     setSubfunctionFilter(ALL);
     setTheme(ALL);
@@ -886,7 +928,7 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
       >
         {!isExecutionVariant ? (
           <div className="flex shrink-0 flex-col gap-2 md:gap-3">
-          <div className={hasLockedScope ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 md:gap-3' : 'grid grid-cols-2 gap-2 lg:grid-cols-4 md:gap-3'}>
+          <div className={hasLockedScope ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 md:gap-3' : 'grid grid-cols-2 gap-2 lg:grid-cols-5 md:gap-3'}>
             {!hasLockedScope ? (
               <Field className="min-w-0 gap-1.5">
                 <FieldLabel className={filterFieldLabelClass}>Órgão</FieldLabel>
@@ -904,9 +946,19 @@ export const OverviewScheduledActionsPanel = memo(function OverviewScheduledActi
               <SearchableCombobox
                 className="relative w-full min-w-0"
                 value={unitCode}
-                onChange={setUnitCode}
+                onChange={handleUnitChange}
                 placeholder="Todas as unidades"
                 items={unitComboboxItems}
+              />
+            </Field>
+            <Field className="min-w-0 gap-1.5">
+              <FieldLabel className={filterFieldLabelClass}>Fonte de recurso</FieldLabel>
+              <SearchableCombobox
+                className="relative w-full min-w-0"
+                value={sourceCode}
+                onChange={setSourceCode}
+                placeholder="Todas as fontes"
+                items={sourceComboboxItems}
               />
             </Field>
             <FunctionalClassificationFilters

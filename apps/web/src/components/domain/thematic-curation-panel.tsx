@@ -67,6 +67,7 @@ import {
   weightingFactorFormValue,
 } from '@/lib/classification-rules';
 import { buildExpenseRows } from '@/lib/expense-breakdown';
+import { restrictToSource, sourceOptionsOf } from '@/lib/execution-monitor';
 import { actionMatchesFunctionalFilters } from '@/lib/functional-classification';
 import { cn } from '@/lib/utils';
 import type {
@@ -546,6 +547,9 @@ type CurationActionsFiltersProps = {
   unitFilter: string;
   onUnitFilterChange: (value: string) => void;
   units: CurationUnitOption[];
+  sourceFilter: string;
+  onSourceFilterChange: (value: string) => void;
+  sourceItems: SearchableComboboxItem[];
   functionFilter: string;
   onFunctionFilterChange: (value: string) => void;
   subfunctionFilter: string;
@@ -570,6 +574,9 @@ function CurationActionsFilters({
   unitFilter,
   onUnitFilterChange,
   units,
+  sourceFilter,
+  onSourceFilterChange,
+  sourceItems,
   functionFilter,
   onFunctionFilterChange,
   subfunctionFilter,
@@ -606,9 +613,7 @@ function CurationActionsFilters({
         <div
           className={cn(
             'grid w-full gap-3',
-            showOrgFilter
-              ? 'sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]'
-              : 'sm:grid-cols-2 lg:grid-cols-3',
+            showOrgFilter ? 'sm:grid-cols-2 lg:grid-cols-5' : 'sm:grid-cols-2 lg:grid-cols-4',
           )}
         >
           {showOrgFilter ? (
@@ -631,6 +636,16 @@ function CurationActionsFilters({
               onChange={onUnitFilterChange}
               placeholder="Todas as unidades"
               items={unitComboboxItems}
+            />
+          </Field>
+          <Field className="min-w-0 gap-1.5">
+            <FieldLabel className={filterFieldLabelClass}>Fonte de recurso</FieldLabel>
+            <SearchableCombobox
+              className="relative w-full"
+              value={sourceFilter}
+              onChange={onSourceFilterChange}
+              placeholder="Todas as fontes"
+              items={sourceItems}
             />
           </Field>
           <FunctionalClassificationFilters
@@ -710,6 +725,7 @@ const CurationActionsCard = memo(function CurationActionsCard({
 }: CurationActionsCardProps) {
   const [organizationFilter, setOrganizationFilter] = useState(ALL);
   const [unitFilter, setUnitFilter] = useState(ALL);
+  const [sourceFilter, setSourceFilter] = useState(ALL);
   const [functionFilter, setFunctionFilter] = useState(ALL);
   const [subfunctionFilter, setSubfunctionFilter] = useState(ALL);
   const [actionFilter, setActionFilter] = useState('');
@@ -770,9 +786,35 @@ const CurationActionsCard = memo(function CurationActionsCard({
     );
   }, [actions, organizationFilter, showOrgFilter]);
 
+  // Fontes das ações do órgão/unidade escolhidos (antes do recorte, para a lista não
+  // encolher), com o rótulo do catálogo do exercício.
+  const sourceItems = useMemo<SearchableComboboxItem[]>(
+    () => [
+      { value: ALL, label: 'Todas as fontes' },
+      ...sourceOptionsOf(
+        actions.filter(
+          (action) =>
+            (organizationFilter === ALL || action.organizationCode === organizationFilter) &&
+            actionMatchesUnitFilter(action, unitFilter, organizationFilter),
+        ),
+        actions[0]?.year ?? null,
+      ),
+    ],
+    [actions, organizationFilter, unitFilter],
+  );
+
+  /**
+   * Recorte por fonte só para exibir (valores e lista): as gravações de marcação usam
+   * a ação pelo id na lista da página, nunca estes totais recalculados.
+   */
+  const sourcedActions = useMemo(
+    () => restrictToSource(actions, sourceFilter === ALL ? null : sourceFilter),
+    [actions, sourceFilter],
+  );
+
   const filteredActions = useMemo(() => {
     const search = normalize(actionFilter);
-    return actions.filter((action) => {
+    return sourcedActions.filter((action) => {
       if (organizationFilter !== ALL && action.organizationCode !== organizationFilter) return false;
       if (!actionMatchesUnitFilter(action, unitFilter, organizationFilter)) return false;
       if (themeFilter !== ALL && !action.assignments.some((item) => item.theme === themeFilter)) {
@@ -790,7 +832,7 @@ const CurationActionsCard = memo(function CurationActionsCard({
         action.unitName,
       ].some((value) => normalize(value).includes(search));
     });
-  }, [actions, actionFilter, themeFilter, unitFilter, organizationFilter, functionFilter, subfunctionFilter]);
+  }, [sourcedActions, actionFilter, themeFilter, unitFilter, organizationFilter, functionFilter, subfunctionFilter]);
 
   const virtualizer = useVirtualizer({
     count: filteredActions.length,
@@ -922,11 +964,18 @@ const CurationActionsCard = memo(function CurationActionsCard({
           onOrganizationFilterChange={(value) => {
             setOrganizationFilter(value);
             setUnitFilter(ALL);
+            setSourceFilter(ALL);
           }}
           orgComboboxItems={orgComboboxItems}
           unitFilter={unitFilter}
-          onUnitFilterChange={setUnitFilter}
+          onUnitFilterChange={(value) => {
+            setUnitFilter(value);
+            setSourceFilter(ALL);
+          }}
           units={units}
+          sourceFilter={sourceFilter}
+          onSourceFilterChange={setSourceFilter}
+          sourceItems={sourceItems}
           functionFilter={functionFilter}
           onFunctionFilterChange={setFunctionFilter}
           subfunctionFilter={subfunctionFilter}

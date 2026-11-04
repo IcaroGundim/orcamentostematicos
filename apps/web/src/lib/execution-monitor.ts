@@ -649,11 +649,77 @@ export function aggregateBySource(actions: BudgetAction[]): ExecutionRow[] {
   const year = exerciseYearOf(actions);
   const map = new Map<string, Bucket>();
   for (const line of linesOf(actions)) {
-    const code = line.source?.trim() || 'Sem fonte';
+    // Mesma normalização do filtro de fonte, para o bucket bater com a opção.
+    const code = normalizeSourceCode(line.source) || 'Sem fonte';
     const name = getFonteLabel(code, year) ?? 'Fonte não catalogada';
     const bucket = bucketOf(map, code, `${code} — ${name}`, name);
     bucket.count += 1;
     addTotals(bucket, line);
   }
   return finish(map);
+}
+
+// ── Filtro por fonte de recurso ──────────────────────────────────────────────
+
+/**
+ * Código de fonte comparável: só dígitos (`15.001.002` e `15001002` são a mesma
+ * fonte); sem dígito, o texto cru. A mesma normalização vale nas opções do filtro,
+ * no recorte e em `aggregateBySource`.
+ */
+export function normalizeSourceCode(value: string | null | undefined): string {
+  const trimmed = (value ?? '').trim();
+  return trimmed.replace(/\D/g, '') || trimmed;
+}
+
+/** Fontes presentes nas linhas de despesa das ações, com rótulo do catálogo do ano. */
+export function sourceOptionsOf(
+  actions: BudgetAction[],
+  year: number | null,
+): Array<{ value: string; label: string }> {
+  const sources = new Map<string, { value: string; label: string }>();
+  for (const line of linesOf(actions)) {
+    const code = normalizeSourceCode(line.source);
+    if (!code || sources.has(code)) continue;
+    sources.set(code, { value: code, label: `${code} — ${getFonteLabel(code, year) ?? 'Fonte não catalogada'}` });
+  }
+  return [...sources.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
+
+/**
+ * Recorta as ações à fonte `source` (contrato, seção 6.9): cada ação fica só com as
+ * linhas de despesa daquela fonte e com os totais **recalculados** delas; ação sem
+ * nenhuma linha da fonte sai. Sem fonte (`null`), devolve as ações intactas — o
+ * mesmo array, para não invalidar memos.
+ *
+ * Seguro porque o total de cada ação é a soma das suas linhas (conferido no QDD
+ * vigente em 2026-11-04: 1.734 ações, nenhuma divergência). Marcações e demais
+ * campos da ação seguem iguais; o ponderador temático passa a pesar só a fonte.
+ */
+export function restrictToSource(actions: BudgetAction[], source: string | null): BudgetAction[] {
+  if (!source) return actions;
+  const result: BudgetAction[] = [];
+  for (const action of actions) {
+    const lines = (action.expenseLines ?? []).filter((line) => normalizeSourceCode(line.source) === source);
+    if (!lines.length) continue;
+    const totals = {
+      initialBudget: 0,
+      supplemented: 0,
+      updatedBudget: 0,
+      committed: 0,
+      liquidated: 0,
+      paid: 0,
+      available: 0,
+    };
+    for (const line of lines) {
+      totals.initialBudget += line.initialBudget;
+      totals.supplemented += line.supplemented;
+      totals.updatedBudget += line.updatedBudget;
+      totals.committed += line.committed;
+      totals.liquidated += line.liquidated;
+      totals.paid += line.paid;
+      totals.available += line.available;
+    }
+    result.push({ ...action, totals, expenseLines: lines, expenseLinesCount: lines.length });
+  }
+  return result;
 }

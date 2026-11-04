@@ -67,6 +67,8 @@ import {
   aggregateBySource,
   amendmentActions,
   centralPayrollActionsForTargets,
+  restrictToSource,
+  sourceOptionsOf,
   totalsOf,
   type BudgetChangeRow,
   type ExecutionRow,
@@ -135,10 +137,6 @@ function normalize(value: string) {
     .toLowerCase();
 }
 
-function normalizeSourceCode(value: string) {
-  const trimmed = value.trim();
-  return trimmed.replace(/\D/g, '') || trimmed;
-}
 
 /** Ordena por dotação atualizada: as agregações chegam pelo liquidado. */
 function byBudget<T extends { updatedBudget: number }>(rows: T[]): T[] {
@@ -592,46 +590,40 @@ function OrcamentoPageContent() {
     ];
   }, [actions, organizationCode]);
 
-  const sourceOptions = useMemo(() => {
-    const sources = new Map<string, { value: string; label: string }>();
-    for (const action of actions) {
-      if (organizationCode !== allValue && action.organizationCode !== organizationCode) continue;
-      if (
-        unitFilter !== allValue &&
-        `${action.organizationCode}|${action.unitCode}` !== unitFilter
-      ) {
-        continue;
-      }
-      for (const line of action.expenseLines ?? []) {
-        const code = normalizeSourceCode(line.source ?? '');
-        if (!code || sources.has(code)) continue;
-        sources.set(code, {
-          value: code,
-          label: `${code} — ${getFonteLabel(code, loadedYear) ?? 'Fonte não catalogada'}`,
-        });
-      }
-    }
-    return [
+  // Opções a partir de todas as ações do órgão/unidade (não das já recortadas pela
+  // fonte), para a lista não encolher quando uma fonte é escolhida.
+  const sourceOptions = useMemo(
+    () => [
       { value: allValue, label: 'Fonte: todas' },
-      ...[...sources.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
-    ];
-  }, [actions, organizationCode, unitFilter, loadedYear]);
+      ...sourceOptionsOf(
+        actions.filter(
+          (action) =>
+            (organizationCode === allValue || action.organizationCode === organizationCode) &&
+            (unitFilter === allValue || `${action.organizationCode}|${action.unitCode}` === unitFilter),
+        ),
+        loadedYear,
+      ),
+    ],
+    [actions, organizationCode, unitFilter, loadedYear],
+  );
+
+  /**
+   * Ações recortadas à fonte escolhida: só as linhas daquela fonte, com os totais
+   * recalculados (contrato, seção 6.9). Base de Ações, Gráficos, Órgão e do escopo
+   * de pessoal; sem fonte, é o próprio `actions`.
+   */
+  const sourcedActions = useMemo(
+    () => restrictToSource(actions, sourceFilter === allValue ? null : sourceFilter),
+    [actions, sourceFilter],
+  );
 
   const filteredActions = useMemo(() => {
     const term = normalize(search.trim());
-    return actions.filter((action) => {
+    return sourcedActions.filter((action) => {
       if (organizationCode !== allValue && action.organizationCode !== organizationCode) return false;
       if (
         unitFilter !== allValue &&
         `${action.organizationCode}|${action.unitCode}` !== unitFilter
-      ) {
-        return false;
-      }
-      if (
-        sourceFilter !== allValue &&
-        !(action.expenseLines ?? []).some(
-          (line) => normalizeSourceCode(line.source ?? '') === sourceFilter,
-        )
       ) {
         return false;
       }
@@ -645,10 +637,9 @@ function OrcamentoPageContent() {
       );
     });
   }, [
-    actions,
+    sourcedActions,
     organizationCode,
     unitFilter,
-    sourceFilter,
     functionFilter,
     subfunctionFilter,
     search,
@@ -657,7 +648,7 @@ function OrcamentoPageContent() {
   const totals = useMemo(() => totalsOf(filteredActions), [filteredActions]);
   const fiscalActions = useMemo(
     () =>
-      actions.filter((action) => {
+      sourcedActions.filter((action) => {
         if (organizationCode === allValue || action.organizationCode !== organizationCode) {
           return false;
         }
@@ -669,7 +660,7 @@ function OrcamentoPageContent() {
         }
         return true;
       }),
-    [actions, organizationCode, unitFilter],
+    [sourcedActions, organizationCode, unitFilter],
   );
   const selectedOrganization = useMemo(
     () => organizations.find((organization) => organization.code === organizationCode),
@@ -722,7 +713,7 @@ function OrcamentoPageContent() {
         { organizationCode: string; unitCode: string; name: string }
       >();
       const organizationActions: BudgetAction[] = [];
-      for (const action of actions) {
+      for (const action of sourcedActions) {
         if (action.organizationCode !== selectedOrganization.code) continue;
         organizationActions.push(action);
         if (!unitsByCode.has(action.unitCode)) {
@@ -735,7 +726,7 @@ function OrcamentoPageContent() {
       }
       const organizationTargets = [organizationTarget, ...unitsByCode.values()];
       const organizationCentralActions = centralPayrollActionsForTargets(
-        actions,
+        sourcedActions,
         organizationTargets,
       );
 
@@ -751,7 +742,7 @@ function OrcamentoPageContent() {
       const selectedUnitCode = unitFilter.split('|')[1] ?? '';
       const selectedUnit = unitsByCode.get(selectedUnitCode);
       const unitMatches = selectedUnit
-        ? centralPayrollActionsForTargets(actions, [selectedUnit])
+        ? centralPayrollActionsForTargets(sourcedActions, [selectedUnit])
         : [];
       if (unitMatches.length) {
         return {
@@ -770,7 +761,7 @@ function OrcamentoPageContent() {
           'A unidade não possui ação própria na folha; por isso, a folha é apresentada no nível da secretaria, sem rateio.',
       };
     },
-    [actions, fiscalActions, selectedOrganization, unitFilter],
+    [sourcedActions, fiscalActions, selectedOrganization, unitFilter],
   );
   // Recorte de emendas: as ações de emenda dentro dos filtros da linha.
   const amendments = useMemo(() => amendmentActions(filteredActions), [filteredActions]);
@@ -1242,10 +1233,13 @@ function OrcamentoPageContent() {
                 organizationOptions={fiscalOrganizationOptions}
                 unitFilter={unitFilter}
                 unitOptions={unitOptions}
+                sourceFilter={sourceFilter}
+                sourceOptions={sourceOptions}
                 payrollHeadcount={fiscalPayrollHeadcount}
                 allValue={allValue}
                 onOrganizationChange={changeOrganization}
                 onUnitChange={changeUnit}
+                onSourceChange={setSourceFilter}
                 vigenteImport={metadata?.vigenteImport}
               />
             </TabsContent>

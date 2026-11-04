@@ -246,9 +246,11 @@ busca tem `aria-label`.
   `functionalProgram`, `organizationName`.
 - **Órgão**, **Unidade**, **Fonte** (`SearchableCombobox`, `w-40`):
   opções e cascata da regra R8. Unidade: chave `{org}|{unit}`, rótulo com
-  `org/unit — nome` sem órgão filtrado e `unit — nome` com. Fonte: código
-  normalizado por `normalizeSourceCode` e rótulo
-  `{código} — {getFonteLabel ?? "Fonte não catalogada"}`.
+  `org/unit — nome` sem órgão filtrado e `unit — nome` com. Fonte: opções de
+  `sourceOptionsOf` (código normalizado por `normalizeSourceCode`, rótulo
+  `{código} — {getFonteLabel ?? "Fonte não catalogada"}`), tiradas das ações do
+  órgão/unidade **antes** do recorte, para a lista não encolher. Escolher uma
+  fonte **recorta os valores** a ela (seção 6.9), não só a lista de ações.
 - **Função/Subfunção**: `FunctionalClassificationFilters` com
   `showLabels={false}`.
 - **Limpar** (`variant="ghost"`), sempre presente e desabilitado quando
@@ -464,10 +466,11 @@ Todos os `useMemo` da página e o que os invalida:
 | `organizationOptions` | `organizations` | opções do combo de órgão |
 | `fiscalOrganizationOptions` | `organizations` | opções da visão por órgão ("Selecione uma secretaria") |
 | `unitOptions` | `actions`, `organizationCode` | unidades do órgão selecionado |
-| `sourceOptions` | `actions`, `organizationCode`, `unitFilter` | fontes das ações do recorte órgão+unidade |
-| `filteredActions` | 6 filtros + `actions` | recorte dos filtros, base de `amendments` e de `dimensionActions` |
+| `sourceOptions` | `actions`, `organizationCode`, `unitFilter` | fontes das ações do recorte órgão+unidade (`sourceOptionsOf`) |
+| `sourcedActions` | `actions`, `sourceFilter` | ações recortadas à fonte (`restrictToSource`, seção 6.9); o próprio `actions` sem fonte |
+| `filteredActions` | `sourcedActions` + 5 filtros | recorte dos filtros, base de `amendments` e de `dimensionActions` |
 | `totals` | `filteredActions` | régua de indicadores (Geral) e grade `geral` |
-| `fiscalActions` | `actions`, `organizationCode`, `unitFilter` | recorte da visão por órgão (sem fonte/função/busca) |
+| `fiscalActions` | `sourcedActions`, `organizationCode`, `unitFilter` | recorte da visão por órgão, já pela fonte (sem função/busca) |
 | `selectedOrganization` | `organizations`, `organizationCode` | objeto do órgão na visão fiscal |
 | `fiscalPayrollHeadcount` | `payroll`, `organizationCode`, `unitFilter` | vínculos da folha no escopo do órgão (seção 6.6) |
 | `personnelScope` | `actions`, `fiscalActions`, `selectedOrganization`, `unitFilter` | ações locais vs. folha centralizada (3 casos, abaixo) |
@@ -905,6 +908,32 @@ dotação, não a execução.
 Fora da base, até decisão contrária: a transferência da LC 176/2020 (`171958`),
 porque a LDO cita só a LC 87.
 
+### 6.9 Filtro por fonte de recurso (`restrictToSource`, `execution-monitor.ts`)
+
+Desde 2026-11-04 (pedido do dono do produto) a fonte **recorta valores**, não só
+a lista: cada ação fica com as linhas de despesa da fonte escolhida e com os
+totais recalculados delas; ação sem linha da fonte sai. Antes o filtro mantinha
+a ação inteira se *alguma* linha fosse da fonte, e os totais somavam as outras
+fontes dela.
+
+- Vale em `/orcamento` (Ações, Gráficos e Órgão, mesmo estado `sourceFilter`) e
+  em `/seplan` (Visão geral — `OverviewScheduledActionsPanel` temático — e
+  Curadoria — `ThematicCurationPanel`, cada um com o próprio seletor "Fonte de
+  recurso" e a cascata Órgão → Unidade → Fonte). **Não** vale em Receitas: a
+  fonte da receita não é gravada em `RevenueMonth`.
+- Seguro porque o total da ação é a soma das linhas: conferido no QDD vigente
+  em 2026-11-04 (1.734 ações, nenhuma divergência em dotação inicial,
+  atualizada, empenhado, liquidado e pago). Se uma importação futura quebrar
+  isso, o recorte deixa de fechar com o total geral — teste em
+  `execution-monitor.test.ts` ("as fontes somadas fecham com o total geral").
+- Na Curadoria o recorte é **só de exibição**: as gravações de marcação mandam o
+  id da ação e buscam a ação na lista da página, nunca os totais recortados.
+- Com fonte escolhida, o ponderador temático, Somar e Exportar do `/seplan` e os
+  gráficos de `/orcamento` passam a pesar só a fonte (a rosca "De onde vem o
+  recurso" mostra a fonte inteira).
+- `aggregateBySource` usa a mesma `normalizeSourceCode` do filtro, para o bucket
+  bater com a opção (antes agrupava pelo texto cru).
+
 ## 7. Componentes do módulo
 
 ### 7.1 `ExecutionChartCard` (`execution-breakdown-panel.tsx:110-206`)
@@ -1001,8 +1030,15 @@ No variant de execução (desde 2026-10-14):
 Props (todas obrigatórias exceto `organization`): `actions`, `personnelActions`,
 `centralPayrollActions`, `personnelScopeLabel`, `personnelScopeNote`,
 `organization?`, `organizationCode`, `organizationOptions`, `unitFilter`,
-`unitOptions`, `payrollHeadcount: PayrollHeadcountScope | null`, `allValue`,
-`onOrganizationChange`, `onUnitChange`, `vigenteImport?`.
+`unitOptions`, `sourceFilter`, `sourceOptions`, `payrollHeadcount:
+PayrollHeadcountScope | null`, `allValue`, `onOrganizationChange`,
+`onUnitChange`, `onSourceChange`, `vigenteImport?`.
+
+Seletores (`fiscal-selection-controls`): secretaria, unidade e **fonte**
+(2026-11-04; desabilitados sem secretaria). A fonte é o mesmo estado do filtro
+de Ações/Gráficos, com a mesma cascata (R8), e `actions`, `personnelActions` e
+`centralPayrollActions` já chegam recortadas a ela (seção 6.9): régua, waffle
+"Por fonte de recurso", comprometido e pessoal passam a valer só para a fonte.
 
 Layout (redesenhado em 2026-10-14):
 

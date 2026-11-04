@@ -99,10 +99,17 @@ type FiscalSecretariatViewProps = {
   organizationOptions: SearchableComboboxItem[];
   unitFilter: string;
   unitOptions: SearchableComboboxItem[];
+  /**
+   * Fonte de recurso: o mesmo estado do filtro de Ações/Gráficos. As `actions` já
+   * chegam recortadas a ela (só as linhas da fonte, totais recalculados).
+   */
+  sourceFilter: string;
+  sourceOptions: SearchableComboboxItem[];
   payrollHeadcount: PayrollHeadcountScope | null;
   allValue: string;
   onOrganizationChange: (value: string) => void;
   onUnitChange: (value: string) => void;
+  onSourceChange: (value: string) => void;
   vigenteImport?: BudgetImport | null;
 };
 
@@ -190,10 +197,13 @@ export const FiscalSecretariatView = memo(function FiscalSecretariatView({
   organizationOptions,
   unitFilter,
   unitOptions,
+  sourceFilter,
+  sourceOptions,
   payrollHeadcount,
   allValue,
   onOrganizationChange,
   onUnitChange,
+  onSourceChange,
   vigenteImport,
 }: FiscalSecretariatViewProps) {
   const presentationRef = useRef<HTMLDivElement>(null);
@@ -423,6 +433,14 @@ export const FiscalSecretariatView = memo(function FiscalSecretariatView({
             onChange={onUnitChange}
             items={unitOptions}
             placeholder="Unidade: todas"
+            disabled={!organization}
+          />
+          <SearchableCombobox
+            className="relative w-56 min-w-0"
+            value={sourceFilter}
+            onChange={onSourceChange}
+            items={sourceOptions}
+            placeholder="Fonte: todas"
             disabled={!organization}
           />
           <div className="fiscal-presentation-actions flex gap-2.5">

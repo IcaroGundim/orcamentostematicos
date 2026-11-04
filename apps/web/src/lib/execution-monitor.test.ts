@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   aggregateBudgetChangesByOrganization,
   isPayrollAction,
+  normalizeSourceCode,
   payrollBudgetTotalsOf,
+  restrictToSource,
+  sourceOptionsOf,
   totalsOf,
 } from './execution-monitor';
 import type { BudgetAction, ExpenseLine } from '@/types/domain';
@@ -134,5 +137,50 @@ describe('payrollBudgetTotalsOf', () => {
 
   it('recorte sem folha devolve zeros, não NaN', () => {
     expect(payrollBudgetTotalsOf([])).toMatchObject({ updatedBudget: 0, actionCount: 0, excludedUpdatedBudget: 0 });
+  });
+});
+
+describe('restrictToSource', () => {
+  const withSources = (organizationCode: string, sources: Array<[string, number]>): BudgetAction => {
+    const base = action(
+      organizationCode,
+      sources.map(([, value]) => ({ initialBudget: value, updatedBudget: value })),
+    );
+    const expenseLines = base.expenseLines!.map((item, index) => ({ ...item, source: sources[index][0] }));
+    return { ...base, expenseLines };
+  };
+  const actions = [
+    withSources('101', [
+      ['15000100', 100],
+      ['17000200', 40],
+    ]),
+    withSources('102', [['17000200', 7]]),
+  ];
+
+  it('sem fonte devolve o mesmo array', () => {
+    expect(restrictToSource(actions, null)).toBe(actions);
+  });
+
+  it('recalcula os totais só com as linhas da fonte e tira ação sem a fonte', () => {
+    const result = restrictToSource(actions, '15000100');
+    expect(result).toHaveLength(1);
+    expect(result[0].totals.updatedBudget).toBe(100);
+    expect(result[0].expenseLines).toHaveLength(1);
+    expect(result[0].expenseLinesCount).toBe(1);
+  });
+
+  it('as fontes somadas fecham com o total geral', () => {
+    const sources = sourceOptionsOf(actions, 2026).map((option) => option.value);
+    expect(sources).toEqual(['15000100', '17000200'].sort());
+    const bySource = sources.reduce(
+      (total, source) => total + totalsOf(restrictToSource(actions, source)).updatedBudget,
+      0,
+    );
+    expect(bySource).toBe(totalsOf(actions).updatedBudget);
+  });
+
+  it('compara o código normalizado (pontuação não importa)', () => {
+    expect(normalizeSourceCode(' 15.000.100 ')).toBe('15000100');
+    expect(restrictToSource([withSources('103', [['15.000.100', 5]])], '15000100')).toHaveLength(1);
   });
 });
