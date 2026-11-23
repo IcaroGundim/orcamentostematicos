@@ -17,6 +17,17 @@ name: Coleta do QDD (SICAF)
 # Roda no Actions (não na Vercel) porque a raspagem depende de sessão GeneXus e do TLS
 # da SEFAZ, como a coleta da folha. É idempotente: cada execução substitui a prévia do
 # SICAF ainda não confirmada.
+#
+# RUNNER PRÓPRIO: desde 03/11/2026 o SICAF não aceita conexão dos runners do GitHub
+# (timeout de conexão no login; da rede da SEPLAN responde normalmente). Por isso este
+# job — e SÓ ele — roda num runner self-hosted (Windows) instalado numa máquina da
+# SEPLAN, rótulo `seplan-sicaf`, em C:\actions-runner. Consequências:
+#   - a coleta só acontece com essa máquina ligada e logada; senão o job fica na fila
+#     (até 24h) e roda quando ela voltar;
+#   - os passos usam bash: o runner acha o Git Bash pelo arquivo C:\actions-runner\.path;
+#   - o repositório é público, então PRs de fork exigem aprovação manual (Settings →
+#     Actions → "Require approval for all external contributors"). Não afrouxar isso:
+#     um workflow de fork apontando para este rótulo rodaria dentro da rede da SEPLAN.
 
 on:
   schedule:
@@ -44,15 +55,20 @@ concurrency:
 
 jobs:
   coletar:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, seplan-sicaf]
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
+      # Sem `cache: npm`: no runner da SEPLAN o download do cache remoto (blob da Azure)
+      # travou por mais de 15 minutos — provavelmente retido pelo firewall da rede. O npm
+      # já mantém o próprio cache no disco da máquina, então o cache remoto não ganha nada.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Instalar dependências
         run: npm ci
@@ -103,7 +119,10 @@ jobs:
 
       - name: Coletar QDD do SICAF
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          # Da rede da SEPLAN, o FortiGate retém *.vercel.app de forma intermitente (em
+          # 23/11/2026: 200 às 10h, timeout às 14h). A variável APP_URL_SEPLAN aponta para a
+          # segunda porta (Worker de repasse na Cloudflare); sem ela, vale o segredo de sempre.
+          APP_URL: ${{ vars.APP_URL_SEPLAN || secrets.APP_URL }}
           SICAF_CPF: ${{ secrets.SICAF_CPF }}
           SICAF_SENHA: ${{ secrets.SICAF_SENHA }}
           SICAF_JOB_TOKEN: ${{ secrets.SICAF_JOB_TOKEN }}
