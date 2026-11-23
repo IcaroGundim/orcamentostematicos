@@ -629,5 +629,15 @@ async function main() {
 
 main().catch((error) => {
   console.error(`\n✗ ${error.message}`);
+  // `fetch failed` sozinho não diz nada: a causa real (ECONNREFUSED, timeout de conexão,
+  // certificado...) fica em error.cause. Sem isto, o bloqueio dos runners do GitHub pela
+  // SEFAZ em 11/2026 passou duas semanas indistinguível de "SICAF fora do ar".
+  const causa = error.cause;
+  if (causa) {
+    const detalhe = [causa.code, causa.message, causa.address && `${causa.address}:${causa.port ?? ''}`]
+      .filter(Boolean)
+      .join(' · ');
+    console.error(`  causa: ${detalhe}`);
+  }
   process.exit(1);
 });

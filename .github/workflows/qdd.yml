@@ -17,6 +17,17 @@ name: Coleta do QDD (SICAF)
 # Roda no Actions (não na Vercel) porque a raspagem depende de sessão GeneXus e do TLS
 # da SEFAZ, como a coleta da folha. É idempotente: cada execução substitui a prévia do
 # SICAF ainda não confirmada.
+#
+# RUNNER PRÓPRIO: desde 03/11/2026 o SICAF não aceita conexão dos runners do GitHub
+# (timeout de conexão no login; da rede da SEPLAN responde normalmente). Por isso este
+# job — e SÓ ele — roda num runner self-hosted (Windows) instalado numa máquina da
+# SEPLAN, rótulo `seplan-sicaf`, em C:\actions-runner. Consequências:
+#   - a coleta só acontece com essa máquina ligada e logada; senão o job fica na fila
+#     (até 24h) e roda quando ela voltar;
+#   - os passos usam bash: o runner acha o Git Bash pelo arquivo C:\actions-runner\.path;
+#   - o repositório é público, então PRs de fork exigem aprovação manual (Settings →
+#     Actions → "Require approval for all external contributors"). Não afrouxar isso:
+#     um workflow de fork apontando para este rótulo rodaria dentro da rede da SEPLAN.
 
 on:
   schedule:
@@ -44,8 +55,11 @@ concurrency:
 
 jobs:
   coletar:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, seplan-sicaf]
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
