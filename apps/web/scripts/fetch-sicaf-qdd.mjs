@@ -206,7 +206,15 @@ async function login() {
   console.log('• Login no SICAF…');
   const inicial = await req('GET', 'app.sicaf');
   const htmlInicial = await responseText(inicial);
-  const gxState = extrair(htmlInicial, RE_STATE, 'o GX_STATE do login', 'login-form');
+  // O GX_STATE NÃO vai no POST: desde 11/2026 o WAF da SEFAZ devolve "Acesso bloqueado"
+  // para POSTs que carregam o GXState inteiro (~12 KB, com HTML do chat dentro). O login
+  // do GeneXus funciona sem ele — o próprio formulário aceita `GX_STATE=undefined` —, e
+  // omitir o campo é mais simples do que enviar um estado expurgado. Ver o incidente em
+  // docs/incidente-coleta-sicaf-2026-11.md.
+  if (!/name="GXState"/.test(htmlInicial)) {
+    // A página de login às vezes chega truncada (sem o GXState); não é problema.
+    console.log('  (página de login sem GXState — seguindo sem ele.)');
+  }
 
   const payload = new URLSearchParams({
     vUSUARIOLOGIN: CPF,
@@ -217,7 +225,7 @@ async function login() {
     _EventName: "E'DOACESSAR'.",
     _EventGridId: '',
     _EventRowId: '',
-    GX_STATE: gxState,
+    GX_STATE: 'undefined',
   });
   const res = await req('POST', 'app.sicaf', {
     body: payload,
@@ -458,11 +466,13 @@ function validarExcel(buffer) {
 
 async function exportarQdd(qdd) {
   console.log('• Disparando a exportação para Excel (DOEXCEL)…');
+  // Sem GXState, pelo mesmo motivo do login: o DOEXCEL é disparado a partir da sessão
+  // já aberta, e o WAF bloqueia o POST quando o estado inteiro vem no corpo.
   const form = new URLSearchParams({
     _EventName: "E'DOEXCEL'.",
     _EventGridId: '',
     _EventRowId: '',
-    GXState: qdd.gxState,
+    GXState: 'undefined',
     vTIPOREL: '2',
     vTIPO: '0',
     vEXRORC: String(EXERCICIO),
