@@ -63,10 +63,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sem `cache: npm`: no runner da SEPLAN o download do cache remoto (blob da Azure)
+      # travou por mais de 15 minutos — provavelmente retido pelo firewall da rede. O npm
+      # já mantém o próprio cache no disco da máquina, então o cache remoto não ganha nada.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Instalar dependências
         run: npm ci
