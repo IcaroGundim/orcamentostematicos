@@ -119,7 +119,10 @@ jobs:
 
       - name: Coletar QDD do SICAF
         env:
-          APP_URL: ${{ secrets.APP_URL }}
+          # Da rede da SEPLAN, o FortiGate retém *.vercel.app de forma intermitente (em
+          # 23/11/2026: 200 às 10h, timeout às 14h). A variável APP_URL_SEPLAN aponta para a
+          # segunda porta (Worker de repasse na Cloudflare); sem ela, vale o segredo de sempre.
+          APP_URL: ${{ vars.APP_URL_SEPLAN || secrets.APP_URL }}
           SICAF_CPF: ${{ secrets.SICAF_CPF }}
           SICAF_SENHA: ${{ secrets.SICAF_SENHA }}
           SICAF_JOB_TOKEN: ${{ secrets.SICAF_JOB_TOKEN }}
