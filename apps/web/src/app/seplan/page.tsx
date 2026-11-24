@@ -26,6 +26,7 @@ import {
   SearchIcon,
   SendIcon,
   Trash2Icon,
+  TriangleAlertIcon,
   UploadIcon,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -93,6 +94,7 @@ import { FunctionalProgramLine } from '@/components/domain/functional-program-li
 import { AdminDeliveryWorkspace } from '@/components/domain/admin-delivery-workspace';
 import { api, classificationLabels, clearStoredSession, formatMoney, getStoredSession, LEGISLATION_LINKS, themeLabels, type Session } from '@/lib/api';
 import { exerciseQuery, useExercise } from '@/lib/use-exercise';
+import { assessQddFreshness } from '@/lib/qdd-freshness';
 import { ExerciseSelect } from '@/components/domain/exercise-select';
 import {
   buildVerifiedDeliveryExecutedMap,
@@ -1596,6 +1598,51 @@ function SeplanPageContent() {
     </Alert>
   ) : null;
 
+  // Alerta de coleta parada (ver `qdd-freshness.ts`). Só no exercício corrente: é o
+  // único que a coleta diária atualiza; um comparativo envelhece por definição.
+  const qddFreshness = useMemo(
+    () =>
+      loadedYear != null && loadedYear === metadata?.currentYear
+        ? assessQddFreshness({
+            revisionDates: importRevisions.filter((r) => r.year === loadedYear).map((r) => r.createdAt),
+            pendingGeneratedAt: sicafPending?.year === loadedYear ? sicafPending.generatedAt : null,
+          })
+        : ({ status: 'unknown' } as const),
+    [importRevisions, sicafPending, loadedYear, metadata?.currentYear],
+  );
+  const qddStaleNotice =
+    qddFreshness.status === 'stalled' || qddFreshness.status === 'awaiting-review' ? (
+      <Alert className="border-amber-500/40 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+        <TriangleAlertIcon />
+        <AlertDescription className="text-inherit">
+          <span className="block font-medium">
+            {qddFreshness.status === 'stalled'
+              ? `QDD sem atualização há ${qddFreshness.businessDays} dias úteis`
+              : 'Coleta do QDD aguardando a SEPLAN'}
+          </span>
+          <span className="block">
+            Última publicação em {qddFreshness.lastPublishedAt.toLocaleString('pt-BR')}.{' '}
+            {qddFreshness.status === 'stalled'
+              ? 'A coleta automática do SICAF deveria atualizar todo dia útil. Verifique se a máquina do runner da SEPLAN está ligada e se a execução falhou em GitHub → Actions → "Coleta do QDD (SICAF)".'
+              : 'A coleta rodou, mas a publicação automática recusou a prévia. Revise e confirme em Estrutura vigente.'}
+          </span>
+          {qddFreshness.status === 'awaiting-review' ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => {
+                setActiveSection('structure');
+                setStructureSubTab('base');
+              }}
+            >
+              Ir para a prévia do SICAF
+            </Button>
+          ) : null}
+        </AlertDescription>
+      </Alert>
+    ) : null;
+
   const navItems: AdminSidebarNavItem[] = [
     { id: 'overview', label: 'Visão geral', icon: GaugeIcon },
     { id: 'structure', label: 'Estrutura vigente', icon: DatabaseIcon, badge: actions.length },
@@ -1747,6 +1794,7 @@ function SeplanPageContent() {
         </header>
 
         <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:px-6 2xl:px-8">
+          {qddStaleNotice}
           {activeSection === 'overview' ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <OverviewScheduledActionsPanel

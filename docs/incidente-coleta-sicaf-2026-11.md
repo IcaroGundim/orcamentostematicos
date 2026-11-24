@@ -497,6 +497,11 @@ janela. Para desativar, apague esse arquivo.
 4. **Disponibilidade:** a coleta das 05:00 só roda com a máquina do runner ligada e logada.
    Fora disso, o job fica na fila por até 24h e roda quando a máquina voltar.
 
+> **Atualização (24/11/2026):** a branch foi mesclada na `main` em 23/11. A primeira coleta
+> agendada falhou no TLS (cadeia incompleta do SICAF), corrigido com o intermediário
+> versionado. O alerta de QDD parado foi criado. Estado atual das pendências na seção 10
+> de [`coleta-automatica.md`](coleta-automatica.md).
+
 ### 10.9. Paliativo até lá
 
 Os exercícios anteriores continuam pelo **upload manual** em `/seplan`.

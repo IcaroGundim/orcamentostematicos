@@ -194,6 +194,16 @@ segredo `APP_URL` (a Vercel direto).
   Exercícios anteriores (comparativos) entram por upload manual até a SEFAZ ajustar a regra.
 - **Conta nominal.** O login usado é de uma pessoa, e toda coleta fica registrada no SICAF
   em nome dela. O ideal é obter da SEFAZ uma conta técnica só de leitura.
+- **Cadeia de certificado incompleta.** O servidor do SICAF envia só o certificado final
+  (`*.sefaz.ac.gov.br`), sem o intermediário *Sectigo Public Server Authentication CA OV
+  R36*. O Node não busca intermediários sozinho e, em 24/11/2026, a coleta agendada falhou
+  com `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. Só funcionava quando o processo herdava
+  `NODE_USE_SYSTEM_CA=1`, que faz o Node usar o repositório do Windows (onde o intermediário
+  está em cache). Essa variável não existe no ambiente do usuário nem da máquina, então o
+  resultado dependia de como o runner foi iniciado. O intermediário (público, válido até 2036) está
+  versionado em `apps/web/scripts/certs/sectigo-ov-r36.pem` e o `qdd.yml` o entrega ao Node
+  por `NODE_EXTRA_CA_CERTS`. A verificação de TLS continua ligada. Para rodar o coletor à
+  mão, defina a mesma variável antes do `node`.
 - **Depuração.** Quando o SICAF responde algo inesperado, o coletor salva a resposta em
   `apps/web/scripts/.sicaf-debug/`, dentro da pasta de trabalho do runner, e tenta
   anexá-la ao job como artefato `sicaf-debug` por 7 dias.
@@ -256,7 +266,7 @@ Configurados no GitHub, em **Settings → Secrets and variables → Actions**.
 | `SICAF_JOB_TOKEN` | segredo | QDD | Senha compartilhada entre o job e as rotas do app. **O mesmo valor** precisa estar na Vercel |
 | `APP_URL` | segredo | QDD | Endereço do app (Vercel direto) |
 | `APP_URL_SEPLAN` | **variável** | QDD | Endereço do app pela Cloudflare; tem prioridade sobre `APP_URL` |
-| `SICAF_INSECURE_TLS` | segredo (opcional) | QDD | `1` só se o TLS da SEFAZ falhar |
+| `SICAF_INSECURE_TLS` | segredo (opcional) | QDD | `1` desliga a verificação de TLS. Último recurso: antes, confira o intermediário em `scripts/certs/` (3.5) |
 | `GITLAB_MIRROR_URL` / `GITLAB_TOKEN` | segredo | espelho GitLab | Destino e token do espelho |
 
 Na **Vercel** (Production): `SICAF_JOB_TOKEN`, com o mesmo valor do GitHub. Para o botão
@@ -285,10 +295,24 @@ cabeçalho `x-job-token` e respondem **401** sem ele. Elas precisam estar libera
 
 ## 9. Monitoramento e diagnóstico
 
-**Hoje não existe alerta automático** quando uma coleta falha. Entre 03/11 e 23/11/2026, a
-coleta do QDD falhou 14 vezes seguidas sem ninguém notar. Até existir um alerta, confira de
-vez em quando a aba **Actions** do repositório (ou ative as notificações de falha de
-workflow no GitHub).
+Entre 03/11 e 23/11/2026, a coleta do QDD falhou 14 vezes seguidas sem ninguém notar. Desde
+24/11/2026, o painel da SEPLAN avisa:
+
+- **Alerta de coleta parada.** No topo de `/seplan`, em qualquer seção, aparece um aviso
+  quando o QDD do exercício corrente está há **2 dias úteis ou mais** sem publicação
+  (`QDD_STALE_BUSINESS_DAYS` em `apps/web/src/lib/qdd-freshness.ts`). A conta usa a data da
+  revisão mais recente da base (do SICAF ou de upload manual), no fuso de Rio Branco, sem
+  contar sábado e domingo.
+  - *"QDD sem atualização há N dias úteis"*: nenhuma coleta chegou ao app. Runner
+    desligado, SICAF fora do ar, senha vencida ou certificado. Veja o log em Actions.
+  - *"Coleta do QDD aguardando a SEPLAN"*: a coleta rodou, mas a publicação automática
+    recusou a prévia (travas da seção 3.2). Revise e confirme a prévia.
+- **Por que medir no painel, e não no workflow:** com a máquina do runner desligada o job
+  fica na fila e **não falha**. Nenhuma notificação de falha pegaria esse caso.
+
+Como complemento, o GitHub manda e-mail de falha de workflow agendado para quem editou o
+`cron` por último, se as notificações de Actions estiverem ligadas em
+**Settings → Notifications → Actions** da conta.
 
 Para ver o histórico de uma rotina pelo terminal:
 
@@ -310,6 +334,7 @@ gh run view <id> --log-failed
 | `bash: command not found` | Runner iniciado sem o Git Bash no PATH | Iniciar sempre pelo `iniciar.cmd`, nunca pelo `run.cmd` direto |
 | `setup-node` parado por muitos minutos | Download de cache remoto retido pela rede | O `qdd.yml` já não usa `cache: npm`; não reative |
 | `✗ fetch failed` + `causa: UND_ERR_CONNECT_TIMEOUT` com IP do SICAF | SICAF inacessível dessa rede | Conferir se o job rodou no runner da SEPLAN; testar o acesso ao SICAF dessa máquina |
+| `✗ fetch failed` + `causa: UNABLE_TO_VERIFY_LEAF_SIGNATURE` no login | O SICAF não mandou o intermediário e o Node não o achou | Conferir se o passo tem `NODE_EXTRA_CA_CERTS` e se o certificado da SEFAZ ainda é emitido pela *Sectigo CA OV R36* (seção 3.5). Se o emissor mudou, troque o PEM |
 | `✗ fetch failed` + `causa: UND_ERR_CONNECT_TIMEOUT` no **envio ao app** | `*.vercel.app` retido pelo FortiGate | Conferir se a variável `APP_URL_SEPLAN` existe e aponta para o Worker |
 | `Falha na autenticação do SICAF` | Senha errada ou expirada, **ou** bloqueio do WAF | Abrir o arquivo em `.sicaf-debug/`. Se for a página "Acesso bloqueado", acionar a SEFAZ com os IDs da página; se for a tela de login, revisar `SICAF_SENHA` |
 | `401` nas rotas do app | `SICAF_JOB_TOKEN` diferente entre o GitHub e a Vercel | Igualar os valores |
@@ -340,13 +365,17 @@ de certificado ou de recusa.
 - **Folha, receitas e backup** continuam nos servidores do GitHub, que alcançam o Portal da
   Transparência e o Neon sem problema. Não precisam do runner da SEPLAN.
 
-### Pendências conhecidas (23/11/2026)
+### Pendências conhecidas (atualizado em 24/11/2026)
 
-1. Mesclar `ci/qdd-runner-seplan` na `main`. Sem isso, o agendamento do QDD continua falhando.
-2. Resolver com a SEFAZ o **403 na troca de exercício**.
-3. Criar um **alerta de coleta parada**: um aviso no painel quando o QDD publicado estiver
-   com mais de N dias úteis, ou uma notificação de falha de workflow.
-4. Obter uma **conta técnica** de leitura no SICAF, no lugar da conta nominal.
+1. ~~Mesclar `ci/qdd-runner-seplan` na `main`.~~ **Feito em 23/11/2026.** A primeira coleta
+   agendada pela `main` (24/11) falhou no TLS do SICAF (cadeia incompleta, seção 3.5).
+   Correção: intermediário versionado. Falha reproduzida e correção validada com o Node do
+   runner (22.23.5) na própria máquina; falta confirmar numa execução do workflow.
+2. Resolver com a SEFAZ o **403 na troca de exercício**. Depende da SEFAZ; o pedido
+   está redigido em [`pedidos-sefaz.md`](pedidos-sefaz.md).
+3. ~~Criar um alerta de coleta parada.~~ **Feito em 24/11/2026** (seção 9).
+4. Obter uma **conta técnica** de leitura no SICAF, no lugar da conta nominal. Depende da
+   SEFAZ; o pedido está no mesmo documento.
 
 ---
 
@@ -357,6 +386,7 @@ de certificado ou de recusa.
 | [`ingestao-qdd-sicaf.md`](ingestao-qdd-sicaf.md) | Desenho e validação da coleta do QDD, travas da publicação, botão da tela |
 | [`incidente-coleta-sicaf-2026-11.md`](incidente-coleta-sicaf-2026-11.md) | Incidente de novembro/2026: diagnóstico, runner próprio, WAF, Worker |
 | [`sicaf-rotas-dados.md`](sicaf-rotas-dados.md) | Rotas e dados do SICAF |
+| [`pedidos-sefaz.md`](pedidos-sefaz.md) | Rascunho dos pedidos à SEFAZ (403, conta técnica, certificado) |
 | [`folha-portal-transparencia.md`](folha-portal-transparencia.md) | Coleta da folha no Portal da Transparência |
 | [`automacao-execucao-transparencia.md`](automacao-execucao-transparencia.md) | Automação da execução orçamentária |
 | [`segunda-porta-cloudflare.md`](segunda-porta-cloudflare.md) | Worker de repasse na Cloudflare (contorno do FortiGate) |

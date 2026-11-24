@@ -127,6 +127,13 @@ jobs:
           SICAF_SENHA: ${{ secrets.SICAF_SENHA }}
           SICAF_JOB_TOKEN: ${{ secrets.SICAF_JOB_TOKEN }}
           SICAF_INSECURE_TLS: ${{ secrets.SICAF_INSECURE_TLS }}
+          # O servidor do SICAF entrega só o certificado final, sem o intermediário
+          # "Sectigo Public Server Authentication CA OV R36". O Node não busca
+          # intermediários sozinho, então a verificação falhava às vezes com
+          # UNABLE_TO_VERIFY_LEAF_SIGNATURE (24/11/2026). O intermediário público vai
+          # versionado; a raiz (Sectigo R46) já é confiável para o Node. A verificação de
+          # TLS continua LIGADA — isto não é o SICAF_INSECURE_TLS.
+          NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/apps/web/scripts/certs/sectigo-ov-r36.pem
           INPUT_EXERCICIO: ${{ github.event.inputs.exercicio }}
           INPUT_MES: ${{ github.event.inputs.mes }}
           INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
