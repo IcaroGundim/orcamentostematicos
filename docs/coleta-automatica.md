@@ -5,11 +5,20 @@ alimenta sozinho: o que é coletado, de onde, quando, por qual caminho, com que 
 o que fazer quando algo para. É a visão geral. Os detalhes de cada coleta ficam nos
 documentos específicos (seção 11).
 
-> **Estado em 23/11/2026.** A coleta do QDD roda num **runner do GitHub instalado numa
-> máquina da SEPLAN**, e não mais nos servidores do GitHub. As mudanças estão na branch
-> `ci/qdd-runner-seplan`. **Enquanto ela não for mesclada na `main`, o agendamento diário
-> do QDD continua apontando para o GitHub e falha.** O motivo está em
+> **Estado em 24/11/2026.** As quatro rotinas estão na `main` e funcionando. A coleta do QDD
+> roda num **runner do GitHub instalado numa máquina da SEPLAN** (seção 3.3), e não mais nos
+> servidores do GitHub; o motivo está em
 > [`incidente-coleta-sicaf-2026-11.md`](incidente-coleta-sicaf-2026-11.md).
+>
+> | Rotina | Última execução | Situação |
+> |---|---|---|
+> | Backup | 24/11, agendada | ✓ |
+> | Folha | 23/11, agendada | ✓ |
+> | Receitas | 23/11, agendada (segunda) | ✓ |
+> | QDD | 24/11, teste (`dry_run`) no runner | ✓ login, exportação e Excel (7.340 linhas). A agendada de 24/11 falhou no certificado do SICAF, já corrigido (3.5); a próxima agendada é a primeira com a correção |
+> | Espelho GitLab | 24/11 | ✗ falha desde 04/11 (seção 1) |
+>
+> Pendências na seção 10.
 
 ---
 
@@ -27,7 +36,17 @@ o que já existe (backup).
 | **Coleta das receitas** | `receitas.yml` | Portal da Transparência | Receita mensal por categoria (`RevenueMonth`) | Toda segunda | Servidores do GitHub |
 
 Há ainda um quinto workflow, `mirror-gitlab.yml`. Ele não coleta nada: espelha o
-repositório no GitLab a cada push na `main`, inclusive os commits de backup.
+repositório no GitLab a cada push na `main`. Os commits de backup feitos pelos próprios
+workflows **não** o disparam (push com o `GITHUB_TOKEN` não aciona outros workflows); eles
+vão para o GitLab no próximo push humano. **Está falhando desde pelo menos 04/11/2026.** A
+`main` do GitLab divergiu: tem o commit `914d90e` (10/09/2026), cuja mesma mudança entrou no
+GitHub como `2b8f1a5`, depois de um rebase. Para alcançar o GitHub, o espelho precisa
+sobrescrever esse commit, e o GitLab recusa porque a `main` de lá é ramo protegido ("not
+allowed to force push code to a protected branch"). Não afeta nenhuma coleta e não há perda:
+o conteúdo do `914d90e` já está no GitHub.
+
+O painel da SEPLAN também participa: ele mostra um **alerta de coleta parada** quando o QDD
+fica 2 dias úteis sem publicação (seção 9).
 
 ### 1.1. Agenda do dia (horário de Rio Branco, UTC−5)
 
@@ -40,8 +59,12 @@ repositório no GitLab a cada push na `main`, inclusive os commits de backup.
 ```
 
 O GitHub não garante o horário do agendamento. Em dias de carga, as execuções costumam
-começar **horas depois** do previsto (no histórico, a coleta do QDD marcada para 05:00 rodou
-entre 10h e 15h de Brasília). Isso é normal e não indica falha.
+começar **horas depois** do previsto (backup, folha e receitas costumam rodar entre 10h e
+15h de Brasília). Isso é normal e não indica falha.
+
+A coleta do QDD tem um atraso a mais: ela espera a máquina da SEPLAN. Se às 05:00 a máquina
+estiver desligada, o job fica na fila e roda assim que alguém liga e entra no Windows (em
+24/11/2026, rodou às 07:43 de Rio Branco).
 
 ---
 
@@ -99,7 +122,7 @@ está toda a curadoria. Os detalhes estão em [`ingestao-qdd-sicaf.md`](ingestao
 | 2 | **Backup** (`backup.mjs`) | Gera `backups/<data>/` a partir do banco | Job **para**: não publica sem ponto de retorno |
 | 3 | **Conferir o dump** | Exige `curadoria.json` existente e não vazio | Job **para** |
 | 4 | **Commit do backup** | Commita e dá push (com rebase, pois o `backup.yml` pode ter commitado antes) | Job **para** |
-| 5 | **Login no SICAF** | Sessão GeneXus com `SICAF_CPF` / `SICAF_SENHA` | Job falha; ver seção 9 |
+| 5 | **Login no SICAF** | Sessão GeneXus com `SICAF_CPF` / `SICAF_SENHA`. O TLS usa o intermediário versionado (3.5) | Job falha; ver seção 9 |
 | 6 | **Exercício** | Confirma que o SICAF está no exercício pedido (por padrão, o corrente) | Troca de exercício ainda dá 403 (seção 3.5) |
 | 7 | **Exportação** | Abre o QDD "Saldo Retroativo — Execução" (`app.quadrodetalhadodespesa`, `vTIPOREL=2`, acumulado até o mês) e dispara o `DOEXCEL` | Job falha |
 | 8 | **Validação do Excel** | Confere se é Excel, tem cabeçalho de QDD, é do exercício certo e não está vazio | Job falha **antes** de enviar |
@@ -359,6 +382,12 @@ de certificado ou de recusa.
   `iniciar.cmd` e o atalho de logon.
 - **Atualizações do runner:** são automáticas.
 - **Mudou a senha do SICAF:** atualize `SICAF_SENHA` no GitHub.
+- **A SEFAZ trocou o certificado do SICAF:** se o novo for emitido por outro intermediário,
+  o login volta a dar `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. Baixe o intermediário indicado no
+  campo *CA Issuers* do certificado novo, confira que ele encadeia numa raiz que o Node
+  conhece e troque o PEM em `apps/web/scripts/certs/` (e o nome no `qdd.yml`). Ao testar
+  nesta máquina, **remova antes `NODE_USE_SYSTEM_CA`** do ambiente: com ela o Node usa os
+  certificados do Windows e o teste passa mesmo com o problema.
 - **Mudou o endereço do app ou do Worker:** atualize `APP_URL` e/ou `APP_URL_SEPLAN`.
 - **Ajustar as travas da publicação automática:** constantes no topo de `assessAutoPublish`.
   Mantenha os testes em `qdd-replacement.test.ts`.
@@ -369,13 +398,21 @@ de certificado ou de recusa.
 
 1. ~~Mesclar `ci/qdd-runner-seplan` na `main`.~~ **Feito em 23/11/2026.** A primeira coleta
    agendada pela `main` (24/11) falhou no TLS do SICAF (cadeia incompleta, seção 3.5).
-   Correção: intermediário versionado. Falha reproduzida e correção validada com o Node do
-   runner (22.23.5) na própria máquina; falta confirmar numa execução do workflow.
+   Corrigido com o intermediário versionado (commit `2c89dbe`) e validado no runner pela
+   execução `45451549182` (`dry_run`, 24/11). Falta só ver a primeira agendada passar de
+   ponta a ponta, com publicação.
 2. Resolver com a SEFAZ o **403 na troca de exercício**. Depende da SEFAZ; o pedido
-   está redigido em [`pedidos-sefaz.md`](pedidos-sefaz.md).
+   está redigido em [`pedidos-sefaz.md`](pedidos-sefaz.md), **ainda não enviado**.
 3. ~~Criar um alerta de coleta parada.~~ **Feito em 24/11/2026** (seção 9).
 4. Obter uma **conta técnica** de leitura no SICAF, no lugar da conta nominal. Depende da
    SEFAZ; o pedido está no mesmo documento.
+5. **Espelho no GitLab** falhando (seção 1). Para resolver, no projeto do GitLab, em
+   Settings → Repository → Protected branches, permita *force push* na `main` (pode ser
+   só por uma execução) e rode de novo o *Espelhar no GitLab*. Depois disso os pushes
+   voltam a ser normais.
+6. **Disponibilidade do runner:** a coleta depende de uma estação ligada e logada. Se isso
+   virar problema, a saída é instalar o runner como serviço do Windows ou numa máquina
+   sempre ligada da rede da SEPLAN.
 
 ---
 
