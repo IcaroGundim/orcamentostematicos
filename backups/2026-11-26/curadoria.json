@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-11-26T18:03:51.365Z",
+  "generatedAt": "2026-11-26T19:26:10.090Z",
   "counts": {
     "thematicAssignments": 259,
     "actionValidations": 259,
     "validationCycles": 3,
     "budgetImports": 1,
-    "budgetImportRevisions": 40,
+    "budgetImportRevisions": 41,
     "fiscalYears": 1,
     "exerciseOrganizations": 33,
     "exerciseUnits": 130,
@@ -9954,13 +9954,13 @@
   "budgetImports": [
     {
       "id": "import-6f15a801-1325-4869-8e9c-30d085deeb58",
-      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20261124.xls",
+      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20261126.xls",
       "year": 2026,
       "referenceMonth": 11,
       "periodType": "ACUMULADO_ANUAL",
       "status": "VIGENTE",
-      "actionCount": 1762,
-      "importedAt": "2026-11-24T20:31:41.193Z"
+      "actionCount": 1776,
+      "importedAt": "2026-11-26T18:04:30.913Z"
     }
   ],
   "budgetImportRevisions": [
@@ -10563,6 +10563,21 @@
       "source": "SICAF",
       "updatedBy": null,
       "createdAt": "2026-11-24T20:31:41.193Z"
+    },
+    {
+      "id": "cmwxv3wcs000008jn9dk96ex1",
+      "importId": "import-6f15a801-1325-4869-8e9c-30d085deeb58",
+      "legacyImportId": null,
+      "confirmationKey": "sicafpreview-da97cd05-f51d-469a-ae42-2221f61bfac9",
+      "year": 2026,
+      "filename": "QDD_Saldo_Retroativo_Execucao-1425-20261126.xls",
+      "referenceMonth": 11,
+      "periodType": "ACUMULADO_ANUAL",
+      "rowCount": 7360,
+      "actionCount": 1776,
+      "source": "SICAF",
+      "updatedBy": null,
+      "createdAt": "2026-11-26T18:04:30.913Z"
     }
   ],
   "fiscalYears": [
